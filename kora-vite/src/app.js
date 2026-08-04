@@ -268,6 +268,41 @@ function viewSettings(s) {
 
     <section class="fact-group">
       <div class="group-head"><span class="group-ic">${icon("i-user")}</span><h3 class="group-title">Personnalisation</h3></div>
+
+      <div class="setting-row setting-col">
+        <div class="meta" style="width:100%">
+          <div class="name">Nom de l'application</div>
+          <div class="sub">Affiché dans la barre supérieure et le rail.</div>
+          <input class="text-input" id="setAppName" type="text" maxlength="40" value="${esc(s.settings?.app_name || "KORA Reach")}" placeholder="KORA Reach">
+        </div>
+      </div>
+
+      <div class="setting-row setting-col">
+        <div class="meta" style="width:100%">
+          <div class="name">Logo</div>
+          <div class="sub">Image carrée (SVG/PNG, ≤ 256 Ko). Laisse vide pour l'icône par défaut.</div>
+          <div class="logo-edit">
+            <div class="logo-preview" id="setLogoPreview">${s.settings?.has_logo ? `<img src="${esc(s.settings.logo_data)}" alt="">` : icon("i-spark")}</div>
+            <div class="logo-actions">
+              <label class="btn btn-ghost btn-sm"><input type="file" id="setLogoFile" accept="image/*" hidden>Choisir un fichier</label>
+              <button class="btn btn-ghost btn-sm" id="setLogoClear" ${s.settings?.has_logo ? "" : "disabled"}>Retirer</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="setting-row setting-col">
+        <div class="meta" style="width:100%">
+          <div class="name">Couleurs d'accent</div>
+          <div class="sub">Coral (principal) et Bordeaux (secondaire). Aperçu en direct.</div>
+          <div class="color-edit">
+            <label class="color-field">Coral <input type="color" id="setCoral" value="${esc(s.settings?.accent_coral || "#F2A98C")}"></label>
+            <label class="color-field">Bordeaux <input type="color" id="setBordeaux" value="${esc(s.settings?.accent_bordeaux || "#E08A84")}"></label>
+            <span class="color-swatch" id="setSwatch" style="background:linear-gradient(135deg, ${esc(s.settings?.accent_coral || "#F2A98C")}, ${esc(s.settings?.accent_bordeaux || "#E08A84")})"></span>
+          </div>
+        </div>
+      </div>
+
       <div class="setting-row">
         <span class="meta-ic">${icon("i-user")}</span>
         <div class="meta"><div class="name">Rôle</div><div class="sub">${esc(roleLabel)}</div></div>
@@ -280,6 +315,7 @@ function viewSettings(s) {
         <span class="meta-ic">${icon("i-sources")}</span>
         <div class="meta"><div class="name">Périmètre éditorial</div><div class="sub">Actualité Guinée · kakilambe.com</div></div>
       </div>
+      <button class="btn btn-primary" id="setSave" style="margin-top:12px">Enregistrer les modifications</button>
     </section>
 
     <section class="fact-group">
@@ -558,6 +594,60 @@ function bindAudit() {
   });
 }
 
+function bindSettings() {
+  const root = document.documentElement;
+  const coral = document.getElementById("setCoral");
+  const bordeaux = document.getElementById("setBordeaux");
+  const swatch = document.getElementById("setSwatch");
+  const preview = () => {
+    const c = coral ? coral.value : "#F2A98C";
+    const b = bordeaux ? bordeaux.value : "#E08A84";
+    if (swatch) swatch.style.background = `linear-gradient(135deg, ${c}, ${b})`;
+    if (c) root.style.setProperty("--coral", c);
+    if (b) root.style.setProperty("--bordeaux", b);
+  };
+  if (coral) coral.oninput = preview;
+  if (bordeaux) bordeaux.oninput = preview;
+
+  const file = document.getElementById("setLogoFile");
+  const logoPreview = document.getElementById("setLogoPreview");
+  const clearBtn = document.getElementById("setLogoClear");
+  let logoData = null; // null = ne pas toucher; "" = effacer; data-URL = set
+  if (file) file.onchange = () => {
+    const f = file.files && file.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      logoData = reader.result;
+      if (logoPreview) logoPreview.innerHTML = `<img src="${logoData}" alt="">`;
+      if (clearBtn) clearBtn.disabled = false;
+    };
+    reader.readAsDataURL(f);
+  };
+  if (clearBtn) clearBtn.onclick = () => {
+    logoData = "";
+    if (logoPreview) logoPreview.innerHTML = icon("i-spark");
+    clearBtn.disabled = true;
+  };
+
+  const save = document.getElementById("setSave");
+  if (save) save.onclick = async () => {
+    const payload = {
+      app_name: (document.getElementById("setAppName")?.value || "").trim(),
+      accent_coral: coral ? coral.value : undefined,
+      accent_bordeaux: bordeaux ? bordeaux.value : undefined,
+    };
+    if (logoData !== null) payload.logo_data = logoData; // "" ou data-URL
+    try {
+      const r = await Store.api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (r.error) { snack(r.error); return; }
+      Store.applySettings(r.settings);
+      Store.setState({ settings: r.settings });
+      snack("Modifications enregistrées");
+    } catch (e) { snack(e.message || "Erreur d'enregistrement"); }
+  };
+}
+
 function render() {
   const s = Store.state;
   const agent = document.getElementById("agentStatus");
@@ -579,6 +669,7 @@ function render() {
   if (gl) { if (s.ui.busy) { gl.hidden = false; const t = document.getElementById("globalLoaderText"); if (t) t.textContent = s.ui.overlay || "Agent en cours…"; } else gl.hidden = true; }
   try { renderSheet(s); } catch (e) { console.error("renderSheet", e); }
   try { if (s.route === "audit") bindAudit(); } catch (e) { console.error("bindAudit", e); }
+  try { if (s.route === "settings") bindSettings(); } catch (e) { console.error("bindSettings", e); }
 }
 function snack(msg) {
   const sn = document.getElementById("snackbar");
@@ -671,6 +762,7 @@ function bind() {
   const r = location.pathname.split("/")[1] || "cockpit";
   navigate(["cockpit", "facts", "hitl", "sources", "audit", "drafts", "settings"].includes(r) ? r : "cockpit");
   Store.loadHealth();
+  Store.loadSettings();
 }
 
 export const App = { render, snack, bind, navigate, openFact };

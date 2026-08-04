@@ -18,6 +18,7 @@ import whitelist as wl
 import normalizer
 import config
 from audit import get_events, log, get_daily, delete_events, purge_all, purge_day
+import settings
 from hitl_store import (
     fact_id_of, decide, get as hitl_get, list_all,
     mark_transmitted, mark_transmission_failed, retract,
@@ -67,6 +68,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"mutex": reach_agent.agent.mutex,
                                     "whitelist_version": wl.WHITELIST_VERSION,
                                     "editor": EDITOR_NAME, "transmit_mode": transmit.mode()})
+        if path == "/api/settings":
+            return self._send(200, settings.get_settings())
         if path == "/api/last":
             with _LAST_LOCK:
                 return self._send(200, {
@@ -220,6 +223,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"ok": True, "scope": "day", "day": day, "deleted": n})
             n = purge_all(EDITOR_NAME)
             return self._send(200, {"ok": True, "scope": "all", "deleted": n})
+        if p.path == "/api/settings":
+            res = settings.save_settings(payload or {})
+            return self._send(200 if res.get("ok") else 400, res)
         return self._send(404, {"error": "unknown endpoint"})
 
     def do_DELETE(self):

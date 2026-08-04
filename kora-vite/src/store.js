@@ -66,6 +66,42 @@ export const Store = (() => {
     try { setState({ sources: await api("/api/whitelist") }); }
     catch (e) { setState({ ui: { ...state.ui, error: e.message } }); }
   }
+  async function loadSettings() {
+    try { const s = await api("/api/settings"); applySettings(s); setState({ settings: s }); }
+    catch (e) { /* settings optionnel */ }
+  }
+  function applySettings(s) {
+    if (!s) return;
+    const root = document.documentElement;
+    if (s.accent_coral) root.style.setProperty("--coral", s.accent_coral);
+    if (s.accent_bordeaux) root.style.setProperty("--bordeaux", s.accent_bordeaux);
+    // applique aussi les dérivés utilisés par le gradient/ombre
+    if (s.accent_coral) root.style.setProperty("--coral-strong", shade(s.accent_coral, -0.12));
+    // nom + logo dans le shell
+    const nameEl = document.querySelector(".brand-name");
+    const subEl = document.querySelector(".brand-sub");
+    const markEl = document.querySelector(".brand-mark");
+    if (nameEl && s.app_name) {
+      const parts = s.app_name.split(/\s+(.+)/); // "KORA Reach" -> ["KORA","Reach"]
+      nameEl.textContent = parts[0] || s.app_name;
+      if (subEl) subEl.textContent = parts[1] || "";
+    }
+    if (markEl) {
+      if (s.has_logo && s.logo_data) {
+        markEl.innerHTML = `<img src="${s.logo_data}" alt="" style="width:22px;height:22px;border-radius:6px;object-fit:contain;">`;
+      } else {
+        markEl.innerHTML = `<svg class="ic"><use href="#i-spark"/></svg>`;
+      }
+    }
+  }
+  function shade(hex, pct) {
+    const m = /^#?([0-9A-Fa-f]{6})$/.exec(hex || "");
+    if (!m) return hex;
+    let n = parseInt(m[1], 16);
+    let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    const f = (c) => Math.max(0, Math.min(255, Math.round(c + 255 * pct)));
+    return "#" + ((1 << 24) + (f(r) << 16) + (f(g) << 8) + f(b)).toString(16).slice(1).toUpperCase();
+  }
   async function startCycle(demand = 3, force = false) {
     setState({ ui: { ...state.ui, busy: true, overlay: force ? "Génération forcée (hors fenêtre 24h)…" : "Collecte des sources whitelist…" } });
     try {
@@ -167,7 +203,7 @@ export const Store = (() => {
 
   return {
     state, setState, subscribe, api,
-    loadHealth, loadLast, loadHITL, loadAudit, loadSources,
+    loadHealth, loadLast, loadHITL, loadAudit, loadSources, loadSettings, applySettings,
     startCycle, seed, decide, retract, setRoute, openSheet, closeSheet, wait,
     getFactFilter, setFactFilter,
     getTheme, setTheme, initTheme,
