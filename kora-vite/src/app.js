@@ -259,7 +259,7 @@ function viewSettings(s) {
       ${theme === k ? `<span class="check">${icon("i-check")}</span>` : ""}
     </button>`;
   return `<div class="section-title">Paramètres</div>
-    <p class="muted" style="margin-bottom:16px">Réglages de l'interface et du compte KORA Reach.</p>
+    <p class="muted" style="margin-bottom:16px">Réglages de l'interface et du compte ${esc(s.app_name || "KORA Reach")}.</p>
 
     <section class="fact-group">
       <div class="group-head"><span class="group-ic">${icon("i-palette")}</span><h3 class="group-title">Apparence</h3></div>
@@ -389,7 +389,7 @@ function viewSettings(s) {
       <div class="group-head"><span class="group-ic">${icon("i-info")}</span><h3 class="group-title">À propos</h3></div>
       <div class="setting-row">
         <span class="meta-ic">${icon("i-spark")}</span>
-        <div class="meta"><div class="name">KORA Reach</div><div class="sub about-tagline">Poste de pilotage éditorial v3</div></div>
+        <div class="meta"><div class="name">${esc(s.app_name || "KORA Reach")}</div><div class="sub about-tagline">${esc(s.settings?.app_tagline || "Poste de pilotage éditorial v3")}</div></div>
       </div>
     </section>`;
 }
@@ -903,14 +903,17 @@ function bind() {
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && Store.state.sheet) Store.closeSheet(); });
   window.addEventListener("popstate", (e) => { if (e.state && e.state.route) navigate(e.state.route); });
   // --- Auth au démarrage : reset (?reset=), sinon check session ---
+  // Charge les settings (nom/logo) AVANT de rendre l'écran de connexion
   const resetToken = new URLSearchParams(location.search).get("reset");
-  if (resetToken) {
-    renderAuth("reset", resetToken);
-  } else {
-    Store.checkAuth().then((ok) => {
-      if (!ok) renderAuth("login");
-    });
-  }
+  Store.loadSettings().then(() => {
+    if (resetToken) {
+      renderAuth("reset", resetToken);
+    } else {
+      Store.checkAuth().then((ok) => {
+        if (!ok) renderAuth("login");
+      });
+    }
+  });
   const r = location.pathname.split("/")[1] || "cockpit";
   navigate(["cockpit", "facts", "hitl", "sources", "audit", "drafts", "settings"].includes(r) ? r : "cockpit");
   Store.loadHealth();
@@ -931,10 +934,11 @@ function renderAuth(mode, token) {
 }
 
 function viewLogin() {
+  const logo = (Store.state.settings && Store.state.settings.logo_data) ? `<img class="auth-logo" src="${Store.state.settings.logo_data}" alt="">` : icon("i-spark");
   return `<div class="auth-screen">
     <div class="auth-card">
-      <div class="auth-mark">${icon("i-spark")}</div>
-      <h1 class="auth-title">KORA Reach</h1>
+      <div class="auth-mark">${logo}</div>
+      <h1 class="auth-title">${esc(Store.state.app_name || "KORA Reach")}</h1>
       <p class="auth-sub">Connexion au poste de pilotage éditorial</p>
       <form id="authForm" autocomplete="off">
         <label class="auth-field">Identifiant

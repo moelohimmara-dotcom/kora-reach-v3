@@ -148,6 +148,7 @@ export const Store = (() => {
   }
   function applySettings(s) {
     if (!s) return;
+    setState({ app_name: s.app_name || state.app_name, settings: Object.assign({}, state.settings, s) });
     const root = document.documentElement;
     if (s.accent_coral) root.style.setProperty("--coral", s.accent_coral);
     if (s.accent_bordeaux) root.style.setProperty("--bordeaux", s.accent_bordeaux);
