@@ -339,7 +339,7 @@ function renderSheet(s) {
     _paras = _clean.split(/\n+/).map(p => p.trim()).filter(Boolean);
   }
   const _first = _paras[0] || _clean;
-  const standfirst = (c.summary || "").slice(0, 220) || _first.slice(0, 220);
+  const standfirst = _first.slice(0, 220);
   // Corps = tout l'article MOINS le début (= standfirst) -> pas de doublon, pas de perte
   let bodyText = _clean.startsWith(standfirst)
     ? _clean.slice(standfirst.length).trim()

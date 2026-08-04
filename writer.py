@@ -21,19 +21,19 @@ SYSTEM_PROMPT = (
     "RÈGLES DE RÉDACTION (strictes) :\n"
     "1. STRUCTURE OBLIGATOIRE (respecte cet ordre) :\n"
     "   # TITRE (accrocheur, factuel, sans clickbait)\n"
-    "   ## Le fait en bref (lede) : 2 phrases max contenant les 5W (Qui, Quoi, Quand, Où, Pourquoi) dans les 2 premières phrases.\n"
-    "   ## Décryptage : 3 à 5 paragraphes au corps, pyramide inversée (l'essentiel d'abord, détails ensuite).\n"
+    "   <CHAPÔ : paragraphe NU (sans titre ni label), 2 à 3 phrases en OUVERTURE, qui posent les 5W (Qui, Quoi, Quand, Où, Pourquoi) de façon factuelle et sobre, dans le style d'un chapô de presse (France 24 / BBC Afrique). Le chapô DOIT être la première phrase de l'article et introduire le sujet sans sensationnalisme.\n"
+    "   ## Décryptage : 3 à 5 paragraphes au corps, pyramide inversée (l'essentiel d'abord, détails ensuite). Le Décryptage DÉVELOPPE le sujet — il ne répète PAS le chapô mot pour mot.\n"
     "   ## À noter : 1 paragraphe de contexte (lien avec la Guinée, enjeu, réaction).\n"
     "   Sources : [nom des sources réelles citées]\n"
     "   Par Kakilambe Kora Agent\n"
     "2. LONGUEUR DYNAMIQUE : l'utilisateur te donne une CIBLE en mots (ex. 'Vise 1200 mots'). "
     "Tu DOIS atteindre AU MOINS cette cible. Pour y parvenir, développe chaque section :\n"
-    "   - Le fait en bref : 3 à 4 phrases (les 5W + enjeu).\n"
+    "   - Chapô : 2 à 3 phrases (les 5W + enjeu), pas plus.\n"
     "   - Décryptage : MINIMUM 5 paragraphes au corps, pyramide inversée, CHAQUE paragraphe >= 60 mots.\n"
     "   - À noter : 2 paragraphes (contexte Guinée + réaction/enjeu).\n"
     "   - Si tu manques de matière, ajoute une section '### Contexte et perspectives' (1-2 paragraphes) STRICTEMENT basée sur les textes fournis — sans inventer.\n"
     "   - Ne tronque jamais pour rester court : remplis la cible.\n"
-    "3. TON : factuel, impartial, neutre. Une seule voix (pas de 'nous' subjectif, pas d'opinion du rédacteur).\n"
+    "3. TON : factuel, impartial, neutre. Une seule voix (pas de 'nous' subjectif, pas d'opinion du rédacteur). Style presse : phrases courtes, vocabulaire précis, pas d'adjectifs superlatifs.\n"
     "4. ANTI-HALLUCINATION : tu ne dois RIEN inventer. Toute info vient EXCLUSIVEMENT des contextes fournis. "
     "Si une donnée (date précise, chiffre, citation) manque dans les contextes, marque-la '[à vérifier]' — ne jamais supposer.\n"
     "5. PÉRIMÈTRE : actualité Guinée (Conakry). Si le fait est international mais filtré, garde le lien explicite avec la Guinée.\n"
@@ -136,7 +136,7 @@ def _build_messages(fact: Dict) -> List[Dict]:
         + f"Source champion à citer : {champ['source']}\n"
         + f"Périmètre : Guinée (Conakry).\n"
         + f"CIBLE DE LONGUEUR : Vise {lt['target']} mots (au moins). Pertinence calculée : {lt['score']}/100.\n"
-        + "Rédige l'article complet (Titre, Le fait en bref, Décryptage, À noter, Sources, Par Kakilambe Kora Agent) "
+        + "Rédige l'article complet (Titre, CHAPÔ en ouverture — paragraphe nu sans label, Décryptage, À noter, Sources, Par Kakilambe Kora Agent) "
         + "en français, en atteignant la cible sans rien inventer hors des textes ci-dessus."
     )
     return [
@@ -218,13 +218,14 @@ def _gen_sections(fact: Dict, lt: Dict) -> str:
 
     sys_base = SYSTEM_PROMPT.split("2. LONGUEUR")[0]  # garde rôle + structure + anti-hallu
 
-    # 1. Lede
+    # 1. Chapô (ouverture, paragraphe nu, 2-3 phrases les 5W)
     lede_msg = [
-        {"role": "system", "content": sys_base + "Rédige UNIQUEMENT la section '## Le fait en bref' (3-4 phrases, ~80 mots, les 5W + enjeu). Pas de titre."},
+        {"role": "system", "content": sys_base + "Rédige UNIQUEMENT le CHAPÔ de l'article (2-3 phrases, ~70 mots, les 5W + enjeu, style presse France 24/BBC Afrique). Paragraphe NU sans titre ni label. Pas de 'Le fait en bref'."},
         {"role": "user", "content": f"{src_block}\n\nTitre suggéré : {champ['title']}"},
     ]
     lede = _ollama_chat(lede_msg, 250) or ""
     lede = _strip_section_title(lede, "Le fait en bref")
+    lede = _strip_section_title(lede, "Chapô")
 
     # 2. Décryptage (n paragraphes)
     deco_parts = []
@@ -247,7 +248,7 @@ def _gen_sections(fact: Dict, lt: Dict) -> str:
     note = _strip_section_title(note, "À noter")
 
     # Assemblage
-    article = f"# {champ['title']}\n\n## Le fait en bref\n{lede}\n\n## Décryptage\n{deco}\n\n## À noter\n{note}\n\nSources : {champ['source']}" + (", " + ", ".join(c['source'] for c in ctx) if ctx else "") + "\n\nPar Kakilambe Kora Agent"
+    article = f"# {champ['title']}\n\n{lede}\n\n## Décryptage\n{deco}\n\n## À noter\n{note}\n\nSources : {champ['source']}" + (", " + ", ".join(c['source'] for c in ctx) if ctx else "") + "\n\nPar Kakilambe Kora Agent"
     # Nettoyage global : retire toute ligne de titre de section résiduelle que le modèle répète
     import re as _re
     article = "\n".join(
@@ -270,7 +271,7 @@ def _ensure_min_length(raw: str, fact: Dict, lt: Dict, min_words: int = 879) -> 
     for attempt in range(3):
         need = max(target, min_words) - n
         msg = [
-            {"role": "system", "content": sys_base + f"L'article ci-dessous fait {n} mots mais la cible est {target} mots (minimum {min_words}, il manque ~{need} mots). ÉTENDS-LE en ajoutant de NOUVEAUX paragraphes UNIQUEMENT dans la section '## Décryptage' (pyramide inversée, angles non répétitifs, STRICTEMENT basés sur les textes fournis). Ne répète AUCUNE phrase existante. Garde la structure (Titre, Le fait en bref, Décryptage, À noter, Sources, signature). Réponds avec l'article COMPLET étendu."},
+            {"role": "system", "content": sys_base + f"L'article ci-dessous fait {n} mots mais la cible est {target} mots (minimum {min_words}, il manque ~{need} mots). ÉTENDS-LE en ajoutant de NOUVEAUX paragraphes UNIQUEMENT dans la section '## Décryptage' (pyramide inversée, angles non répétitifs, STRICTEMENT basés sur les textes fournis). Ne répète AUCUNE phrase existante. Garde la structure (Titre, CHAPÔ en ouverture, Décryptage, À noter, Sources, signature). Réponds avec l'article COMPLET étendu."},
             {"role": "user", "content": f"SOURCE PRINCIPALE ({champ['source']}) :\n{champ['raw_content'][:2500]}\n\nARTICLE ACTUEL À ÉTENDRE :\n{raw}"},
         ]
         ext = _ollama_chat(msg, 3400)
