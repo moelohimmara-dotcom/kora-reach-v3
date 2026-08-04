@@ -15,8 +15,8 @@ export const SHELL = `
       <div class="topbar-status" id="agentStatus">
         <span class="dot dot-ok"></span><span id="agentMode">prêt</span>
       </div>
-      <button class="btn btn-primary topbar-cta" id="topbarCycle">
-        ${ic("i-refresh")} Lancer un cycle
+      <button class="btn btn-primary topbar-cta" id="topbarCycle" title="Lancer un cycle" aria-label="Lancer un cycle">
+        ${ic("i-refresh")}<span class="topbar-cta-label">Lancer un cycle</span>
       </button>
     </div>
   </header>

@@ -257,6 +257,31 @@ def _gen_sections(fact: Dict, lt: Dict) -> str:
     return article
 
 
+def _ensure_min_length(raw: str, fact: Dict, lt: Dict, min_words: int = 879) -> str:
+    """Repass : si l'article généré est sous le plancher (879 mots), demande au
+    modèle d'étendre le Décryptage SANS répéter, jusqu'à atteindre la cible.
+    Anti-boucle : max 3 tentatives, tokens larges."""
+    n = len(raw.split())
+    if n >= min_words:
+        return raw
+    champ = fact["champion"]
+    target = lt.get("target", min_words)
+    sys_base = SYSTEM_PROMPT.split("2. LONGUEUR")[0]
+    for attempt in range(3):
+        need = max(target, min_words) - n
+        msg = [
+            {"role": "system", "content": sys_base + f"L'article ci-dessous fait {n} mots mais la cible est {target} mots (minimum {min_words}, il manque ~{need} mots). ÉTENDS-LE en ajoutant de NOUVEAUX paragraphes UNIQUEMENT dans la section '## Décryptage' (pyramide inversée, angles non répétitifs, STRICTEMENT basés sur les textes fournis). Ne répète AUCUNE phrase existante. Garde la structure (Titre, Le fait en bref, Décryptage, À noter, Sources, signature). Réponds avec l'article COMPLET étendu."},
+            {"role": "user", "content": f"SOURCE PRINCIPALE ({champ['source']}) :\n{champ['raw_content'][:2500]}\n\nARTICLE ACTUEL À ÉTENDRE :\n{raw}"},
+        ]
+        ext = _ollama_chat(msg, 3400)
+        if ext and len(ext.split()) > n:
+            raw = ext
+            n = len(raw.split())
+            if n >= min_words:
+                break
+    return raw
+
+
 def write_article(fact: Dict, dry_run: bool = None) -> Dict:
     """Génère l'article de synthèse pour un fact. Retourne dict avec article + image."""
     if dry_run is None:
@@ -278,11 +303,14 @@ def write_article(fact: Dict, dry_run: bool = None) -> Dict:
     messages = _build_messages(fact)
     last_err = None
     lt = compute_length_target(fact)
-    # Mode sections (algo spécialisé) si cible longue et Ollama dispo -> meilleure longueur sur petit modèle 4B
-    if os.environ.get("OLLAMA_API_KEY") and lt["target"] > 500:
+    # Mode sections désactivé : gemma4:31b n'est pas un petit modèle 4B, le mode
+    # direct Ollama Cloud (+ ensure_min_length) donne une longueur plus fiable.
+    # (conservé ci-dessous comme référence, non exécuté)
+    if False and os.environ.get("OLLAMA_API_KEY") and lt["target"] > 500:
         try:
             art = _gen_sections(fact, lt)
             if art and len(art.split()) >= 400:
+                art = _ensure_min_length(art, fact, lt)
                 return {"article": art, "image": image, "image_meta": image_meta,
                         "model": f"ollama/{os.environ.get('OLLAMA_MODEL', 'gemma4')}-sections",
                         "status": "ok", "length_target": lt["target"], "length_score": lt["score"]}
@@ -296,12 +324,14 @@ def write_article(fact: Dict, dry_run: bool = None) -> Dict:
             model = os.environ.get("OLLAMA_MODEL", "gemma4")
             req = _req.Request(
                 "https://ollama.com/v1/chat/completions",
-                data=_json.dumps({"model": model, "messages": messages, "max_tokens": 2200, "temperature": 0.4, "stream": False}).encode(),
+                data=_json.dumps({"model": model, "messages": messages, "max_tokens": 2600, "temperature": 0.4, "stream": False}).encode(),
                 headers={"Authorization": f"Bearer {os.environ['OLLAMA_API_KEY']}", "Content-Type": "application/json"},
             )
-            with _req.urlopen(req, timeout=180) as r:
+            with _req.urlopen(req, timeout=300) as r:
                 data = _json.loads(r.read())
-            return {"article": data["choices"][0]["message"]["content"], "image": image, "image_meta": image_meta, "model": f"ollama/{model}", "status": "ok", "length_target": lt["target"], "length_score": lt["score"]}
+            art = data["choices"][0]["message"]["content"]
+            art = _ensure_min_length(art, fact, lt)
+            return {"article": art, "image": image, "image_meta": image_meta, "model": f"ollama/{model}", "status": "ok", "length_target": lt["target"], "length_score": lt["score"]}
         except Exception as e:
             last_err = e
 
@@ -317,7 +347,9 @@ def write_article(fact: Dict, dry_run: bool = None) -> Dict:
             )
             with _req.urlopen(req, timeout=120) as r:
                 data = _json.loads(r.read())
-            return {"article": data["choices"][0]["message"]["content"], "image": image, "image_meta": image_meta, "model": "tokenrouter/kimi-k3-free", "status": "ok"}
+            art = data["choices"][0]["message"]["content"]
+            art = _ensure_min_length(art, fact, lt)
+            return {"article": art, "image": image, "image_meta": image_meta, "model": "tokenrouter/kimi-k3-free", "status": "ok"}
         except Exception as e:
             last_err = e
 
@@ -328,8 +360,10 @@ def write_article(fact: Dict, dry_run: bool = None) -> Dict:
         try:
             import litellm
             setattr(litellm, f"{p}_key", key)
-            resp = litellm.completion(model=PROVIDER_CONFIG[p]["model"], messages=messages, max_tokens=2200, temperature=0.4)
-            return {"article": resp.choices[0].message.content, "image": image, "image_meta": image_meta, "model": PROVIDER_CONFIG[p]["model"], "status": "ok"}
+            resp = litellm.completion(model=PROVIDER_CONFIG[p]["model"], messages=messages, max_tokens=2600, temperature=0.4)
+            art = resp.choices[0].message.content
+            art = _ensure_min_length(art, fact, lt)
+            return {"article": art, "image": image, "image_meta": image_meta, "model": PROVIDER_CONFIG[p]["model"], "status": "ok"}
         except Exception as e:
             last_err = e
             continue

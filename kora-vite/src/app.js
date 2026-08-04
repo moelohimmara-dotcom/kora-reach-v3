@@ -328,6 +328,16 @@ function renderSheet(s) {
   const ph = placeholderSvg(Store.getTheme());
   const text = (f.article && (f.article.final_text || f.article.body)) || f.final_text || c.summary || "";
   const status = f.status || "PENDING_REVIEW";
+  // Séparation chapeau / corps : le chapeau = 1er paragraphe, le corps = RESTE (évite la duplication)
+  // Split tolérant : doubles sauts (\n\n) sinon simples (\n)
+  const _rawParas = text.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+  let _paras = _rawParas;
+  if (_paras.length <= 1 && text.includes("\n")) {
+    _paras = text.split(/\n+/).map(p => p.trim()).filter(Boolean);
+  }
+  const _first = _paras[0] || "";
+  const standfirst = (c.summary || "").slice(0, 220) || (_first ? _first.slice(0, 220) : text.slice(0, 200));
+  const bodyText = _paras.length > 1 ? _paras.slice(1).join("\n\n") : (text.length > standfirst.length ? text.slice(standfirst.length).trim() : "");
   body.innerHTML = `
     <article class="sheet-article">
       ${img ? `<figure class="sheet-figure"><img class="sheet-img" src="${esc(img)}" alt="" onerror="this.src='${ph}'"><figcaption class="sheet-cap">Illustration IA — KORA Reach</figcaption></figure>` : `<figure class="sheet-figure"><img class="sheet-img" src="${ph}" alt=""><figcaption class="sheet-cap">Illustration IA — KORA Reach</figcaption></figure>`}
@@ -347,9 +357,9 @@ function renderSheet(s) {
         </div>
         <button class="sheet-close" data-close="1" title="Fermer" aria-label="Fermer">${icon("i-close")}</button>
       </div>
-      <p class="sheet-standfirst">${esc((c.summary || "").slice(0, 220) || text.slice(0, 200))}</p>
+      <p class="sheet-standfirst">${esc(standfirst)}</p>
       <div class="fact-chips" style="margin:6px 0 16px">${factMeta(f)} ${statusBadge(status)}</div>
-      <div class="sheet-textwrap"><div class="sheet-text">${esc(text)}</div></div>
+      <div class="sheet-textwrap"><div class="sheet-text">${esc(bodyText || text)}</div></div>
       <div class="sheet-audit-note">${icon("i-audit")} Décision enregistrée dans l'historique · ${esc(f.n_sources || 1)} source(s) fusionnée(s)</div>
     </article>
     <div class="sheet-actions">

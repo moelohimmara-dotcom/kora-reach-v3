@@ -303,7 +303,8 @@ body::after {
 .pulse-num.alert { color: var(--bordeaux); text-shadow: 0 0 34px rgba(224,138,132,0.36); }
 .pulse-sub { font-size: 0.95rem; color: #C9BEB2; }
 
-.stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3); margin-bottom: var(--space-4); }
+/* Base = mobile : 2 colonnes, minmax(0,1fr) empêche le débordement (min-width:auto) */
+.stat-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
 .stat {
   padding: var(--space-4) var(--space-3); text-align: center; border-radius: var(--radius-lg);
   background: linear-gradient(160deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03)); backdrop-filter: var(--glass-blur);
@@ -314,7 +315,9 @@ body::after {
 .stat .l { font-size: var(--t-label-xs); color: var(--md-sys-color-on-surface-variant); text-transform: uppercase; letter-spacing: .6px; margin-top: 5px; }
 .stat.alert .n { color: var(--md-sys-color-error); }
 
-.fact-grid { display: grid; grid-template-columns: 1fr; gap: var(--space-4); }
+.fact-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+/* Tablette portrait (≥600px) : 2 colonnes, même sans le rail desktop */
+@media (min-width: 600px) { .fact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* ---- Filtres + groupes de faits (style Notion/PandaDoc) ---- */
 .filter-bar { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: var(--space-5); }
@@ -450,6 +453,23 @@ body::after {
 }
 .sheet-handle { width: 42px; height: 4px; border-radius: 3px; background: var(--md-sys-color-outline); margin: 10px auto var(--space-4); }
 
+/* Smartphone (≤600px) : le tiroir occupe TOUT l'écran, sans marges ni coins arrondis */
+@media (max-width: 600px) {
+  .sheet {
+    top: 0; max-height: 100dvh; height: 100dvh; max-width: 100%;
+    border-radius: 0; border-left: none; border-right: none; border-top: none;
+    padding: 0 var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom));
+    padding-top: env(safe-area-inset-top);
+    overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  }
+  .sheet-handle { display: none; }
+  /* barre d'actions collante : cibles tactiles ≥44px */
+  .sheet-actions .btn { min-height: 44px; padding: 12px 18px; font-size: var(--t-label); }
+  .sheet-close { width: 44px; height: 44px; }
+  .sheet-title { font-size: 1.45rem; }
+  .sheet-img { height: 200px; max-height: 200px; }
+}
+
 @keyframes slideup { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 
@@ -507,6 +527,15 @@ body::after {
 .topbar-right { display: flex; align-items: center; gap: 12px; }
 .topbar-cta { padding: 10px 18px; font-size: var(--t-label); box-shadow: var(--glass-glow); }
 @media (max-width: 520px) { .topbar-cta span, .topbar-cta { font-size: .72rem; padding: 9px 13px; } }
+/* ≤560px : le CTA passe en bouton icône (44px, cible tactile MD3) et le statut se réduit */
+@media (max-width: 560px) {
+  .topbar { padding-left: var(--space-3); padding-right: var(--space-3); gap: 8px; }
+  .topbar-right { gap: 8px; min-width: 0; }
+  .topbar-cta-label { display: none; }
+  .topbar-cta { width: 44px; height: 44px; min-width: 44px; padding: 0; border-radius: var(--radius-pill); flex: none; }
+  .topbar-status { padding: 8px 11px; font-size: var(--t-label-xs); }
+  .brand-sub { display: none; }
+}
 
 .pulse-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
 .pulse-eyebrow { font-size: var(--t-label-xs); text-transform: uppercase; letter-spacing: 1.4px; color: var(--coral); font-weight: 800; }
@@ -558,7 +587,7 @@ body::after {
   .rail .navitem.active { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); border: 1px solid var(--glass-border-strong); box-shadow: var(--glass-glow); }
   .rail .navitem.active::before { display: none; }
   .rail .navitem-center .ic { background: linear-gradient(135deg,var(--coral),var(--bordeaux)); color:#20100B; padding:0; box-shadow: var(--glass-glow); }
-  .stat-row { grid-template-columns: repeat(4, 1fr); }
+  .stat-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .fact-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
@@ -581,13 +610,22 @@ body::after {
 @keyframes slideup { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 .force-mobile .rail { display: none !important; }
-@media (min-width: 1100px) { .fact-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1100px) { .fact-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .force-mobile .bottomnav { display: flex !important; }
 .force-mobile .view { padding: var(--space-4) !important; padding-top: 72px !important; padding-bottom: 110px !important; max-width: 100% !important; }
 .force-mobile .fab { bottom: 88px !important; right: 20px !important; }
 .force-mobile .fab-menu { bottom: 162px !important; right: 20px !important; }
 .force-mobile .fact-grid { grid-template-columns: 1fr !important; }
 .force-mobile .stat-row { grid-template-columns: repeat(2, 1fr) !important; }
+
+/* Cibles tactiles MD3 ≥48px sur smartphone (règle 8) */
+@media (max-width: 600px) {
+  .icon-btn { width: 44px; height: 44px; }
+  .btn-sm { min-height: 44px; padding: 11px 16px; }
+  .filter-pill { min-height: 44px; padding: 11px 16px; }
+  .bottomnav .navitem { min-height: 56px; padding: 8px 2px; }
+  .setting-row, .theme-opt { min-height: 48px; }
+}
 
 /* ---- Sélecteur de thème (rail desktop + bouton mobile) ---- */
 .rail-appearance { margin-top: 8px; padding-top: var(--space-3); border-top: 1px solid var(--glass-border); }
