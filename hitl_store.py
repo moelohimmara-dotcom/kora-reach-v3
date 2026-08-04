@@ -14,6 +14,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import config
 import db
+import audit
 
 TZ = ZoneInfo(config.LIMITS["timezone"])
 
@@ -208,6 +209,9 @@ def decide(fact_id: str, decision: str, decided_by: str,
         con.commit()
     finally:
         con.close()
+    _act = {"EDITED": "MODIFIE", "APPROVED": "APPROUVE", "REJECTED": "REJETE"}.get(decision, "MODIFIE")
+    audit.log(None, f"DECIDE_{decision}", f"fact={fact_id} by={decided_by}",
+              fact_id=fact_id, action=_act, editor=decided_by)
     return {"ok": True, "fact_id": fact_id, "status": decision, "decided_by": decided_by}
 
 
@@ -231,6 +235,8 @@ def mark_transmitted(fact_id: str, provider: str, http_status: int,
         con.commit()
     finally:
         con.close()
+    audit.log(None, "TRANSMIT", f"fact={fact_id} provider={provider} http={http_status}",
+              fact_id=fact_id, action="TRANSMIS", editor="system")
     return {"ok": True, "fact_id": fact_id, "status": "TRANSMITTED"}
 
 
@@ -265,4 +271,6 @@ def retract(fact_id: str, by: str) -> dict:
         con.commit()
     finally:
         con.close()
+    audit.log(None, "RETRACT", f"fact={fact_id} by={by}", fact_id=fact_id,
+              action="MODIFIE", editor=by)
     return {"ok": True, "fact_id": fact_id, "status": "RETRACTED", "by": by}

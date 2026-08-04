@@ -291,21 +291,14 @@ function viewSettings(s) {
     </section>`;
 }
 function viewAudit(s) {
-  const a = s.audit || [];
-  if (!a.length) return stateBox("i-audit", "Piste d'audit vide", "Les décisions validées apparaîtront ici (qui / quand / transition).", false);
-  const dayLabel = (iso) => {
-    const d = new Date((iso || "").replace(" ", "T"));
-    if (isNaN(d)) return "Autres";
-    const today = new Date(); const y = new Date(); y.setDate(today.getDate() - 1);
-    const sd = d.toDateString();
-    if (sd === today.toDateString()) return "Aujourd'hui";
-    if (sd === y.toDateString()) return "Hier";
-    return d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
-  };
-  const groups = {};
-  a.slice(0, 60).forEach(ev => { const k = dayLabel(ev.at || ev.ts); (groups[k] = groups[k] || []).push(ev); });
+  const data = s.audit || {};
+  const days = data.days || [];
+  const total = data.total || 0;
+  if (!days.length) return stateBox("i-audit", "Historique vide", "Aucune activité enregistrée pour l'instant. Lance un cycle pour peupler l'historique.", false);
+  const ACTION_FR = { GENERE: "Générés", TRANSMIS: "Transmis", APPROUVE: "Approuvés", REJETE: "Rejetés", MODIFIE: "Modifiés", SUPPRIME: "Supprimés", CYCLE: "Cycles", PURGE: "Purges" };
+  const ACTION_CLS = { GENERE: "primary", TRANSMIS: "tertiary", APPROUVE: "tertiary", REJETE: "error", MODIFIE: "warning", SUPPRIME: "error", CYCLE: "secondary", PURGE: "secondary" };
   const transitionBadge = (ev) => {
-    const t = ev.transition || (ev.detail && ev.detail.match(/(PENDING_REVIEW|APPROVED|EDITED|REJECTED|TRANSMITTED)\s*→\s*(APPROVED|EDITED|REJECTED|TRANSMITTED)/)) ;
+    const t = ev.transition || (ev.detail && ev.detail.match(/(PENDING_REVIEW|APPROVED|EDITED|REJECTED|TRANSMITTED)\s*→\s*(APPROVED|EDITED|REJECTED|TRANSMITTED)/));
     if (ev.transition) return `<span class="badge badge-pending">${esc(ev.transition.replace(/_/g, " "))}</span>`;
     return "";
   };
@@ -317,6 +310,7 @@ function viewAudit(s) {
     if (blob.includes("APPROVED")) return "Article approuvé";
     if (blob.includes("EDITED") || blob.includes("EDIT ")) return "Article modifié";
     if (blob.includes("CYCLE") || blob.includes("MODE=") || blob.includes("PROVIDER=")) return "Cycle lancé";
+    if (blob.includes("PURGE")) return "Historique purgé";
     if (blob.includes("SOURCE") || blob.includes("SRC=")) return "Source consultée";
     const k = (ev.kind || "").toLowerCase();
     if (k === "reject") return "Article rejeté";
@@ -326,11 +320,10 @@ function viewAudit(s) {
     if (k === "source") return "Source mise à jour";
     return ev.action || "Activité";
   };
-  // Nettoie le detail (key=value) en affichage lisible, masque le provider technique
+  // Nettoie le detail en affichage lisible, masque les erreurs techniques
   const auditSub = (ev) => {
     let d = ev.detail || "";
     if (!d) return "";
-    // masque les erreurs techniques brutes (ne doivent pas apparaitre en clair)
     if (/error|traceback|exception|attributeerror|keyerror|typeerror/i.test(d)) return "Erreur d'exécution (voir logs)";
     const pairs = {};
     (d.match(/(\w+)=([^\s]+)/g) || []).forEach(p => { const [k,v]=p.split("="); pairs[k]=v; });
@@ -342,25 +335,42 @@ function viewAudit(s) {
     if (pairs.facts) parts.push(pairs.facts + " fait(s)");
     if (pairs.clusters) parts.push(pairs.clusters + " groupe(s)");
     if (parts.length) return parts.join(" · ");
-    // fallback : tronque proprement sans couper un mot
     const clean = d.replace(/\s+/g, " ").trim();
     return clean.length > 90 ? clean.slice(0, 87).replace(/\s+\S*$/, "") + "…" : clean;
   };
   const evRow = (ev) => `
-    <div class="list-row audit-row">
+    <div class="list-row audit-row" data-ev="${esc(ev.id)}">
+      <input type="checkbox" class="audit-check" data-id="${esc(ev.id)}" aria-label="Sélectionner">
       <span class="meta-ic">${icon(ev.kind === "reject" ? "i-reject" : ev.kind === "edit" ? "i-edit" : "i-check")}</span>
       <div class="meta">
         <div class="name">${esc(auditLabel(ev))} ${transitionBadge(ev)}</div>
         <div class="sub">${esc(auditSub(ev))}</div>
       </div>
-      <div class="sub audit-time">${esc((ev.at || ev.ts || "").slice(0, 19).replace("T", " "))}</div>
+      <div class="sub audit-time">${esc((ev.ts || "").slice(0, 19).replace("T", " "))}</div>
     </div>`;
-  return `<div class="section-title">Piste d'audit (${a.length})</div>
-    ${Object.keys(groups).map(k => `
-      <section class="fact-group">
-        <div class="group-head"><span class="group-ic">${icon("i-date")}</span><h3 class="group-title">${esc(k)}</h3><span class="group-count">${groups[k].length}</span></div>
-        ${groups[k].map(evRow).join("")}
-      </section>`).join("")}`;
+  const counterChips = (counters) => Object.keys(ACTION_FR).filter(a => (counters[a]||0) > 0)
+    .map(a => `<span class="chip chip-${ACTION_CLS[a]}">${ACTION_FR[a]} : ${counters[a]}</span>`).join("");
+  const dayBlock = (day) => `
+    <section class="fact-group audit-day" data-day="${esc(day.date)}">
+      <div class="group-head">
+        <span class="group-ic">${icon("i-date")}</span>
+        <h3 class="group-title">${esc(day.label)}</h3>
+        <span class="group-count">${day.count}</span>
+        <button class="btn btn-ghost btn-sm audit-purge-day" data-day="${esc(day.date)}">Réinitialiser le jour</button>
+      </div>
+      <div class="audit-counters">${counterChips(day.counters)}</div>
+      <div class="audit-events">${day.events.map(evRow).join("")}</div>
+    </section>`;
+  return `<div class="section-title">Historique <span class="muted">(${total} événement(s))</span></div>
+    <div class="audit-toolbar">
+      <button class="btn btn-ghost btn-sm" id="auditSelAll">Tout sélectionner</button>
+      <button class="btn btn-ghost btn-sm" id="auditSelNone">Désélectionner</button>
+      <button class="btn btn-danger btn-sm" id="auditDelSel" disabled>Supprimer la sélection</button>
+      <div class="spacer"></div>
+      <button class="btn btn-outline btn-sm" id="auditResetToday">Réinitialiser aujourd'hui</button>
+      <button class="btn btn-danger btn-sm" id="auditPurgeAll">Vider tout l'historique</button>
+    </div>
+    ${days.map(dayBlock).join("")}`;
 }
 function staleBox(s) {
   const r = (s.lastCycle && s.lastCycle.result) || {};
@@ -487,6 +497,45 @@ function renderSheet(s) {
   };
 }
 
+function bindAudit() {
+  const view = document.getElementById("view");
+  if (!view) return;
+  const checks = () => Array.from(view.querySelectorAll(".audit-check:checked")).map(c => c.dataset.id);
+  const delBtn = document.getElementById("auditDelSel");
+  const refresh = () => { if (delBtn) delBtn.disabled = checks().length === 0; };
+  view.querySelectorAll(".audit-check").forEach(c => c.onchange = refresh);
+  const selAll = document.getElementById("auditSelAll");
+  if (selAll) selAll.onclick = () => { view.querySelectorAll(".audit-check").forEach(c => c.checked = true); refresh(); };
+  const selNone = document.getElementById("auditSelNone");
+  if (selNone) selNone.onclick = () => { view.querySelectorAll(".audit-check").forEach(c => c.checked = false); refresh(); };
+  if (delBtn) delBtn.onclick = async () => {
+    const ids = checks();
+    if (!ids.length) return;
+    if (!confirm(`Supprimer ${ids.length} événement(s) de l'historique ?`)) return;
+    await Store.api("/api/audit", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+    Store.loadAudit(); snack("Sélection supprimée");
+  };
+  const purgeAll = document.getElementById("auditPurgeAll");
+  if (purgeAll) purgeAll.onclick = async () => {
+    if (!confirm("Vider TOUT l'historique ? (une ligne de purge sera conservée)")) return;
+    await Store.api("/api/audit/purge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "all" }) });
+    Store.loadAudit(); snack("Historique vidé");
+  };
+  const resetToday = document.getElementById("auditResetToday");
+  if (resetToday) resetToday.onclick = async () => {
+    if (!confirm("Réinitialiser l'historique du jour (aujourd'hui) ?")) return;
+    const today = new Date().toISOString().slice(0, 10);
+    await Store.api("/api/audit/purge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "day", day: today }) });
+    Store.loadAudit(); snack("Historique du jour réinitialisé");
+  };
+  view.querySelectorAll(".audit-purge-day").forEach(b => b.onclick = async () => {
+    const day = b.dataset.day;
+    if (!confirm(`Réinitialiser l'historique du ${day} ?`)) return;
+    await Store.api("/api/audit/purge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "day", day }) });
+    Store.loadAudit(); snack(`Historique du ${day} réinitialisé`);
+  });
+}
+
 function render() {
   const s = Store.state;
   const agent = document.getElementById("agentStatus");
@@ -507,6 +556,7 @@ function render() {
   const gl = document.getElementById("globalLoader");
   if (gl) { if (s.ui.busy) { gl.hidden = false; const t = document.getElementById("globalLoaderText"); if (t) t.textContent = s.ui.overlay || "Agent en cours…"; } else gl.hidden = true; }
   try { renderSheet(s); } catch (e) { console.error("renderSheet", e); }
+  try { if (s.route === "audit") bindAudit(); } catch (e) { console.error("bindAudit", e); }
 }
 function snack(msg) {
   const sn = document.getElementById("snackbar");

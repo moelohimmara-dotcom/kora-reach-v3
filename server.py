@@ -17,7 +17,7 @@ import reach_agent
 import whitelist as wl
 import normalizer
 import config
-from audit import get_events, log
+from audit import get_events, log, get_daily, delete_events, purge_all, purge_day
 from hitl_store import (
     fact_id_of, decide, get as hitl_get, list_all,
     mark_transmitted, mark_transmission_failed, retract,
@@ -62,7 +62,7 @@ class Handler(BaseHTTPRequestHandler):
                 "version": e.version, "status": e.status,
             } for e in wl.WHITELIST])
         if path == "/api/audit":
-            return self._send(200, get_events())
+            return self._send(200, {"days": get_daily(), "total": sum(d["count"] for d in get_daily())})
         if path == "/api/state":
             return self._send(200, {"mutex": reach_agent.agent.mutex,
                                     "whitelist_version": wl.WHITELIST_VERSION,
@@ -212,7 +212,32 @@ class Handler(BaseHTTPRequestHandler):
             if res.get("ok"):
                 log(fid, "HITL_RETRACT", f"by={EDITOR_NAME}", "hitl")
             return self._send(200, res)
+        if p.path == "/api/audit/purge":
+            scope = payload.get("scope", "all")  # "all" | "day"
+            day = payload.get("day")
+            if scope == "day" and day:
+                n = purge_day(day, EDITOR_NAME)
+                return self._send(200, {"ok": True, "scope": "day", "day": day, "deleted": n})
+            n = purge_all(EDITOR_NAME)
+            return self._send(200, {"ok": True, "scope": "all", "deleted": n})
         return self._send(404, {"error": "unknown endpoint"})
+
+    def do_DELETE(self):
+        p = urllib.parse.urlparse(self.path)
+        length = int(self.headers.get("Content-Length", 0))
+        raw = self.rfile.read(length) if length else b"{}"
+        try:
+            payload = json.loads(raw or b"{}")
+        except Exception:
+            payload = {}
+        if p.path == "/api/audit":
+            ids = payload.get("ids", [])
+            if not ids:
+                return self._send(400, {"error": "ids_requis"})
+            n = delete_events([str(i) for i in ids])
+            return self._send(200, {"ok": True, "deleted": n})
+        return self._send(404, {"error": "unknown endpoint"})
+
 
     def log_message(self, *a):
         pass  # silence

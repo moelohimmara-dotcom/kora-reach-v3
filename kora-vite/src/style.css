@@ -534,6 +534,19 @@ body::after {
 .src-row .meta, .audit-row .meta { flex: 1; min-width: 0; }
 .audit-time { flex: none; color: var(--md-sys-color-on-surface-variant); font-variant-numeric: tabular-nums; text-align: right; }
 @media (max-width: 520px) { .audit-time { display: none; } }
+.audit-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: var(--space-3) 0; padding: var(--space-3); background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); }
+.audit-toolbar .spacer { flex: 1; }
+.audit-toolbar .btn-sm { padding: 7px 12px; font-size: var(--t-label-sm); }
+.btn-danger { background: var(--md-sys-color-error); color: var(--md-sys-color-on-error); border: none; }
+.btn-danger:hover { filter: brightness(0.95); }
+.btn-outline { background: transparent; border: 1px solid var(--md-sys-color-outline); color: var(--on-surface-soft); }
+.audit-check { width: 18px; height: 18px; flex: none; accent-color: var(--coral); cursor: pointer; }
+.audit-counters { display: flex; flex-wrap: wrap; gap: 6px; margin: var(--space-2) 0 var(--space-3); }
+.audit-counters .chip { font-size: var(--t-label-sm); padding: 3px 10px; border-radius: var(--radius-pill); }
+.audit-day .group-count { margin-left: auto; }
+.audit-day .group-head { display: flex; align-items: center; gap: 8px; }
+.audit-day .audit-purge-day { margin-left: 4px; padding: 5px 10px; font-size: var(--t-label-sm); }
+.audit-events { display: flex; flex-direction: column; }
 .section-title { font-family: var(--font-display); font-size: var(--t-headline); font-weight: 800; margin: var(--space-6) 0 var(--space-3); }
 .muted { color: var(--md-sys-color-on-surface-variant); }
 .kv { display: flex; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--glass-border); font-size: var(--t-body); }

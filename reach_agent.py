@@ -17,6 +17,7 @@ from dedup import url_hash, is_dup
 from clusterer import cluster, pick_champion
 from state_store import seen, mark, new_cycle, end_cycle, init as _init_state
 from writer import write_article
+from hitl_store import fact_id_of
 from audit import log
 from illustrate import illustrate
 
@@ -32,7 +33,7 @@ class ReachAgent:
         _init_state()  # (re)crée les tables si la DB a été resetée
         cid = new_cycle()
         cycle_start = datetime.now(TZ)
-        log(cid, "CYCLE_START", f"initiator={initiator} scope={scope_filter} whitelist_v={wl.WHITELIST_VERSION}")
+        log(cid, "CYCLE_START", f"initiator={initiator} scope={scope_filter} whitelist_v={wl.WHITELIST_VERSION}", action="CYCLE")
         try:
             items = []
             sources_ok = 0
@@ -142,7 +143,7 @@ class ReachAgent:
             except Exception as _ie:
                 log(cid, "ILLU_WARN", f"{type(_ie).__name__}: {_ie}", "illustrate")
             log(cid, "FACT_GEN", f"provider={written['model']} src={champ['source']}",
-                written["model"])
+                written["model"], fact_id=fact_id_of(champ), action="GENERE")
 
             end_cycle(cid, "OK")
             self.mutex = False
