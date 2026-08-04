@@ -353,7 +353,7 @@ body::after {
 .fact-chips .tag { flex: none; white-space: nowrap; }
 .fact-status { font-size: var(--t-label); color: var(--md-sys-color-on-surface-variant); display: flex; align-items: center; gap: 8px; }
 .badge { padding: 3px 11px; border-radius: var(--radius-pill); font-weight: 700; font-size: var(--t-label-sm); letter-spacing: .2px; }
-.badge-pending { background: rgba(234,182,100,0.22); color: #F2D9A8; border: 1px solid rgba(234,182,100,0.4); }
+.badge-pending { background: rgba(234,182,100,0.28); color: #8A5A12; border: 1px solid rgba(234,182,100,0.55); }
 .badge-approved { background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); }
 .badge-rejected { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
 .badge-transmitted { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
@@ -473,9 +473,10 @@ body::after {
   .sheet-close { width: 44px; height: 44px; }
   /* le corps laisse de la place sous les boutons sticky (pas de chevauchement) */
   .sheet-textwrap { padding-bottom: 16px; }
-  /* puces : une seule ligne, réduites sur mobile pour tenir les 4 sans coupure */
-  .fact-chips { padding-right: 4px; gap: 6px; }
-  .fact-chips .tag, .fact-chips .badge { font-size: var(--t-label-sm); padding: 3px 8px; }
+  /* puces : sur mobile, wrap autorisé (2x2 max) pour éviter toute coupure ; restent groupées */
+  .fact-chips { padding-right: 2px; gap: 5px; flex-wrap: wrap; overflow: visible; }
+  .fact-chips .tag, .fact-chips .badge { font-size: 11px; padding: 3px 6px; }
+  .fact-chips .ic { display: none; }  /* icônes masquées sur mobile pour gagner de la place */
   .sheet-title { font-size: 1.45rem; }
   .sheet-img { height: 200px; max-height: 200px; }
 }

@@ -39,13 +39,17 @@ function placeholderSvg(theme) {
 function chip(label, kind = "", ic = "") {
   return `<span class="chip ${kind} ${ic ? "ic-only" : ""}">${ic ? icon(ic) : ""}${esc(label)}</span>`;
 }
-function factMeta(f) {
+function factMeta(f, status) {
   const c = f.champion || {};
   const lvl = c.level || (c.guinee_filter ? 2 : 1);
+  const st = status || f.status || "PENDING_REVIEW";
+  const stMap = { PENDING_REVIEW: "En attente", APPROVED: "Approuvé", REJECTED: "Rejeté", TRANSMITTED: "Transmis", EDITED: "Édité" };
+  const stLabel = stMap[st] || st || "En attente";
   return [
     chip(lvl === 1 ? "Niveau 1 · Source guinéenne" : "Niveau 2 · International filtrée", lvl === 1 ? "primary" : "secondary", lvl === 1 ? "i-level1" : "i-level2"),
     chip("Fusion " + (f.n_sources || 1) + " sources", "tertiary", "i-fusion"),
     chip("Date OK", "tertiary", "i-date"),
+    `<span class="badge badge-pending">${esc(stLabel)}</span>`,
   ].join("");
 }
 function statusBadge(st) {
@@ -357,10 +361,11 @@ function renderSheet(s) {
     _paras = _clean.split(/\n+/).map(p => p.trim()).filter(Boolean);
   }
   const _first = _paras[0] || _clean;
-  const standfirst = _first.slice(0, 220);
-  // Corps = tout l'article MOINS le début (= standfirst) -> pas de doublon, pas de perte
-  let bodyText = _clean.startsWith(standfirst)
-    ? _clean.slice(standfirst.length).trim()
+  // Chapô = 1er paragraphe COMPLET (ouverture de l'article), pas tronqué arbitrairement
+  const standfirst = _first;
+  // Corps = tout l'article MOINS le 1er paragraphe (le chapô) -> pas de doublon, pas de coupure
+  let bodyText = _clean.startsWith(_first)
+    ? _clean.slice(_first.length).trim()
     : _clean;
   // Retire la section "## Le fait en bref" du corps (le chapeau joue déjà ce rôle -> évite la redondance)
   bodyText = bodyText.replace(/^##\s*Le fait en bref\b[\s\S]*?(?=##\s*Décryptage)/i, "").trim();
@@ -384,7 +389,7 @@ function renderSheet(s) {
         <button class="sheet-close" data-close="1" title="Fermer" aria-label="Fermer">${icon("i-close")}</button>
       </div>
       <p class="sheet-standfirst">${mdToHtmlInline(standfirst)}</p>
-      <div class="fact-chips" style="margin:6px 0 16px">${factMeta(f)} ${statusBadge(status)}</div>
+      <div class="fact-chips" style="margin:6px 0 16px">${factMeta(f, status)}</div>
       <div class="sheet-textwrap"><div class="sheet-text">${mdToHtml(bodyText || text)}</div></div>
       <div class="sheet-audit-note">${icon("i-audit")} Décision enregistrée dans l'historique · ${esc(f.n_sources || 1)} source(s) fusionnée(s)</div>
     </article>
