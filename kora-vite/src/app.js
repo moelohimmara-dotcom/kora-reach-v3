@@ -370,6 +370,13 @@ function viewAudit(s) {
       <button class="btn btn-outline btn-sm" id="auditResetToday">Réinitialiser aujourd'hui</button>
       <button class="btn btn-danger btn-sm" id="auditPurgeAll">Vider tout l'historique</button>
     </div>
+    <div class=\"audit-floatbar\" id=\"auditFloatbar\">
+      <span class=\"fb-count\" id=\"auditFbCount\">0 sélectionné(s)</span>
+      <span class=\"fb-spacer\"></span>
+      <button class=\"btn btn-ghost btn-sm\" id=\"auditFbAll\">Tout</button>
+      <button class=\"btn btn-ghost btn-sm\" id=\"auditFbNone\">Aucun</button>
+      <button class=\"btn btn-danger btn-sm\" id=\"auditFbDel\" disabled>Supprimer</button>
+    </div>
     ${days.map(dayBlock).join("")}`;
 }
 function staleBox(s) {
@@ -502,19 +509,34 @@ function bindAudit() {
   if (!view) return;
   const checks = () => Array.from(view.querySelectorAll(".audit-check:checked")).map(c => c.dataset.id);
   const delBtn = document.getElementById("auditDelSel");
-  const refresh = () => { if (delBtn) delBtn.disabled = checks().length === 0; };
+  const fb = document.getElementById("auditFloatbar");
+  const fbCount = document.getElementById("auditFbCount");
+  const fbDel = document.getElementById("auditFbDel");
+  const refresh = () => {
+    const n = checks().length;
+    if (delBtn) delBtn.disabled = n === 0;
+    if (fbDel) fbDel.disabled = n === 0;
+    if (fbCount) fbCount.textContent = `${n} sélectionné(s)`;
+    if (fb) fb.classList.toggle("show", n > 0);
+  };
   view.querySelectorAll(".audit-check").forEach(c => c.onchange = refresh);
   const selAll = document.getElementById("auditSelAll");
   if (selAll) selAll.onclick = () => { view.querySelectorAll(".audit-check").forEach(c => c.checked = true); refresh(); };
   const selNone = document.getElementById("auditSelNone");
   if (selNone) selNone.onclick = () => { view.querySelectorAll(".audit-check").forEach(c => c.checked = false); refresh(); };
-  if (delBtn) delBtn.onclick = async () => {
+  const fbAll = document.getElementById("auditFbAll");
+  if (fbAll) fbAll.onclick = () => { view.querySelectorAll(".audit-check").forEach(c => c.checked = true); refresh(); };
+  const fbNone = document.getElementById("auditFbNone");
+  if (fbNone) fbNone.onclick = () => { view.querySelectorAll(".audit-check").forEach(c => c.checked = false); refresh(); };
+  const doDelete = async () => {
     const ids = checks();
     if (!ids.length) return;
     if (!confirm(`Supprimer ${ids.length} événement(s) de l'historique ?`)) return;
     await Store.api("/api/audit", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
     Store.loadAudit(); snack("Sélection supprimée");
   };
+  if (delBtn) delBtn.onclick = doDelete;
+  if (fbDel) fbDel.onclick = doDelete;
   const purgeAll = document.getElementById("auditPurgeAll");
   if (purgeAll) purgeAll.onclick = async () => {
     if (!confirm("Vider TOUT l'historique ? (une ligne de purge sera conservée)")) return;
