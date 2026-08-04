@@ -6,6 +6,24 @@ import { Store } from "./store.js";
 const $ = (id) => document.getElementById(id);
 const $$ = (sel, root = document) => root ? Array.from(root.querySelectorAll(sel)) : [];
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>`"'$]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "`": "&#96;", '"': "&quot;", "'": "&#39;", "$": "&#36;" }[c]));
+// Markdown léger sécurisé : échappe d'abord, puis **gras** -> <strong>, *ital* -> <em>, ##/### titre -> <h*> (pour le corps), \n -> <br>
+const mdToHtml = (s) => {
+  let h = esc(s);
+  // titres de section (## Décryptage etc.) -> uniquement dans le corps, pas dans le chapeau
+  h = h.replace(/^###\s+(.+)$/gm, "<h3 class=\"sheet-h3\">$1</h3>")
+       .replace(/^##\s+(.+)$/gm, "<h2 class=\"sheet-h2\">$1</h2>")
+       .replace(/^#\s+(.+)$/gm, "<strong class=\"sheet-h1\">$1</strong>");
+  h = h.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+       .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  return h;
+};
+const mdToHtmlInline = (s) => {
+  // version chapeau : pas de titres de section, gras/italique seulement
+  let h = esc(s);
+  h = h.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+       .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  return h;
+};
 const icon = (id, cls = "") => `<svg class="ic ${cls}"><use href="#${id}"/></svg>`;
 function placeholderSvg(theme) {
   const pal = {
@@ -365,9 +383,9 @@ function renderSheet(s) {
         </div>
         <button class="sheet-close" data-close="1" title="Fermer" aria-label="Fermer">${icon("i-close")}</button>
       </div>
-      <p class="sheet-standfirst">${esc(standfirst)}</p>
+      <p class="sheet-standfirst">${mdToHtmlInline(standfirst)}</p>
       <div class="fact-chips" style="margin:6px 0 16px">${factMeta(f)} ${statusBadge(status)}</div>
-      <div class="sheet-textwrap"><div class="sheet-text">${esc(bodyText || text)}</div></div>
+      <div class="sheet-textwrap"><div class="sheet-text">${mdToHtml(bodyText || text)}</div></div>
       <div class="sheet-audit-note">${icon("i-audit")} Décision enregistrée dans l'historique · ${esc(f.n_sources || 1)} source(s) fusionnée(s)</div>
     </article>
     <div class="sheet-actions">

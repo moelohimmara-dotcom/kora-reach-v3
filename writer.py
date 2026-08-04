@@ -283,6 +283,31 @@ def _ensure_min_length(raw: str, fact: Dict, lt: Dict, min_words: int = 879) -> 
     return raw
 
 
+def _proofread(raw: str, fact: Dict) -> str:
+    """2e règle : passe de relecture/correction orthographe, grammaire, syntaxe
+    et suppression des artifacts d'ecriture IA. NE change AUCUN fait. 1 passage, fallback original."""
+    msg = [
+        {"role": "system", "content": (
+            "Tu es un relecteur-correcteur de presse francophone (AFP/RFI). "
+            "Relis le texte et corrige STRICTEMENT : orthographe, grammaire, syntaxe, "
+            "accords, ponctuation, et supprime les artifacts d'ecriture IA (lignes orphelines "
+            "hors contexte, doubles asterisques ** residuels, repetitions de mots, formulations "
+            "artificielles). Règles : (1) NE change AUCUN fait, date, chiffre, nom ou citation ; "
+            "(2) garde la structure (Titre, CHAPO, ## Décryptage, ## A noter, Sources, signature) ; "
+            "(3) si un fragment de phrase est detache en fin de paragraphe sans lien, reintegre-le "
+            "dans le paragraphe precedent ; (4) reponds avec le texte CORRIGE complet, rien d'autre."
+        )},
+        {"role": "user", "content": f"TEXTE A RELIRE :\n{raw}"},
+    ]
+    try:
+        fixed = _ollama_chat(msg, 3000)
+        if fixed and len(fixed.split()) >= len(raw.split()) * 0.8:
+            return fixed
+    except Exception:
+        pass
+    return raw
+
+
 def write_article(fact: Dict, dry_run: bool = None) -> Dict:
     """Génère l'article de synthèse pour un fact. Retourne dict avec article + image."""
     if dry_run is None:
@@ -332,6 +357,7 @@ def write_article(fact: Dict, dry_run: bool = None) -> Dict:
                 data = _json.loads(r.read())
             art = data["choices"][0]["message"]["content"]
             art = _ensure_min_length(art, fact, lt)
+            art = _proofread(art, fact)
             return {"article": art, "image": image, "image_meta": image_meta, "model": f"ollama/{model}", "status": "ok", "length_target": lt["target"], "length_score": lt["score"]}
         except Exception as e:
             last_err = e
