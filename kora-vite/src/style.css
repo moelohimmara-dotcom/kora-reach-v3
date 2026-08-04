@@ -112,8 +112,8 @@
 
   --md-sys-color-warning: #8A5A12;
   --md-sys-color-on-warning: #FFF7F2;
-  --md-sys-color-warning-container: rgba(138,90,18,0.13);
-  --md-sys-color-on-warning-container: #432C09;
+  --md-sys-color-warning-container: #FCE3B8;
+  --md-sys-color-on-warning-container: #4A3005;
 
   --md-sys-color-surface: #F4F1EC;
   --md-sys-color-on-surface: #2A201B;
@@ -281,11 +281,14 @@ body::after {
 
 .glass { background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); border-radius: var(--radius-xl); }
 
+/* MD3 assist chip (compact) : hauteur 24px, pas de bordure, fond container */
 .chip {
-  display: inline-flex; align-items: center; gap: 5px; font-size: var(--t-label-sm); font-weight: 600; letter-spacing: .2px;
-  padding: 5px 11px; border-radius: var(--radius-pill); background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--md-sys-color-on-surface-variant);
+  display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; letter-spacing: .1px;
+  height: 24px; padding: 0 8px; border-radius: 8px; background: var(--glass-bg); border: none;
+  color: var(--md-sys-color-on-surface-variant);
+  line-height: 1; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
 }
-.chip .ic { width: 16px; height: 16px; opacity: .92; }
+.chip .ic { width: 14px; height: 14px; flex: none; opacity: .9; }
 .chip-primary { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); border-color: transparent; }
 .chip-secondary { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); border-color: transparent; }
 .chip-tertiary { background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); border-color: transparent; }
@@ -348,12 +351,14 @@ body::after {
 .fact-img { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; background: var(--md-sys-color-surface-variant); }
 .fact-body { padding: var(--space-4); }
 .fact-title { font-family: var(--font-display); font-size: var(--t-title-lg); font-weight: 700; margin-bottom: var(--space-3); line-height: 1.28; letter-spacing: -.2px; }
-.fact-chips { display: flex; flex-wrap: nowrap; gap: 9px; margin-bottom: var(--space-3); overflow-x: auto; overscroll-behavior: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.fact-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--space-3); }
 .fact-chips::-webkit-scrollbar { display: none; }
 .fact-chips .tag { flex: none; white-space: nowrap; }
-.fact-status { font-size: var(--t-label); color: var(--md-sys-color-on-surface-variant); display: flex; align-items: center; gap: 8px; }
-.badge { padding: 3px 11px; border-radius: var(--radius-pill); font-weight: 700; font-size: var(--t-label-sm); letter-spacing: .2px; }
-.badge-pending { background: rgba(234,182,100,0.28); color: #8A5A12; border: 1px solid rgba(234,182,100,0.55); }
+.fact-status { font-size: 11px; color: var(--md-sys-color-on-surface-variant); display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.fact-status .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* MD3 : badge = même gabarit que chip, sans bordure */
+.badge { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 8px; border: none; font-weight: 600; font-size: 11px; line-height: 1; letter-spacing: .1px; white-space: nowrap; }
+.badge-pending { background: var(--md-sys-color-warning-container, rgba(234,182,100,0.28)); color: var(--md-sys-color-on-warning-container, #8A5A12); border: none; }
 .badge-approved { background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); }
 .badge-rejected { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
 .badge-transmitted { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }

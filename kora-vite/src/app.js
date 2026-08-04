@@ -37,20 +37,30 @@ function placeholderSvg(theme) {
 }
 
 function chip(label, kind = "", ic = "") {
-  return `<span class="chip ${kind} ${ic ? "ic-only" : ""}">${ic ? icon(ic) : ""}${esc(label)}</span>`;
+  // kind = primary|secondary|tertiary|warning|error → classe MD3 .chip-<kind>
+  const k = kind ? (kind.startsWith("chip-") ? kind : "chip-" + kind) : "";
+  return `<span class="chip ${k}">${ic ? icon(ic) : ""}${esc(label)}</span>`;
 }
-function factMeta(f, status) {
+function factMeta(f, status, compact) {
   const c = f.champion || {};
   const lvl = c.level || (c.guinee_filter ? 2 : 1);
   const st = status || f.status || "PENDING_REVIEW";
   const stMap = { PENDING_REVIEW: "En attente", APPROVED: "Approuvé", REJECTED: "Rejeté", TRANSMITTED: "Transmis", EDITED: "Édité" };
   const stLabel = stMap[st] || st || "En attente";
-  return [
-    chip(lvl === 1 ? "Niveau 1 · Source guinéenne" : "Niveau 2 · International filtrée", lvl === 1 ? "primary" : "secondary", lvl === 1 ? "i-level1" : "i-level2"),
-    chip("Fusion " + (f.n_sources || 1) + " sources", "tertiary", "i-fusion"),
+  const lvlLabel = compact
+    ? (lvl === 1 ? "Niveau 1" : "Niveau 2")
+    : (lvl === 1 ? "Niveau 1 · Source guinéenne" : "Niveau 2 · International filtrée");
+  // En mode carte (compact), on retire les puces de métadonnées (surcharge visuelle) ;
+  // seul le statut est conservé via .fact-status. Dans le tiroir (sheet), on garde tout.
+  if (compact) return "";
+  const items = [
+    chip(lvlLabel, lvl === 1 ? "primary" : "secondary", lvl === 1 ? "i-level1" : "i-level2"),
+    chip((f.n_sources || 1) + " source" + ((f.n_sources || 1) > 1 ? "s" : ""), "tertiary", "i-fusion"),
     chip("Date OK", "tertiary", "i-date"),
-    `<span class="badge badge-pending">${esc(stLabel)}</span>`,
-  ].join("");
+  ];
+  // en mode carte, le statut est déjà affiché dans la ligne .fact-status (pas de doublon)
+  if (!compact) items.push(`<span class="badge badge-pending">${esc(stLabel)}</span>`);
+  return items.join("");
 }
 function statusBadge(st) {
   const map = {
@@ -142,7 +152,7 @@ function factCard(f, s, idx) {
       <img class="fact-img" src="${src}" alt="" loading="lazy" onerror="this.src='${ph}'">
       <div class="fact-body">
         <h3 class="fact-title">${esc(c.title)}</h3>
-        <div class="fact-chips">${factMeta(f)}</div>
+        <div class="fact-chips">${factMeta(f, undefined, true)}</div>
         <div class="fact-status">${statusBadge(status)} <span class="muted">${esc(c.source || "")}</span></div>
       </div>
     </article>`;
