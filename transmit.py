@@ -100,16 +100,21 @@ def transmit(fact: dict, final_text: str, provider: str = None) -> dict:
                 "http_status": 200, "detail": "Aucune transmission réelle (mode démo).",
                 "payload_preview": {k: (v[:120] + "…" if isinstance(v, str) and len(v) > 120 else v)
                                     for k, v in payload.items()}}
-    if m in ("wordpress", "supabase"):
+    if m in ("wordpress", "supabase", "postgres"):
         # force un seul backend
         if m == "wordpress":
             return _to_wordpress(payload)
+        if m == "postgres":
+            return _to_postgres(fact, final_text)
         return _to_supabase(fact, final_text)
-    # mode() == "both" (WP + Supabase tous deux configurés)
+    # mode() == "both"
     results = []
     if WP_URL and WP_USER and WP_APP_PASS:
         results.append(_to_wordpress(payload))
-    if SB_URL and SB_KEY:
+    # Entrepôt: Postgres local si activé, sinon Supabase cloud (legacy)
+    if (os.environ.get("DATABASE_BACKEND") or "sqlite").lower() == "postgres":
+        results.append(_to_postgres(fact, final_text))
+    elif SB_URL and SB_KEY:
         results.append(_to_supabase(fact, final_text))
     if not results:
         return {"status": "ERROR", "provider": "both", "http_status": 0,
@@ -121,12 +126,17 @@ def transmit(fact: dict, final_text: str, provider: str = None) -> dict:
 
 
 def mode() -> str:
+    pg = (os.environ.get("DATABASE_BACKEND") or "sqlite").lower() == "postgres"
+    if WP_URL and WP_USER and WP_APP_PASS and pg:
+        return "both"          # WordPress (public) + Postgres local (entrepôt)
     if WP_URL and WP_USER and WP_APP_PASS and SB_URL and SB_KEY:
-        return "both"
+        return "both"          # WordPress + Supabase cloud (legacy)
     if WP_URL and WP_USER and WP_APP_PASS:
         return "wordpress"
     if SB_URL and SB_KEY:
         return "supabase"
+    if pg:
+        return "postgres"
     return "dry_run"
 
 
@@ -249,6 +259,46 @@ def _to_supabase(fact: dict, final_text: str) -> dict:
     except urllib.error.HTTPError as e:
         return {"status": "FAILED", "provider": "supabase",
                 "http_status": e.code, "detail": e.reason}
+
+
+def _to_postgres(fact: dict, final_text: str) -> dict:
+    """Écrit l'article validé dans la table 'articles' de la base PostgreSQL locale.
+    Même schéma que Supabase (colonnes fr). Dédupe sur source_url."""
+    import db
+    payload = _build_supabase_payload(fact, final_text)
+    src_url = payload.get("source_url", "")
+    con, mode = db.conn()
+    if mode != "postgres":
+        return {"status": "FAILED", "provider": "postgres", "http_status": 0,
+                "detail": "DATABASE_BACKEND n'est pas 'postgres'."}
+    try:
+        cur = con.cursor()
+        # Dédupe
+        if src_url:
+            cur.execute("SELECT id FROM articles WHERE source_url=%s" % db.placeholder(), (src_url,))
+            if cur.fetchone():
+                return {"status": "SKIPPED_DUPLICATE", "provider": "postgres",
+                        "http_status": 200, "detail": "source_url déjà présent."}
+        cols = ["titre", "chapeau", "corps", "meta_description", "mots_cles",
+                "source_url", "source_nom", "source_level", "image_url",
+                "llm_model_used", "status", "origin"]
+        vals = [payload.get("titre"), payload.get("chapeau"), payload.get("corps"),
+                payload.get("meta_description"), payload.get("mots_cles"),
+                payload.get("source_url"), payload.get("source_nom"),
+                payload.get("source_level"), payload.get("image_url"),
+                payload.get("llm_model_used"), payload.get("status"), payload.get("origin")]
+        ph = ",".join([db.placeholder()] * len(cols))
+        cur.execute(
+            f"INSERT INTO articles ({','.join(cols)}) VALUES ({ph})",
+            vals)
+        con.commit()
+        return {"status": "TRANSMITTED", "provider": "postgres", "http_status": 201,
+                "detail": "Écrit dans kora.articles (PENDING_REVIEW)."}
+    except Exception as e:
+        return {"status": "FAILED", "provider": "postgres", "http_status": 0,
+                "detail": str(e)}
+    finally:
+        con.close()
 
 
 def _b64(s: str) -> str:
