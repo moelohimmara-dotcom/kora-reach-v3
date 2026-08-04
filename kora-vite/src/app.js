@@ -303,6 +303,22 @@ function viewSettings(s) {
         </div>
       </div>
 
+      <div class="setting-row setting-col">
+        <div class="meta" style="width:100%">
+          <div class="name">Libellés de l'interface</div>
+          <div class="sub">Personnalise le nom des onglets et le sous-titre (white-label).</div>
+          <div class="labels-grid">
+            <label class="label-field">Tableau de bord<input class="text-input" id="setLblCockpit" type="text" maxlength="30" value="${esc(s.settings?.label_cockpit || "Tableau de bord")}"></label>
+            <label class="label-field">Articles<input class="text-input" id="setLblFacts" type="text" maxlength="30" value="${esc(s.settings?.label_facts || "Articles")}"></label>
+            <label class="label-field">Validation<input class="text-input" id="setLblHitl" type="text" maxlength="30" value="${esc(s.settings?.label_hitl || "Validation")}"></label>
+            <label class="label-field">Sources<input class="text-input" id="setLblSources" type="text" maxlength="30" value="${esc(s.settings?.label_sources || "Sources")}"></label>
+            <label class="label-field">Brouillons<input class="text-input" id="setLblDrafts" type="text" maxlength="30" value="${esc(s.settings?.label_drafts || "Brouillons")}"></label>
+            <label class="label-field">Historique<input class="text-input" id="setLblAudit" type="text" maxlength="30" value="${esc(s.settings?.label_audit || "Historique")}"></label>
+            <label class="label-field label-full">Sous-titre (À propos)<input class="text-input" id="setTagline" type="text" maxlength="30" value="${esc(s.settings?.app_tagline || "Poste de pilotage éditorial v3")}"></label>
+          </div>
+        </div>
+      </div>
+
       <div class="setting-row">
         <span class="meta-ic">${icon("i-user")}</span>
         <div class="meta"><div class="name">Rôle</div><div class="sub">${esc(roleLabel)}</div></div>
@@ -322,7 +338,7 @@ function viewSettings(s) {
       <div class="group-head"><span class="group-ic">${icon("i-info")}</span><h3 class="group-title">À propos</h3></div>
       <div class="setting-row">
         <span class="meta-ic">${icon("i-spark")}</span>
-        <div class="meta"><div class="name">KORA Reach</div><div class="sub">Poste de pilotage éditorial v3</div></div>
+        <div class="meta"><div class="name">KORA Reach</div><div class="sub about-tagline">Poste de pilotage éditorial v3</div></div>
       </div>
     </section>`;
 }
@@ -632,11 +648,18 @@ function bindSettings() {
 
   const save = document.getElementById("setSave");
   if (save) save.onclick = async () => {
+    const lblIds = { cockpit: "setLblCockpit", facts: "setLblFacts", hitl: "setLblHitl", sources: "setLblSources", drafts: "setLblDrafts", audit: "setLblAudit" };
     const payload = {
       app_name: (document.getElementById("setAppName")?.value || "").trim(),
       accent_coral: coral ? coral.value : undefined,
       accent_bordeaux: bordeaux ? bordeaux.value : undefined,
     };
+    Object.keys(lblIds).forEach(route => {
+      const v = (document.getElementById(lblIds[route])?.value || "").trim();
+      if (v) payload["label_" + route] = v;
+    });
+    const tag = (document.getElementById("setTagline")?.value || "").trim();
+    if (tag) payload.app_tagline = tag;
     if (logoData !== null) payload.logo_data = logoData; // "" ou data-URL
     try {
       const r = await Store.api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -646,6 +669,21 @@ function bindSettings() {
       snack("Modifications enregistrées");
     } catch (e) { snack(e.message || "Erreur d'enregistrement"); }
   };
+  // Preview live des libellés d'onglets
+  const liveLabels = () => {
+    const lblIds = { cockpit: "setLblCockpit", facts: "setLblFacts", hitl: "setLblHitl", sources: "setLblSources", drafts: "setLblDrafts", audit: "setLblAudit" };
+    Object.keys(lblIds).forEach(route => {
+      const el = document.getElementById(lblIds[route]);
+      if (el) document.querySelectorAll(`.navitem[data-route="${route}"] span`).forEach(sp => { sp.textContent = el.value || sp.textContent; });
+    });
+    const tg = document.getElementById("setTagline");
+    const tl = document.querySelector(".about-tagline");
+    if (tg && tl) tl.textContent = tg.value || tl.textContent;
+  };
+  ["setLblCockpit","setLblFacts","setLblHitl","setLblSources","setLblDrafts","setLblAudit","setTagline"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.oninput = liveLabels;
+  });
 }
 
 function render() {

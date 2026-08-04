@@ -13,7 +13,18 @@ DEFAULTS = {
     "app_name": "KORA Reach",
     "accent_coral": "#F2A98C",
     "accent_bordeaux": "#E08A84",
+    # Libellés de l'interface (white-label)
+    "label_cockpit": "Tableau de bord",
+    "label_facts": "Articles",
+    "label_hitl": "Validation",
+    "label_sources": "Sources",
+    "label_drafts": "Brouillons",
+    "label_audit": "Historique",
+    "app_tagline": "Poste de pilotage éditorial v3",
 }
+
+_LABEL_KEYS = [k for k in DEFAULTS if k.startswith("label_")] + ["app_tagline"]
+_LABEL_RE = re.compile(r"^[^<>]{1,30}$")
 
 
 def _ph():
@@ -95,10 +106,24 @@ def save_settings(payload: dict) -> dict:
         elif not _valid_logo(logo):
             return {"ok": False, "error": "Logo invalide (doit être data:image/...;base64, <256 Ko)"}
 
+    # Libellés d'interface (white-label)
+    labels = {}
+    for k in _LABEL_KEYS:
+        v = (payload.get(k) or "").strip()
+        if v and not _LABEL_RE.match(v):
+            return {"ok": False, "error": f"Libellé '{k}' invalide (1-30 caractères, sans < >)"}
+        labels[k] = v or DEFAULTS.get(k, "")
+
     con, _ = db.conn()
     try:
         cur = con.cursor()
         for k, v in [("app_name", name), ("accent_coral", coral), ("accent_bordeaux", bordeaux)]:
+            if db.is_postgres():
+                cur.execute(f"DELETE FROM kora_config WHERE key={_ph()}", (k,))
+                cur.execute(f"INSERT INTO kora_config(key,value) VALUES({_ph()},{_ph()})", (k, v))
+            else:
+                cur.execute(f"INSERT OR REPLACE INTO kora_config(key,value) VALUES({_ph()},{_ph()})", (k, v))
+        for k, v in labels.items():
             if db.is_postgres():
                 cur.execute(f"DELETE FROM kora_config WHERE key={_ph()}", (k,))
                 cur.execute(f"INSERT INTO kora_config(key,value) VALUES({_ph()},{_ph()})", (k, v))

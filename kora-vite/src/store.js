@@ -93,6 +93,17 @@ export const Store = (() => {
         markEl.innerHTML = `<svg class="ic"><use href="#i-spark"/></svg>`;
       }
     }
+    // Libellés d'interface (white-label) : navitems par data-route + tagline
+    const routeMap = { cockpit: s.label_cockpit, facts: s.label_facts, hitl: s.label_hitl, sources: s.label_sources, drafts: s.label_drafts, audit: s.label_audit };
+    Object.keys(routeMap).forEach(route => {
+      const lbl = routeMap[route];
+      if (!lbl) return;
+      document.querySelectorAll(`.navitem[data-route="${route}"] span`).forEach(sp => { sp.textContent = lbl; });
+    });
+    if (s.app_tagline) {
+      const tl = document.querySelector(".about-tagline");
+      if (tl) tl.textContent = s.app_tagline;
+    }
   }
   function shade(hex, pct) {
     const m = /^#?([0-9A-Fa-f]{6})$/.exec(hex || "");
