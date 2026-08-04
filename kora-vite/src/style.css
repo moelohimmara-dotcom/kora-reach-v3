@@ -695,6 +695,12 @@ body::after {
 [data-rail="collapsed"] .rail-section-label { display: none; }
 [data-rail="collapsed"] .rail-sep { margin: 8px 14px; }
 
+/* ---- Liste des comptes (multi-rédacteurs) ---- */
+.user-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.user-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--glass-bg); border: 1px solid var(--glass-border); }
+.user-row .name { font-weight: 600; font-size: var(--t-body); }
+.user-row .sub { font-size: var(--t-label-sm); color: var(--md-sys-color-on-surface-variant); }
+
 /* ---- Auth overlay ---- */
 #authOverlay[hidden] { display: none; }
 .auth-screen { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; background: var(--md-sys-color-background); padding: 24px; }

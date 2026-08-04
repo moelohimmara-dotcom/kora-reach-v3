@@ -151,6 +151,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"ok": True, "username": u["username"] if isinstance(u, dict) else u[1],
                                         "email": u["email"] if isinstance(u, dict) else u[3]})
             return self._send(401, {"error": "unauthorized"})
+        if path == "/api/auth/users":
+            if not self._require_auth():
+                return
+            users = auth.list_users()
+            out = [dict(u) if isinstance(u, dict) else {"id": u[0], "username": u[1], "email": u[3], "created_at": u[4]} for u in users]
+            return self._send(200, {"users": out})
         if path == "/api/hitl":
             # Tous les faits persistés (survit au redémarrage du service)
             out = list_facts()
@@ -267,7 +273,7 @@ class Handler(BaseHTTPRequestHandler):
         if p.path == "/api/auth/login":
             u = payload.get("username", "").strip()
             pw = payload.get("password", "")
-            r = auth.login(u, pw)
+            r = auth.login(u, pw, self.client_address[0])
             if r.get("ok"):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -305,8 +311,24 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200 if r.get("ok") else 400, r)
             return
         if p.path == "/api/auth/forgot":
-            r = auth.forgot_password((payload.get("email") or "").strip().lower())
+            r = auth.forgot_password((payload.get("email") or "").strip().lower(), self.client_address[0])
             self._send(200, r)
+            return
+        if p.path == "/api/auth/users":
+            # Création d'un utilisateur (admin session requise)
+            if not self._require_auth():
+                return
+            uname = (payload.get("username") or "").strip()
+            email = (payload.get("email") or "").strip().lower()
+            pw = payload.get("password") or ""
+            if len(uname) < 3:
+                self._send(400, {"error": "username_too_short"})
+                return
+            if len(pw) < 8:
+                self._send(400, {"error": "password_too_short"})
+                return
+            r = auth.add_user(uname, pw, email)
+            self._send(200 if r.get("ok") else 400, r)
             return
         if p.path == "/api/auth/reset":
             r = auth.reset_password(payload.get("token", ""), payload.get("new_password", ""))
@@ -323,6 +345,19 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             payload = {}
         if not self._require_auth():
+            return
+        if p.path == "/api/auth/users":
+            uid = payload.get("id")
+            if not uid:
+                return self._send(400, {"error": "id_requis"})
+            # Empêche de se supprimer soi-même
+            sid = auth.read_cookie_sid(self.headers)
+            me = auth.get_session_user(sid)
+            my_id = me["id"] if isinstance(me, dict) else me[0]
+            if uid == my_id:
+                return self._send(400, {"error": "cannot_delete_self"})
+            r = auth.delete_user(uid)
+            self._send(200 if r.get("ok") else 400, r)
             return
         if p.path == "/api/audit":
             ids = payload.get("ids", [])

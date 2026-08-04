@@ -17,6 +17,7 @@ import base64
 import json
 import smtplib
 import email.utils
+import threading
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta
 
@@ -25,6 +26,48 @@ import db
 RESET_TTL_MIN = int(os.environ.get("KORA_RESET_TTL_MIN", "30"))
 SESSION_TTL_H = int(os.environ.get("KORA_SESSION_TTL_H", "24"))
 PBKDF2_ROUNDS = int(os.environ.get("KORA_PBKDF2_ROUNDS", "200000"))
+
+# Rate-limit (en mémoire, par IP) : 5 tentatives / 10 min pour login + forgot
+RL_MAX = int(os.environ.get("KORA_RL_MAX", "5"))
+RL_WINDOW = int(os.environ.get("KORA_RL_WINDOW", "600"))
+_rl_lock = threading.Lock()
+_rl_hits = {}  # ip -> [(ts, type), ...]
+
+
+def rate_ok(ip, kind):
+    now = datetime.now().timestamp()
+    with _rl_lock:
+        hits = _rl_hits.get(ip, [])
+        hits = [t for t in hits if t[0] > now - RL_WINDOW and t[1] == kind]
+        if len(hits) >= RL_MAX:
+            return False
+        hits.append((now, kind))
+        _rl_hits[ip] = hits
+        return True
+
+
+def list_users():
+    ph = db.placeholder()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(f"SELECT id, username, email, created_at FROM kora_users ORDER BY username")
+        return cur.fetchall()
+    finally:
+        con.close()
+
+
+def delete_user(uid):
+    ph = db.placeholder()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(f"DELETE FROM kora_sessions WHERE user_id={ph}", (uid,))
+        cur.execute(f"DELETE FROM kora_users WHERE id={ph}", (uid,))
+        con.commit()
+        return {"ok": True}
+    finally:
+        con.close()
 
 
 # ----------------------------------------------------------------------------
@@ -201,7 +244,10 @@ def delete_all_sessions_for_user(user_id):
 # ----------------------------------------------------------------------------
 # Auth actions
 # ----------------------------------------------------------------------------
-def login(username, password):
+def login(username, password, ip=None):
+    # Rate-limit par IP (5 / 10 min)
+    if ip and not rate_ok(ip, "login"):
+        return {"ok": False, "error": "rate_limited"}
     u = _get_user_by_username(username)
     if not u:
         return {"ok": False, "error": "invalid_credentials"}
@@ -252,7 +298,10 @@ def _username_by_id(uid):
 # ----------------------------------------------------------------------------
 # Reset mot de passe + SMTP
 # ----------------------------------------------------------------------------
-def forgot_password(email_addr):
+def forgot_password(email_addr, ip=None):
+    # Rate-limit par IP (5 / 10 min)
+    if ip and not rate_ok(ip, "forgot"):
+        return {"ok": True, "message": "si_compte_existe_email_envoye"}  # réponse générique
     u = _get_user_by_email(email_addr)
     # Réponse générique (ne pas révéler si l'email existe)
     if u:

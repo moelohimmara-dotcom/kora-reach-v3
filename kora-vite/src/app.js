@@ -364,6 +364,28 @@ function viewSettings(s) {
     </section>
 
     <section class="fact-group">
+      <div class="group-head"><span class="group-ic">${icon("i-user")}</span><h3 class="group-title">Comptes</h3></div>
+      <div class="user-list" id="userList">
+        ${(s.users || []).map(u => `<div class="user-row" data-id="${esc(u.id)}">
+          <div class="meta"><div class="name">${esc(u.username)}</div><div class="sub">${esc(u.email || "—")}</div></div>
+          <button class="btn btn-ghost btn-sm user-del" data-id="${esc(u.id)}">Retirer</button>
+        </div>`).join("")}
+      </div>
+      <div class="setting-row setting-col">
+        <div class="meta" style="width:100%">
+          <div class="name">Ajouter un compte</div>
+          <div class="sub">Identifiant (3+), email, mot de passe (8+).</div>
+          <div class="labels-grid">
+            <label class="label-field">Identifiant<input class="text-input" id="setNewUser" type="text" maxlength="40" placeholder="redacteur1"></label>
+            <label class="label-field">Email<input class="text-input" id="setNewEmail" type="email" maxlength="80" placeholder="redacteur@kora.reach"></label>
+            <label class="label-field label-full">Mot de passe<input class="text-input" id="setNewUserPw" type="password" maxlength="64" placeholder="••••••••" autocomplete="new-password"></label>
+          </div>
+          <button class="btn btn-outline" id="setAddUser" style="margin-top:10px">Créer le compte</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="fact-group">
       <div class="group-head"><span class="group-ic">${icon("i-info")}</span><h3 class="group-title">À propos</h3></div>
       <div class="setting-row">
         <span class="meta-ic">${icon("i-spark")}</span>
@@ -742,6 +764,31 @@ function bindSettings() {
     await Store.logout();
     App.renderAuth("login");
   };
+  // Comptes : liste + ajout + suppression
+  const addUser = document.getElementById("setAddUser");
+  if (addUser) addUser.onclick = async () => {
+    const uname = (document.getElementById("setNewUser")?.value || "").trim();
+    const email = (document.getElementById("setNewEmail")?.value || "").trim();
+    const pw = document.getElementById("setNewUserPw")?.value || "";
+    if (uname.length < 3) { snack("Identifiant 3 caractères minimum"); return; }
+    if (pw.length < 8) { snack("Mot de passe 8 caractères minimum"); return; }
+    try {
+      await Store.createUser(uname, email, pw);
+      snack("Compte créé");
+      await Store.loadUsers();
+      render();
+    } catch (e) { snack(e.message || "Erreur"); }
+  };
+  view.querySelectorAll(".user-del").forEach(b => b.onclick = async () => {
+    const id = b.dataset.id;
+    if (!confirm("Retirer ce compte ? Ses sessions seront fermées.")) return;
+    try {
+      await Store.deleteUser(id);
+      snack("Compte retiré");
+      await Store.loadUsers();
+      render();
+    } catch (e) { snack(e.message || "Erreur"); }
+  });
 }
 
 function render() {
@@ -868,6 +915,7 @@ function bind() {
   navigate(["cockpit", "facts", "hitl", "sources", "audit", "drafts", "settings"].includes(r) ? r : "cockpit");
   Store.loadHealth();
   Store.loadSettings();
+  Store.loadUsers().catch(() => {});  // peupler la liste des comptes (si session)
 }
 
 // ---- Écrans d'authentification (overlay plein écran) ----
@@ -958,6 +1006,7 @@ function bindAuth(mode, token) {
         await Store.login(u, p);
         overlay.hidden = true;
         document.getElementById("app").style.display = "";
+        Store.loadUsers().catch(() => {});
         Store.loadSettings();
         render();
         snack("Connecté");

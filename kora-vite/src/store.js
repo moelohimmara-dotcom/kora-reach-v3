@@ -94,6 +94,25 @@ export const Store = (() => {
     if (r.error === "password_too_short") throw new Error("Le mot de passe doit faire au moins 8 caractères");
     throw new Error(r.error || "Erreur");
   }
+  async function loadUsers() {
+    const r = await api("/api/auth/users");
+    if (r.users) { setState({ users: r.users }); return r.users; }
+    return [];
+  }
+  async function createUser(username, email, password) {
+    const r = await api("/api/auth/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, email, password }) });
+    if (r.ok) return true;
+    if (r.error === "username_exists") throw new Error("Cet identifiant existe déjà");
+    if (r.error === "username_too_short") throw new Error("Identifiant trop court (3 min)");
+    if (r.error === "password_too_short") throw new Error("Mot de passe 8 caractères minimum");
+    throw new Error(r.error || "Erreur");
+  }
+  async function deleteUser(id) {
+    const r = await api("/api/auth/users", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    if (r.ok) return true;
+    if (r.error === "cannot_delete_self") throw new Error("Vous ne pouvez pas supprimer votre propre compte");
+    throw new Error(r.error || "Erreur");
+  }
 
   async function loadHealth() {
     try { setState({ health: await api("/api/health") }); }
@@ -276,6 +295,7 @@ export const Store = (() => {
     getFactFilter, setFactFilter,
     getTheme, setTheme, initTheme,
     getRail, setRail, initRail,
-    checkAuth, login, logout, changePassword, forgot, resetPassword
+    checkAuth, login, logout, changePassword, forgot, resetPassword,
+    loadUsers, createUser, deleteUser
   };
 })();
