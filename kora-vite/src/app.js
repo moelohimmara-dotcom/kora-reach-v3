@@ -5,7 +5,7 @@ import { Store } from "./store.js";
 
 const $ = (id) => document.getElementById(id);
 const $$ = (sel, root = document) => root ? Array.from(root.querySelectorAll(sel)) : [];
-const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>`"'$]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "`": "&#96;", '"': "&quot;", "'": "&#39;", "$": "&#36;" }[c]));
 const icon = (id, cls = "") => `<svg class="ic ${cls}"><use href="#${id}"/></svg>`;
 function placeholderSvg(theme) {
   const pal = {
@@ -326,18 +326,26 @@ function renderSheet(s) {
   const f = sh.fact; const c = f.champion || {};
   const img = (f.image_meta && f.image_meta.image) || f.image || c.image || "";
   const ph = placeholderSvg(Store.getTheme());
-  const text = (f.article && (f.article.final_text || f.article.body)) || f.final_text || c.summary || "";
+  const text = (typeof f.article === "string" ? f.article
+    : (f.article && (f.article.final_text || f.article.body)))
+    || f.final_text || c.summary || "";
   const status = f.status || "PENDING_REVIEW";
   // Séparation chapeau / corps : le chapeau = 1er paragraphe, le corps = RESTE (évite la duplication)
-  // Split tolérant : doubles sauts (\n\n) sinon simples (\n)
-  const _rawParas = text.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+  // Nettoyage : on retire le "# Titre" markdown (déjà affiché séparément) du corps
+  let _clean = text.replace(/^#\s.*\n+/, "");
+  const _rawParas = _clean.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
   let _paras = _rawParas;
-  if (_paras.length <= 1 && text.includes("\n")) {
-    _paras = text.split(/\n+/).map(p => p.trim()).filter(Boolean);
+  if (_paras.length <= 1 && _clean.includes("\n")) {
+    _paras = _clean.split(/\n+/).map(p => p.trim()).filter(Boolean);
   }
-  const _first = _paras[0] || "";
-  const standfirst = (c.summary || "").slice(0, 220) || (_first ? _first.slice(0, 220) : text.slice(0, 200));
-  const bodyText = _paras.length > 1 ? _paras.slice(1).join("\n\n") : (text.length > standfirst.length ? text.slice(standfirst.length).trim() : "");
+  const _first = _paras[0] || _clean;
+  const standfirst = (c.summary || "").slice(0, 220) || _first.slice(0, 220);
+  // Corps = tout l'article MOINS le début (= standfirst) -> pas de doublon, pas de perte
+  let bodyText = _clean.startsWith(standfirst)
+    ? _clean.slice(standfirst.length).trim()
+    : _clean;
+  // Retire la section "## Le fait en bref" du corps (le chapeau joue déjà ce rôle -> évite la redondance)
+  bodyText = bodyText.replace(/^##\s*Le fait en bref\b[\s\S]*?(?=##\s*Décryptage)/i, "").trim();
   body.innerHTML = `
     <article class="sheet-article">
       ${img ? `<figure class="sheet-figure"><img class="sheet-img" src="${esc(img)}" alt="" onerror="this.src='${ph}'"><figcaption class="sheet-cap">Illustration IA — KORA Reach</figcaption></figure>` : `<figure class="sheet-figure"><img class="sheet-img" src="${ph}" alt=""><figcaption class="sheet-cap">Illustration IA — KORA Reach</figcaption></figure>`}
