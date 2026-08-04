@@ -165,9 +165,15 @@ export const Store = (() => {
     }
     if (markEl) {
       if (s.has_logo && s.logo_data) {
-        markEl.innerHTML = `<img src="${s.logo_data}" alt="" style="width:22px;height:22px;border-radius:6px;object-fit:contain;">`;
+        markEl.style.display = "none";
+        const nm = document.querySelector(".brand-name");
+        const sb = document.querySelector(".brand-sub");
+        if (nm) { nm.innerHTML = `<img src="${s.logo_data}" alt="" class="brand-logo-img">`; if (sb) sb.style.display = "none"; }
       } else {
+        markEl.style.display = "";
         markEl.innerHTML = `<svg class="ic"><use href="#i-spark"/></svg>`;
+        const nm = document.querySelector(".brand-name"); if (nm) nm.innerHTML = "KORA";
+        const sb = document.querySelector(".brand-sub"); if (sb) { sb.style.display = ""; sb.textContent = "Reach"; }
       }
     }
     // Libellés d'interface (white-label) : navitems par data-route + tagline

@@ -934,10 +934,10 @@ function renderAuth(mode, token) {
 }
 
 function viewLogin() {
-  const logo = (Store.state.settings && Store.state.settings.logo_data) ? `<img class="auth-logo" src="${Store.state.settings.logo_data}" alt="">` : icon("i-spark");
+  const logo = (Store.state.settings && Store.state.settings.logo_data) ? `<img class="auth-wordmark" src="${Store.state.settings.logo_data}" alt="">` : icon("i-spark");
   return `<div class="auth-screen">
     <div class="auth-card">
-      <div class="auth-mark">${logo}</div>
+      ${logo && typeof logo === "string" && logo.startsWith("<img") ? `<div class="auth-wordmark-wrap">${logo}</div>` : `<div class="auth-mark">${logo}</div>`}
       <h1 class="auth-title">${esc(Store.state.app_name || "KORA Reach")}</h1>
       <p class="auth-sub">Connexion au poste de pilotage éditorial</p>
       <form id="authForm" autocomplete="off">

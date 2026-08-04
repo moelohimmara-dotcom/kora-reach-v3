@@ -254,6 +254,7 @@ body::after {
 }
 .brand-mark .ic { width: 17px; height: 17px; }
 .brand-name { font-weight: 800; font-size: 1.2rem; letter-spacing: .4px; }
+.brand-logo-img { height: 24px; width: auto; max-width: 180px; object-fit: contain; display: block; }
 .brand-sub { font-size: .78rem; color: var(--md-sys-color-on-surface-variant); font-weight: 600; letter-spacing: .3px; }
 .topbar-status {
   display: flex; align-items: center; gap: 8px; font-size: var(--t-label); color: var(--md-sys-color-on-surface-variant); font-weight: 600;
@@ -713,3 +714,5 @@ body::after {
 .auth-field .text-input { width: 100%; }
 .auth-link { background: none; border: none; color: var(--coral-strong, var(--coral)); font-size: 13px; margin-top: 12px; cursor: pointer; text-decoration: underline; }
 .auth-err { color: var(--md-sys-color-error); font-size: 13px; margin-top: 10px; min-height: 18px; }
+.auth-wordmark-wrap { display: flex; justify-content: center; margin: 0 auto 12px; }
+.auth-wordmark { width: 78%; max-width: 260px; height: auto; object-fit: contain; }
