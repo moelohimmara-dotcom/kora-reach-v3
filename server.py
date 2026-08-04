@@ -8,6 +8,7 @@ explicite (HITL verrouillé). Mode transmission = dry_run par défaut.
 """
 import json
 import os
+import hmac
 import threading
 import urllib.parse
 from datetime import datetime
@@ -19,6 +20,7 @@ import normalizer
 import config
 from audit import get_events, log, get_daily, delete_events, purge_all, purge_day
 import settings
+import auth
 from hitl_store import (
     fact_id_of, decide, get as hitl_get, list_all,
     mark_transmitted, mark_transmission_failed, retract,
@@ -29,6 +31,9 @@ import transmit
 ROOT = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.environ.get("KORA_STATIC", os.path.join(ROOT, "static"))
 EDITOR_NAME = os.environ.get("EDITOR_NAME", "Rédacteur en chef")
+# Auth légère : token partagé (option B choisie par le client).
+# Défini dans deploy/.env (KORA_API_TOKEN). Fail-closed : si absent -> écritures refusées.
+API_TOKEN = os.environ.get("KORA_API_TOKEN", "").strip()
 
 # Dernier cycle persisté (pour affichage dashboard au rechargement)
 LAST_CYCLE = {"result": None, "ts": None, "running": False}
@@ -47,6 +52,27 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(data)
+
+    def _session_ok(self):
+        # 1) Session par cookie (auth complète)
+        sid = auth.read_cookie_sid(self.headers)
+        if sid and auth.get_session_user(sid):
+            return True
+        # 2) Fallback legacy : token partagé (X-API-Token) — toléré pour ne pas casser les intégrations
+        client = (self.headers.get("X-API-Token") or "").strip()
+        if not client:
+            authz = self.headers.get("Authorization", "")
+            if authz.startswith("Bearer "):
+                client = authz[7:].strip()
+        if client and API_TOKEN and hmac.compare_digest(client, API_TOKEN):
+            return True
+        return False
+
+    def _require_auth(self):
+        if self._session_ok():
+            return True
+        self._send(401, {"error": "unauthorized"})
+        return False
 
     def do_GET(self):
         p = urllib.parse.urlparse(self.path)
@@ -118,6 +144,13 @@ class Handler(BaseHTTPRequestHandler):
                 LAST_CYCLE["result"] = {"status":"ok","facts":facts,"facts_to_generate":len(facts)}
                 LAST_CYCLE["ts"] = datetime.now().isoformat(timespec="seconds")
             return self._send(200, {"seeded": len(facts)})
+        if path == "/api/auth/me":
+            sid = auth.read_cookie_sid(self.headers)
+            u = auth.get_session_user(sid) if sid else None
+            if u:
+                return self._send(200, {"ok": True, "username": u["username"] if isinstance(u, dict) else u[1],
+                                        "email": u["email"] if isinstance(u, dict) else u[3]})
+            return self._send(401, {"error": "unauthorized"})
         if path == "/api/hitl":
             # Tous les faits persistés (survit au redémarrage du service)
             out = list_facts()
@@ -161,6 +194,10 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(raw or b"{}")
         except Exception:
             payload = {}
+        # Routes publiques (aucune session requise) : login, forgot, reset
+        PUBLIC_POST = {"/api/auth/login", "/api/auth/forgot", "/api/auth/reset"}
+        if p.path not in PUBLIC_POST and not self._require_auth():
+            return
         if p.path == "/api/cycle":
             if reach_agent.agent.mutex:
                 return self._send(429, {"error": "cycle_en_cours"})
@@ -226,6 +263,55 @@ class Handler(BaseHTTPRequestHandler):
         if p.path == "/api/settings":
             res = settings.save_settings(payload or {})
             return self._send(200 if res.get("ok") else 400, res)
+        # ---- Auth ----
+        if p.path == "/api/auth/login":
+            u = payload.get("username", "").strip()
+            pw = payload.get("password", "")
+            r = auth.login(u, pw)
+            if r.get("ok"):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Set-Cookie", auth.cookie_value(r["session_id"]))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": True, "username": u}, ensure_ascii=False).encode("utf-8"))
+            else:
+                self._send(401, {"error": "invalid_credentials"})
+            return
+        if p.path == "/api/auth/logout":
+            if not self._require_auth():
+                return
+            sid = auth.read_cookie_sid(self.headers)
+            if sid: auth.delete_session(sid)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Set-Cookie", "kora_sid=; Path=/; HttpOnly; Max-Age=0")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(b'{"ok":true}')
+            return
+        if p.path == "/api/auth/change-password":
+            if not self._require_auth():
+                return
+            sid = auth.read_cookie_sid(self.headers)
+            user = auth.get_session_user(sid)
+            if not user:
+                self._send(401, {"error": "unauthorized"})
+                return
+            uid = user["id"] if isinstance(user, dict) else user[0]
+            r = auth.change_password(uid, payload.get("current", ""), payload.get("new", ""))
+            self._send(200 if r.get("ok") else 400, r)
+            return
+        if p.path == "/api/auth/forgot":
+            r = auth.forgot_password((payload.get("email") or "").strip().lower())
+            self._send(200, r)
+            return
+        if p.path == "/api/auth/reset":
+            r = auth.reset_password(payload.get("token", ""), payload.get("new_password", ""))
+            self._send(200 if r.get("ok") else 400, r)
+            return
         return self._send(404, {"error": "unknown endpoint"})
 
     def do_DELETE(self):
@@ -236,6 +322,8 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(raw or b"{}")
         except Exception:
             payload = {}
+        if not self._require_auth():
+            return
         if p.path == "/api/audit":
             ids = payload.get("ids", [])
             if not ids:
@@ -268,6 +356,7 @@ def _fact_by_id(fid):
 
 def main():
     port = int(os.environ.get("PORT", "8765"))
+    auth.init()  # crée tables + admin depuis .env
     srv = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     print(f"KORA dashboard sur http://localhost:{port} | editor={EDITOR_NAME} | transmit={transmit.mode()}")
     srv.serve_forever()

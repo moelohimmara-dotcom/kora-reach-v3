@@ -15,6 +15,7 @@ export const Store = (() => {
     audit: [],
     sources: [],
     sheet: null,
+    auth: { loggedIn: false, username: null, email: null },
   };
 
   const subs = new Set();
@@ -26,8 +27,18 @@ export const Store = (() => {
 
   async function api(path, opts) {
     const url = BASE + path;
+    // Inject token if present (light auth) – token stored in localStorage under "kora-token"
+    const token = (() => {
+      try { return localStorage.getItem("kora-token"); } catch (e) { return null; }
+    })();
+    const headers = Object.assign({}, opts && opts.headers ? opts.headers : {});
+    if (token) {
+      // Prefer X-API-Token, fallback to Authorization Bearer
+      headers["X-API-Token"] = token;
+    }
+    const fetchOpts = Object.assign({}, opts, { headers, credentials: "same-origin" });
     try {
-      const res = await fetch(url, opts);
+      const res = await fetch(url, fetchOpts);
       const ct = res.headers.get("content-type") || "";
       if (!ct.includes("application/json")) {
         throw new Error("Réponse non-JSON du serveur (code " + res.status + ")");
@@ -36,6 +47,52 @@ export const Store = (() => {
     } catch (e) {
       throw new Error(e.message || "Réseau indisponible");
     }
+  }
+
+  // ---- Auth ----
+  async function checkAuth() {
+    try {
+      const r = await api("/api/auth/me");
+      if (r.ok) {
+        setState({ auth: { loggedIn: true, username: r.username, email: r.email } });
+        return true;
+      }
+    } catch (e) {}
+    setState({ auth: { loggedIn: false, username: null, email: null } });
+    return false;
+  }
+  async function login(username, password) {
+    const r = await api("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }) });
+    if (r.ok) {
+      setState({ auth: { loggedIn: true, username, email: null } });
+      await checkAuth();
+      return true;
+    }
+    if (r.error === "invalid_credentials") throw new Error("Identifiants invalides");
+    throw new Error("Erreur de connexion");
+  }
+  async function logout() {
+    try { await api("/api/auth/logout", { method: "POST" }); } catch (e) {}
+    setState({ auth: { loggedIn: false, username: null, email: null } });
+  }
+  async function changePassword(current, newp) {
+    const r = await api("/api/auth/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ current, new: newp }) });
+    if (r.ok) return true;
+    if (r.error === "wrong_current") throw new Error("Mot de passe actuel incorrect");
+    if (r.error === "password_too_short") throw new Error("Le nouveau mot de passe doit faire au moins 8 caractères");
+    throw new Error(r.error || "Erreur");
+  }
+  async function forgot(email) {
+    const r = await api("/api/auth/forgot", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+    return r.ok !== false;
+  }
+  async function resetPassword(token, newp) {
+    const r = await api("/api/auth/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, new_password: newp }) });
+    if (r.ok) return true;
+    if (r.error === "token_expired") throw new Error("Lien expiré, redemandez une réinitialisation");
+    if (r.error === "invalid_token") throw new Error("Lien invalide");
+    if (r.error === "password_too_short") throw new Error("Le mot de passe doit faire au moins 8 caractères");
+    throw new Error(r.error || "Erreur");
   }
 
   async function loadHealth() {
@@ -218,6 +275,7 @@ export const Store = (() => {
     startCycle, seed, decide, retract, setRoute, openSheet, closeSheet, wait,
     getFactFilter, setFactFilter,
     getTheme, setTheme, initTheme,
-    getRail, setRail, initRail
+    getRail, setRail, initRail,
+    checkAuth, login, logout, changePassword, forgot, resetPassword
   };
 })();

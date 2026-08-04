@@ -331,7 +331,36 @@ function viewSettings(s) {
         <span class="meta-ic">${icon("i-sources")}</span>
         <div class="meta"><div class="name">Périmètre éditorial</div><div class="sub">Actualité Guinée · kakilambe.com</div></div>
       </div>
+      <div class="setting-row setting-col">
+        <div class="meta" style="width:100%">
+          <div class="name">Clé d'administration (token)</div>
+          <div class="sub">Token partagé pour autoriser les modifications (option B). Valeur stockée en localStorage.</div>
+          <input class="text-input" id="setToken" type="password" maxlength="64" placeholder="Entrer le token partagé" value="${esc(localStorage.getItem("kora-token") || "")}">
+        </div>
+      </div>
+
       <button class="btn btn-primary" id="setSave" style="margin-top:12px">Enregistrer les modifications</button>
+    </section>
+
+    <section class="fact-group">
+      <div class="group-head"><span class="group-ic">${icon("i-user")}</span><h3 class="group-title">Compte</h3></div>
+      <div class="setting-row setting-col">
+        <div class="meta" style="width:100%">
+          <div class="name">Changer le mot de passe</div>
+          <div class="sub">8 caractères minimum.</div>
+          <div class="labels-grid">
+            <label class="label-field label-full">Mot de passe actuel<input class="text-input" id="setCurPw" type="password" maxlength="64" autocomplete="current-password"></label>
+            <label class="label-field">Nouveau<input class="text-input" id="setNewPw" type="password" maxlength="64" autocomplete="new-password"></label>
+            <label class="label-field">Confirmer<input class="text-input" id="setNewPw2" type="password" maxlength="64" autocomplete="new-password"></label>
+          </div>
+          <button class="btn btn-outline" id="setChangePw" style="margin-top:10px">Mettre à jour le mot de passe</button>
+        </div>
+      </div>
+      <div class="setting-row">
+        <span class="meta-ic">${icon("i-user")}</span>
+        <div class="meta"><div class="name">Session</div><div class="sub">Connecté en tant que ${esc(Store.state.auth.username || "—")}</div></div>
+        <button class="btn btn-ghost" id="setLogout">Se déconnecter</button>
+      </div>
     </section>
 
     <section class="fact-group">
@@ -648,6 +677,14 @@ function bindSettings() {
 
   const save = document.getElementById("setSave");
   if (save) save.onclick = async () => {
+    // Token d'administration (stocké localement, jamais envoyé au serveur)
+    const tokenField = document.getElementById("setToken");
+    if (tokenField) {
+      const tk = tokenField.value.trim();
+      if (tk) {
+        try { localStorage.setItem("kora-token", tk); } catch (e) {}
+      }
+    }
     const lblIds = { cockpit: "setLblCockpit", facts: "setLblFacts", hitl: "setLblHitl", sources: "setLblSources", drafts: "setLblDrafts", audit: "setLblAudit" };
     const payload = {
       app_name: (document.getElementById("setAppName")?.value || "").trim(),
@@ -684,6 +721,27 @@ function bindSettings() {
     const el = document.getElementById(id);
     if (el) el.oninput = liveLabels;
   });
+  // Compte : changement de mot de passe + déconnexion
+  const changePw = document.getElementById("setChangePw");
+  if (changePw) changePw.onclick = async () => {
+    const cur = document.getElementById("setCurPw")?.value || "";
+    const n1 = document.getElementById("setNewPw")?.value || "";
+    const n2 = document.getElementById("setNewPw2")?.value || "";
+    if (n1.length < 8) { snack("Le nouveau mot de passe doit faire au moins 8 caractères"); return; }
+    if (n1 !== n2) { snack("Les mots de passe ne correspondent pas"); return; }
+    try {
+      await Store.changePassword(cur, n1);
+      snack("Mot de passe mis à jour. Reconnecte-toi.");
+      await Store.logout();
+      document.getElementById("authUser") && (document.getElementById("authUser").value = "");
+      App.renderAuth("login");
+    } catch (e) { snack(e.message || "Erreur"); }
+  };
+  const logoutBtn = document.getElementById("setLogout");
+  if (logoutBtn) logoutBtn.onclick = async () => {
+    await Store.logout();
+    App.renderAuth("login");
+  };
 }
 
 function render() {
@@ -797,10 +855,152 @@ function bind() {
   // Fermeture au clavier (Escape) en complément du clic-dehors
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && Store.state.sheet) Store.closeSheet(); });
   window.addEventListener("popstate", (e) => { if (e.state && e.state.route) navigate(e.state.route); });
+  // --- Auth au démarrage : reset (?reset=), sinon check session ---
+  const resetToken = new URLSearchParams(location.search).get("reset");
+  if (resetToken) {
+    renderAuth("reset", resetToken);
+  } else {
+    Store.checkAuth().then((ok) => {
+      if (!ok) renderAuth("login");
+    });
+  }
   const r = location.pathname.split("/")[1] || "cockpit";
   navigate(["cockpit", "facts", "hitl", "sources", "audit", "drafts", "settings"].includes(r) ? r : "cockpit");
   Store.loadHealth();
   Store.loadSettings();
 }
 
-export const App = { render, snack, bind, navigate, openFact };
+// ---- Écrans d'authentification (overlay plein écran) ----
+function renderAuth(mode, token) {
+  const overlay = document.getElementById("authOverlay");
+  if (!overlay) return;
+  if (mode === "login") overlay.innerHTML = viewLogin();
+  else if (mode === "forgot") overlay.innerHTML = viewForgot();
+  else if (mode === "reset") overlay.innerHTML = viewReset(token);
+  overlay.hidden = false;
+  document.getElementById("app").style.display = "none";
+  bindAuth(mode, token);
+}
+
+function viewLogin() {
+  return `<div class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-mark">${icon("i-spark")}</div>
+      <h1 class="auth-title">KORA Reach</h1>
+      <p class="auth-sub">Connexion au poste de pilotage éditorial</p>
+      <form id="authForm" autocomplete="off">
+        <label class="auth-field">Identifiant
+          <input class="text-input" id="authUser" type="text" autocomplete="username" placeholder="admin">
+        </label>
+        <label class="auth-field">Mot de passe
+          <input class="text-input" id="authPass" type="password" autocomplete="current-password" placeholder="••••••••">
+        </label>
+        <button class="btn btn-primary btn-block" id="authSubmit" type="submit">Se connecter</button>
+      </form>
+      <button class="auth-link" id="authForgot">Mot de passe oublié ?</button>
+      <div class="auth-err" id="authErr"></div>
+    </div>
+  </div>`;
+}
+
+function viewForgot() {
+  return `<div class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-mark">${icon("i-spark")}</div>
+      <h1 class="auth-title">Mot de passe oublié</h1>
+      <p class="auth-sub">Saisis ton adresse email. Si un compte existe, un lien de réinitialisation sera envoyé.</p>
+      <form id="authForm" autocomplete="off">
+        <label class="auth-field">Email
+          <input class="text-input" id="authEmail" type="email" placeholder="admin@kora.reach">
+        </label>
+        <button class="btn btn-primary btn-block" id="authSubmit" type="submit">Envoyer le lien</button>
+      </form>
+      <button class="auth-link" id="authBack">Retour à la connexion</button>
+      <div class="auth-err" id="authErr"></div>
+    </div>
+  </div>`;
+}
+
+function viewReset(token) {
+  return `<div class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-mark">${icon("i-spark")}</div>
+      <h1 class="auth-title">Nouveau mot de passe</h1>
+      <p class="auth-sub">Choisis un nouveau mot de passe (8 caractères minimum).</p>
+      <form id="authForm" autocomplete="off">
+        <label class="auth-field">Nouveau mot de passe
+          <input class="text-input" id="authNew" type="password" autocomplete="new-password" placeholder="••••••••">
+        </label>
+        <label class="auth-field">Confirmer
+          <input class="text-input" id="authNew2" type="password" autocomplete="new-password" placeholder="••••••••">
+        </label>
+        <button class="btn btn-primary btn-block" id="authSubmit" type="submit">Réinitialiser</button>
+      </form>
+      <div class="auth-err" id="authErr"></div>
+    </div>
+  </div>`;
+}
+
+function bindAuth(mode, token) {
+  const overlay = document.getElementById("authOverlay");
+  const err = overlay.querySelector("#authErr");
+  const setErr = (m) => { if (err) err.textContent = m || ""; };
+  const form = overlay.querySelector("#authForm");
+  if (mode === "login") {
+    const forgot = overlay.querySelector("#authForgot");
+    if (forgot) forgot.onclick = () => renderAuth("forgot");
+    if (form) form.onsubmit = async (e) => {
+      e.preventDefault();
+      setErr("");
+      const u = overlay.querySelector("#authUser").value.trim();
+      const p = overlay.querySelector("#authPass").value;
+      try {
+        await Store.login(u, p);
+        overlay.hidden = true;
+        document.getElementById("app").style.display = "";
+        Store.loadSettings();
+        render();
+        snack("Connecté");
+      } catch (ex) { setErr(ex.message || "Erreur de connexion"); }
+    };
+  } else if (mode === "forgot") {
+    const back = overlay.querySelector("#authBack");
+    if (back) back.onclick = () => renderAuth("login");
+    if (form) form.onsubmit = async (e) => {
+      e.preventDefault();
+      setErr("");
+      const email = overlay.querySelector("#authEmail").value.trim();
+      try {
+        await Store.forgot(email);
+        setErr("Si un compte existe, un lien a été envoyé. Vérifie ton email.");
+      } catch (ex) { setErr(ex.message || "Erreur"); }
+    };
+  } else if (mode === "reset") {
+    if (form) form.onsubmit = async (e) => {
+      e.preventDefault();
+      setErr("");
+      const n1 = overlay.querySelector("#authNew").value;
+      const n2 = overlay.querySelector("#authNew2").value;
+      if (n1.length < 8) { setErr("Le mot de passe doit faire au moins 8 caractères"); return; }
+      if (n1 !== n2) { setErr("Les mots de passe ne correspondent pas"); return; }
+      try {
+        await Store.resetPassword(token, n1);
+        // Nettoie le token de l'URL
+        history.replaceState(null, "", location.pathname);
+        setErr("");
+        renderAuth("login");
+        snack("Mot de passe réinitialisé. Connecte-toi.");
+      } catch (ex) { setErr(ex.message || "Erreur"); }
+    };
+  }
+}
+
+// Affiche l'app (si session OK) et masque l'overlay
+function showApp() {
+  const overlay = document.getElementById("authOverlay");
+  if (overlay) overlay.hidden = true;
+  const app = document.getElementById("app");
+  if (app) app.style.display = "";
+}
+
+export const App = { render, snack, bind, navigate, openFact, renderAuth, showApp };
