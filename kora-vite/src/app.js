@@ -455,7 +455,7 @@ function render() {
   const agent = document.getElementById("agentStatus");
   if (agent) agent.innerHTML = s.ui.busy
     ? `<span class="dot dot-busy"></span><span>${s.ui.overlay || "Agent occupé…"}</span>`
-    : `<span class="dot dot-ok"></span><span>${esc((s.health && s.health.editor) || "prêt")}</span>`;
+    : `<span class="dot dot-ok"></span><span>prêt</span>`;
   const view = document.getElementById("view");
   if (!view) return;
   const map = { cockpit: viewCockpit, facts: viewFacts, hitl: viewHITL, sources: viewSources, audit: viewAudit, drafts: viewDrafts, settings: viewSettings };
