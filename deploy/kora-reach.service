@@ -1,0 +1,36 @@
+# kora-reach.service — systemd unit (durci)
+# Install : cp kora-reach.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now kora-reach
+[Unit]
+Description=KORA Reach — agent de collecte + HITL éditorial
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kora
+Group=kora
+WorkingDirectory=/opt/kora-reach
+EnvironmentFile=/opt/kora-reach/deploy/.env
+ExecStart=/opt/kora-reach/.venv/bin/python /opt/kora-reach/server.py
+Restart=on-failure
+RestartSec=5
+# --- Durcissement ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/kora-reach
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+# Pas d'accès sauf réseau + fichiers du projet
+# (on autorise le réseau car l'agent collecte des flux externes)
+SystemCallFilter=@system-service
+
+[Install]
+WantedBy=multi-user.target

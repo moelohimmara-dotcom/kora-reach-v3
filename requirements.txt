@@ -1,0 +1,5 @@
+feedparser==6.0.10
+trafilatura==2.2.0
+beautifulsoup4==4.12.2
+python-docx==0.8.11
+requests>=2.31.0

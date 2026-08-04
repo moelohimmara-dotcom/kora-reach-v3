@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KORA — Poste de pilotage éditorial</title>
+<script>
+  // Anti-FOUC : applique le thème avant le premier paint (évite flash clair→sombre).
+  (function () {
+    try {
+      var t = localStorage.getItem("kora-theme");
+      if (!t) t = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+      if (["dark", "light", "cacao"].indexOf(t) === -1) t = "dark";
+      document.documentElement.setAttribute("data-theme", t);
+    } catch (e) { document.documentElement.setAttribute("data-theme", "dark"); }
+  })();
+</script>
+</head>
+<body>
+<div id="app"></div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

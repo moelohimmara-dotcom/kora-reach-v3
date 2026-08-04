@@ -1,0 +1,41 @@
+# --- Secrets / credentials (JAMAIS committés) ---
+*.env
+deploy/.env
+_key.txt
+**/_key.txt
+.env
+.env.*
+!.env.example
+
+# --- Données runtime (SQLite) ---
+*.db
+*.sqlite
+*.sqlite3
+reach_state.db
+
+# --- Virtual env ---
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# --- Build front (généré par Vite) ---
+kora-vite/dist/
+kora-vite/node_modules/
+node_modules/
+dist/
+
+# --- OS / éditeur ---
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# --- Fichiers de test/dump temporaires ---
+_test_*.py
+_migrate_*.py
+diag_*.py
+*.log

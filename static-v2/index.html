@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KORA — Poste de pilotage éditorial</title>
+<link rel="stylesheet" href="tokens.css?v=8">
+<link rel="stylesheet" href="app.css?v=8">
+</head>
+<body>
+<!-- Sprite d'icônes -->
+<object type="image/svg+xml" data="icons.svg" style="display:none"></object>
+
+<!-- App shell -->
+<div id="app">
+  <!-- Rail navigation (desktop) / Top bar (mobile) -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">◓</span>
+      <span class="brand-name">KORA</span>
+      <span class="brand-sub">Reach</span>
+    </div>
+    <div class="topbar-status" id="agentStatus">
+      <span class="dot dot-ok"></span><span id="agentMode">prêt</span>
+    </div>
+  </header>
+
+  <!-- Rail navigation (desktop) -->
+  <nav class="rail" id="rail">
+    <button class="navitem" data-route="cockpit"><svg class="ic"><use href="#i-dashboard"/></svg><span>Cockpit</span></button>
+    <button class="navitem" data-route="facts"><svg class="ic"><use href="#i-facts"/></svg><span>Faits</span></button>
+    <button class="navitem navitem-center" data-route="hitl"><svg class="ic"><use href="#i-check"/></svg><span>Validation</span></button>
+    <button class="navitem" data-route="audit"><svg class="ic"><use href="#i-audit"/></svg><span>Audit</span></button>
+    <button class="navitem" data-route="sources"><svg class="ic"><use href="#i-sources"/></svg><span>Sources</span></button>
+  </nav>
+
+  <!-- Contenu des écrans -->
+  <main id="view" class="view"><!-- injecté par le store --></main>
+
+  <!-- FAB menu (M3 Expressive) -->
+  <div class="fab-menu" id="fabMenu">
+    <button class="fab-action" data-act="seed" title="Seed démo">
+      <svg class="ic"><use href="#i-spark"/></svg><span>Seed démo</span>
+    </button>
+    <button class="fab-action" data-act="cycle" title="Lancer un cycle">
+      <svg class="ic"><use href="#i-refresh"/></svg><span>Lancer un cycle</span>
+    </button>
+  </div>
+  <button class="fab" id="fab" aria-label="Actions">
+    <svg class="ic ic-fab"><use href="#i-menu"/></svg>
+  </button>
+
+  <!-- Bottom navigation (mobile) -->
+  <nav class="bottomnav" id="bottomnav">
+    <button class="navitem" data-route="cockpit"><svg class="ic"><use href="#i-dashboard"/></svg><span>Cockpit</span></button>
+    <button class="navitem" data-route="facts"><svg class="ic"><use href="#i-facts"/></svg><span>Faits</span></button>
+    <button class="navitem navitem-center" data-route="hitl"><svg class="ic"><use href="#i-check"/></svg><span>Validation</span></button>
+    <button class="navitem" data-route="audit"><svg class="ic"><use href="#i-audit"/></svg><span>Audit</span></button>
+    <button class="navitem" data-route="sources"><svg class="ic"><use href="#i-sources"/></svg><span>Sources</span></button>
+  </nav>
+</div>
+
+<!-- Bottom sheet (validation / détails) -->
+<div class="sheet-scrim" id="sheetScrim" hidden></div>
+<div class="sheet" id="sheet" hidden role="dialog" aria-modal="true">
+  <div class="sheet-handle"></div>
+  <div class="sheet-body" id="sheetBody"></div>
+</div>
+
+<!-- Snackbar -->
+<div class="snackbar" id="snackbar" hidden></div>
+
+<!-- Loader global (waveform M3 Expressive) -->
+<div class="global-loader" id="globalLoader" hidden>
+  <div class="wave"><i></i><i></i><i></i><i></i><i></i></div>
+  <span id="globalLoaderText">Agent en cours…</span>
+</div>
+
+<script src="store.js?v=8"></script>
+<script src="app.js?v=8"></script>
+</body>
+</html>
