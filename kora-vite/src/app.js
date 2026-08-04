@@ -309,12 +309,49 @@ function viewAudit(s) {
     if (ev.transition) return `<span class="badge badge-pending">${esc(ev.transition.replace(/_/g, " "))}</span>`;
     return "";
   };
+  // Libellé métier lisible (anti-surcharge) au lieu de 'événement'
+  const auditLabel = (ev) => {
+    const blob = ((ev.transition || "") + " " + (ev.detail || "") + " " + (ev.action || "")).toUpperCase();
+    if (blob.includes("TRANSMITTED")) return "Article transmis";
+    if (blob.includes("REJECTED")) return "Article rejeté";
+    if (blob.includes("APPROVED")) return "Article approuvé";
+    if (blob.includes("EDITED") || blob.includes("EDIT ")) return "Article modifié";
+    if (blob.includes("CYCLE") || blob.includes("MODE=") || blob.includes("PROVIDER=")) return "Cycle lancé";
+    if (blob.includes("SOURCE") || blob.includes("SRC=")) return "Source consultée";
+    const k = (ev.kind || "").toLowerCase();
+    if (k === "reject") return "Article rejeté";
+    if (k === "edit") return "Article modifié";
+    if (k === "approve" || k === "transmit") return "Article transmis";
+    if (k === "cycle" || k === "run") return "Cycle lancé";
+    if (k === "source") return "Source mise à jour";
+    return ev.action || "Activité";
+  };
+  // Nettoie le detail (key=value) en affichage lisible, masque le provider technique
+  const auditSub = (ev) => {
+    let d = ev.detail || "";
+    if (!d) return "";
+    // masque les erreurs techniques brutes (ne doivent pas apparaitre en clair)
+    if (/error|traceback|exception|attributeerror|keyerror|typeerror/i.test(d)) return "Erreur d'exécution (voir logs)";
+    const pairs = {};
+    (d.match(/(\w+)=([^\s]+)/g) || []).forEach(p => { const [k,v]=p.split("="); pairs[k]=v; });
+    const statusFr = { TRANSMITTED: "Transmis", APPROVED: "Approuvé", REJECTED: "Rejeté", EDITED: "Modifié", PENDING_REVIEW: "En attente" };
+    const parts = [];
+    if (pairs.src) parts.push("source : " + pairs.src);
+    const st = pairs.status || pairs.decision;
+    if (st) parts.push("statut : " + (statusFr[st.toUpperCase()] || st));
+    if (pairs.facts) parts.push(pairs.facts + " fait(s)");
+    if (pairs.clusters) parts.push(pairs.clusters + " groupe(s)");
+    if (parts.length) return parts.join(" · ");
+    // fallback : tronque proprement sans couper un mot
+    const clean = d.replace(/\s+/g, " ").trim();
+    return clean.length > 90 ? clean.slice(0, 87).replace(/\s+\S*$/, "") + "…" : clean;
+  };
   const evRow = (ev) => `
     <div class="list-row audit-row">
       <span class="meta-ic">${icon(ev.kind === "reject" ? "i-reject" : ev.kind === "edit" ? "i-edit" : "i-check")}</span>
       <div class="meta">
-        <div class="name">${esc(ev.action || ev.kind || "événement")} ${transitionBadge(ev)}</div>
-        <div class="sub">${esc(ev.detail || "")}</div>
+        <div class="name">${esc(auditLabel(ev))} ${transitionBadge(ev)}</div>
+        <div class="sub">${esc(auditSub(ev))}</div>
       </div>
       <div class="sub audit-time">${esc((ev.at || ev.ts || "").slice(0, 19).replace("T", " "))}</div>
     </div>`;
