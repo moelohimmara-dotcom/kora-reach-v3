@@ -15,7 +15,7 @@ def _article_title(html: str) -> str:
     for tag in ("h1", "h2"):
         t = s.find(tag)
         if t and t.get_text(strip=True):
-            return t.get_text(strip=True)[:120]
+            return t.get_text(strip=True)
     return ""
 
 def _guess_date(url: str) -> str:
