@@ -1,55 +1,66 @@
-// Mini-quiz éditorial — affiché pendant le cycle de génération (attente utile).
-// Pool de questions Vrai/Faux métier. Pas de backend : 100% côté client.
+// Mini-quiz culture générale — affiché pendant le cycle de génération (attente utile).
+// L'agent pose des questions ludiques (pas métier) pour tenir l'utilisateur en haleine.
+// Pool statique côté client, pas de backend.
 const QUIZ_POOL = [
   {
-    q: "Un article d'actualité doit citer au moins une source vérifiée.",
-    a: true,
-    ex: "Oui — KORA ne publie jamais sans source whitelistée. La traçabilité est le cœur de l'outil."
-  },
-  {
-    q: "Le niveau 1 regroupe les sources internationales (RFI, BBC, France24).",
+    q: "La capitale de l'Australie est Sydney.",
     a: false,
-    ex: "Non — le Niveau 1 = sources guinéennes (Mosaïque, Guinéenews…). Le Niveau 2 = international filtré."
+    ex: "Faux — c'est Canberra. Sydney est la plus grande ville, mais Canberra est la capitale fédérale depuis 1913."
   },
   {
-    q: "Fusionner 3 articles sur un même fait augmente la fiabilité de l'article.",
+    q: "L'eau gèle à 0°C au niveau de la mer.",
     a: true,
-    ex: "Exact — la fusion de plusieurs sources indépendantes réduit le biais et les erreurs."
+    ex: "Vrai — à pression atmosphérique normale, l'eau pure se solidifie à 0°C."
   },
   {
-    q: "KORA peut générer un article même si aucune source n'a publié depuis 24h.",
-    a: false,
-    ex: "Non — par défaut la fenêtre est de 24h. L'option « Générer quand même » force hors fenêtre (à utiliser avec précaution)."
-  },
-  {
-    q: "La validation humaine (HITL) est obligatoire avant transmission.",
+    q: "La pyramide de Khéops a été construite en Égypte antique.",
     a: true,
-    ex: "Oui — aucun article n'est transmis sans décision Approuver/Rejeter/Modifier d'un éditeur."
+    ex: "Vrai — vers 2560 av. J.-C., sous le règne de Khéops (IVe dynastie)."
   },
   {
-    q: "Un utilisateur 'Normal' peut gérer les comptes et les rôles.",
+    q: "Le lithium est un métal liquide à température ambiante.",
     a: false,
-    ex: "Non — seul le rôle 'Avancé' gère les habilitations. Le Normal se limite à générer et valider."
+    ex: "Faux — seul le mercure est liquide à température ambiante. Le lithium est un métal solide, très léger."
   },
   {
-    q: "L'illustration d'un article KORA est toujours une photo réelle du terrain.",
-    a: false,
-    ex: "Non — les images sont générées par IA (non-copyrightées). On l'indique dans la légende."
-  },
-  {
-    q: "Le périmètre éditorial par défaut couvre l'actualité Guinée.",
+    q: "La planète Jupiter est la plus massive du système solaire.",
     a: true,
-    ex: "Exact — la cible est l'actu guinéenne, avec un niveau 2 international pour le contexte."
+    ex: "Vrai — elle est ~2,5 fois plus lourde que toutes les autres planètes réunies."
   },
   {
-    q: "Un article rejeté en validation peut être supprimé de l'historique.",
+    q: "Leonardo da Vinci a peint la Joconde.",
     a: true,
-    ex: "Oui — depuis l'onglet Historique, on purge les événements (ligne de purge conservée)."
+    ex: "Vrai — le portrait de Mona Lisa, réalisé au début du XVIe siècle, est l'une de ses œuvres les plus célèbres."
   },
   {
-    q: "Le mode 'Générer quand même' s'applique sur une fenêtre de 48h.",
+    q: "L'océan Pacifique est le plus grand océan du monde.",
+    a: true,
+    ex: "Vrai — il couvre près du tiers de la surface de la Terre."
+  },
+  {
+    q: "Le TTL (Time To Live) d'un paquet réseau mesure sa vitesse en Mb/s.",
     a: false,
-    ex: "Non — il force hors des 24h, mais reste borné à 48h max pour éviter le hors-sujet."
+    ex: "Faux — le TTL est un compteur de sauts (hops) : il décrémenté à chaque routeur pour éviter les boucles."
+  },
+  {
+    q: "La Tour Eiffel a été construite pour l'Exposition universelle de 1889.",
+    a: true,
+    ex: "Vrai — édifiée par Gustave Eiffel pour célébrer le centenaire de la Révolution française."
+  },
+  {
+    q: "Les dinosaures ont disparu il y a environ 65 millions d'années.",
+    a: true,
+    ex: "Vrai — fin du Crétacé, à la suite de l'impact de Chicxulub (Mexique)."
+  },
+  {
+    q: "L'hémisphère Nord compte plus de terres émergées que l'hémisphère Sud.",
+    a: true,
+    ex: "Vrai — ~68 % des terres émergées sont dans l'hémisphère Nord."
+  },
+  {
+    q: "Le son voyage plus vite dans l'eau que dans l'air.",
+    a: true,
+    ex: "Vrai — ~1500 m/s dans l'eau contre ~340 m/s dans l'air, car l'eau est plus dense."
   }
 ];
 
@@ -67,14 +78,14 @@ function quizRender(container) {
   const item = QUIZ_POOL[_quizState.idx];
   container.innerHTML = `
     <div class="quiz-card">
-      <div class="quiz-badge">🧠 Mini-quiz · édition</div>
+      <div class="quiz-badge">🌍 Culture générale</div>
       <div class="quiz-q">${esc(item.q)}</div>
       <div class="quiz-actions">
         <button class="btn btn-tonal quiz-ans" data-a="true">Vrai</button>
         <button class="btn btn-tonal quiz-ans" data-a="false">Faux</button>
       </div>
       <div class="quiz-feedback" hidden></div>
-      <div class="quiz-score">Score session : <b id="quizScore">${_quizState.correct}/${_quizState.total}</b></div>
+      <div class="quiz-score">Score : <b id="quizScore">${_quizState.correct}/${_quizState.total}</b></div>
     </div>`;
   container.querySelectorAll('.quiz-ans').forEach(b => {
     b.onclick = () => quizAnswer(container, b.dataset.a === 'true');
@@ -97,7 +108,7 @@ function quizAnswer(container, userAns) {
   container.querySelectorAll('.quiz-ans').forEach(b => b.disabled = true);
   const sc = container.querySelector('#quizScore');
   if (sc) sc.textContent = `${_quizState.correct}/${_quizState.total}`;
-  // passe à la question suivante après 2.5s
+  // passe à la question suivante après 2.6s
   setTimeout(() => { if (container.isConnected) { quizPick(); quizRender(container); } }, 2600);
 }
 
