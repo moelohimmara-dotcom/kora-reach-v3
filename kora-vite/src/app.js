@@ -363,27 +363,35 @@ function viewSettings(s) {
       </div>
     </section>
 
-    <section class="fact-group">
-      <div class="group-head"><span class="group-ic">${icon("i-user")}</span><h3 class="group-title">Comptes</h3></div>
+    ${s.auth && s.auth.role === "advanced" ? `<section class="fact-group">
+      <div class="group-head"><span class="group-ic">${icon("i-user")}</span><h3 class="group-title">Comptes & habilitations</h3></div>
+      <p class="muted" style="margin-bottom:12px">Gère qui fait quoi. Le rôle « Avancé » donne accès à tous les réglages, la gestion des comptes et les actions sensibles. Le rôle « Normal » est limité à la génération et à la validation.</p>
       <div class="user-list" id="userList">
         ${(s.users || []).map(u => `<div class="user-row" data-id="${esc(u.id)}">
           <div class="meta"><div class="name">${esc(u.username)}</div><div class="sub">${esc(u.email || "—")}</div></div>
-          <button class="btn btn-ghost btn-sm user-del" data-id="${esc(u.id)}">Retirer</button>
+          <div class="role-edit">
+            <select class="text-input role-select" data-id="${esc(u.id)}">
+              <option value="normal" ${(u.role || "normal") === "normal" ? "selected" : ""}>Normal</option>
+              <option value="advanced" ${(u.role || "normal") === "advanced" ? "selected" : ""}>Avancé</option>
+            </select>
+            <button class="btn btn-ghost btn-sm user-del" data-id="${esc(u.id)}">Retirer</button>
+          </div>
         </div>`).join("")}
       </div>
       <div class="setting-row setting-col">
         <div class="meta" style="width:100%">
           <div class="name">Ajouter un compte</div>
-          <div class="sub">Identifiant (3+), email, mot de passe (8+).</div>
+          <div class="sub">Identifiant (3+), email, mot de passe (8+), rôle.</div>
           <div class="labels-grid">
             <label class="label-field">Identifiant<input class="text-input" id="setNewUser" type="text" maxlength="40" placeholder="redacteur1"></label>
             <label class="label-field">Email<input class="text-input" id="setNewEmail" type="email" maxlength="80" placeholder="redacteur@kora.reach"></label>
-            <label class="label-field label-full">Mot de passe<input class="text-input" id="setNewUserPw" type="password" maxlength="64" placeholder="••••••••" autocomplete="new-password"></label>
+            <label class="label-field">Mot de passe<input class="text-input" id="setNewUserPw" type="password" maxlength="64" placeholder="••••••••" autocomplete="new-password"></label>
+            <label class="label-field">Rôle<select class="text-input" id="setNewUserRole"><option value="normal" selected>Normal</option><option value="advanced">Avancé</option></select></label>
           </div>
           <button class="btn btn-outline" id="setAddUser" style="margin-top:10px">Créer le compte</button>
         </div>
       </div>
-    </section>
+    </section>` : ""}
 
     <section class="fact-group">
       <div class="group-head"><span class="group-ic">${icon("i-info")}</span><h3 class="group-title">À propos</h3></div>
@@ -764,21 +772,31 @@ function bindSettings() {
     await Store.logout();
     App.renderAuth("login");
   };
-  // Comptes : liste + ajout + suppression
+  // Comptes : liste + ajout + suppression + changement de rôle (advanced only)
   const addUser = document.getElementById("setAddUser");
   if (addUser) addUser.onclick = async () => {
     const uname = (document.getElementById("setNewUser")?.value || "").trim();
     const email = (document.getElementById("setNewEmail")?.value || "").trim();
     const pw = document.getElementById("setNewUserPw")?.value || "";
+    const role = (document.getElementById("setNewUserRole")?.value || "normal");
     if (uname.length < 3) { snack("Identifiant 3 caractères minimum"); return; }
     if (pw.length < 8) { snack("Mot de passe 8 caractères minimum"); return; }
     try {
-      await Store.createUser(uname, email, pw);
-      snack("Compte créé");
+      await Store.createUser(uname, email, pw, role);
+      snack("Compte créé" + (role === "advanced" ? " (Avancé)" : ""));
       await Store.loadUsers();
       render();
     } catch (e) { snack(e.message || "Erreur"); }
   };
+  view.querySelectorAll(".role-select").forEach(sel => sel.onchange = async () => {
+    const id = sel.dataset.id;
+    const newRole = sel.value;
+    try {
+      await Store.setRole(id, newRole);
+      snack("Rôle mis à jour : " + (newRole === "advanced" ? "Avancé" : "Normal"));
+      await Store.loadUsers();
+    } catch (e) { snack(e.message || "Erreur"); }
+  });
   view.querySelectorAll(".user-del").forEach(b => b.onclick = async () => {
     const id = b.dataset.id;
     if (!confirm("Retirer ce compte ? Ses sessions seront fermées.")) return;
@@ -802,6 +820,11 @@ function render() {
   const map = { cockpit: viewCockpit, facts: viewFacts, hitl: viewHITL, sources: viewSources, audit: viewAudit, drafts: viewDrafts, settings: viewSettings };
   view.innerHTML = (map[s.route] || viewCockpit)(s);
   $$(".navitem, .rail .navitem").forEach(n => n.classList.toggle("active", n.dataset.route === s.route));
+  // Habilitations : l'onglet Paramètres (gestion avancée) est réservé au rôle "advanced"
+  const isAdvanced = (s.auth && s.auth.role === "advanced");
+  $$('.navitem[data-route="settings"]').forEach(n => { n.hidden = !isAdvanced; });
+  const bnav = document.querySelector('.bottomnav [data-route="settings"]');
+  if (bnav) bnav.hidden = !isAdvanced;
   const curTheme = Store.getTheme();
   $$("[data-theme-btn]").forEach(n => n.classList.toggle("active", n.dataset.themeBtn === curTheme));
   const sa = document.getElementById("stateAction");

@@ -74,6 +74,22 @@ class Handler(BaseHTTPRequestHandler):
         self._send(401, {"error": "unauthorized"})
         return False
 
+    def _session_role(self):
+        sid = auth.read_cookie_sid(self.headers)
+        u = auth.get_session_user(sid) if sid else None
+        if not u:
+            return None
+        return u["role"] if isinstance(u, dict) else (u[5] if len(u) > 5 else "normal")
+
+    def _require_role(self, role):
+        if not self._session_ok():
+            self._send(401, {"error": "unauthorized"})
+            return False
+        if self._session_role() != role:
+            self._send(403, {"error": "forbidden", "role_requis": role})
+            return False
+        return True
+
     def do_GET(self):
         p = urllib.parse.urlparse(self.path)
         path = p.path
@@ -148,14 +164,16 @@ class Handler(BaseHTTPRequestHandler):
             sid = auth.read_cookie_sid(self.headers)
             u = auth.get_session_user(sid) if sid else None
             if u:
-                return self._send(200, {"ok": True, "username": u["username"] if isinstance(u, dict) else u[1],
-                                        "email": u["email"] if isinstance(u, dict) else u[3]})
+                return self._send(200, {"ok": True,
+                                        "username": u["username"] if isinstance(u, dict) else u[1],
+                                        "email": u["email"] if isinstance(u, dict) else u[3],
+                                        "role": u["role"] if isinstance(u, dict) else (u[5] if len(u) > 5 else "normal")})
             return self._send(401, {"error": "unauthorized"})
         if path == "/api/auth/users":
-            if not self._require_auth():
+            if not self._require_role("advanced"):
                 return
             users = auth.list_users()
-            out = [dict(u) if isinstance(u, dict) else {"id": u[0], "username": u[1], "email": u[3], "created_at": u[4]} for u in users]
+            out = [dict(u) if isinstance(u, dict) else {"id": u[0], "username": u[1], "email": u[3], "role": u[4] if len(u) > 4 else "normal", "created_at": u[5] if len(u) > 5 else u[4]} for u in users]
             return self._send(200, {"users": out})
         if path == "/api/hitl":
             # Tous les faits persistés (survit au redémarrage du service)
@@ -259,6 +277,8 @@ class Handler(BaseHTTPRequestHandler):
                 log(fid, "HITL_RETRACT", f"by={EDITOR_NAME}", "hitl")
             return self._send(200, res)
         if p.path == "/api/audit/purge":
+            if not self._require_role("advanced"):
+                return
             scope = payload.get("scope", "all")  # "all" | "day"
             day = payload.get("day")
             if scope == "day" and day:
@@ -267,6 +287,8 @@ class Handler(BaseHTTPRequestHandler):
             n = purge_all(EDITOR_NAME)
             return self._send(200, {"ok": True, "scope": "all", "deleted": n})
         if p.path == "/api/settings":
+            if not self._require_role("advanced"):
+                return
             res = settings.save_settings(payload or {})
             return self._send(200 if res.get("ok") else 400, res)
         # ---- Auth ----
@@ -315,19 +337,38 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, r)
             return
         if p.path == "/api/auth/users":
-            # Création d'un utilisateur (admin session requise)
-            if not self._require_auth():
+            # Gestion des comptes (advanced-only) : création avec choix de rôle
+            if not self._require_role("advanced"):
                 return
             uname = (payload.get("username") or "").strip()
             email = (payload.get("email") or "").strip().lower()
             pw = payload.get("password") or ""
+            role = payload.get("role", "normal")
+            if role not in ("normal", "advanced"):
+                self._send(400, {"error": "role_invalide"})
+                return
             if len(uname) < 3:
                 self._send(400, {"error": "username_too_short"})
                 return
             if len(pw) < 8:
                 self._send(400, {"error": "password_too_short"})
                 return
-            r = auth.add_user(uname, pw, email)
+            r = auth.add_user(uname, pw, email, role)
+            self._send(200 if r.get("ok") else 400, r)
+            return
+        if p.path == "/api/auth/users/role":
+            # Changement de rôle d'un compte existant (advanced-only, self-service des habilitations)
+            if not self._require_role("advanced"):
+                return
+            uid = payload.get("id")
+            new_role = payload.get("role")
+            if not uid:
+                self._send(400, {"error": "id_requis"})
+                return
+            if new_role not in ("normal", "advanced"):
+                self._send(400, {"error": "role_invalide"})
+                return
+            r = auth.set_role(uid, new_role)
             self._send(200 if r.get("ok") else 400, r)
             return
         if p.path == "/api/auth/reset":
@@ -344,7 +385,7 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(raw or b"{}")
         except Exception:
             payload = {}
-        if not self._require_auth():
+        if not self._require_role("advanced"):
             return
         if p.path == "/api/auth/users":
             uid = payload.get("id")

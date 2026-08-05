@@ -54,11 +54,11 @@ export const Store = (() => {
     try {
       const r = await api("/api/auth/me");
       if (r.ok) {
-        setState({ auth: { loggedIn: true, username: r.username, email: r.email } });
+        setState({ auth: { loggedIn: true, username: r.username, email: r.email, role: r.role || "normal" } });
         return true;
       }
     } catch (e) {}
-    setState({ auth: { loggedIn: false, username: null, email: null } });
+    setState({ auth: { loggedIn: false, username: null, email: null, role: null } });
     return false;
   }
   async function login(username, password) {
@@ -99,12 +99,19 @@ export const Store = (() => {
     if (r.users) { setState({ users: r.users }); return r.users; }
     return [];
   }
-  async function createUser(username, email, password) {
-    const r = await api("/api/auth/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, email, password }) });
+  async function createUser(username, email, password, role = "normal") {
+    const r = await api("/api/auth/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, email, password, role }) });
     if (r.ok) return true;
     if (r.error === "username_exists") throw new Error("Cet identifiant existe déjà");
     if (r.error === "username_too_short") throw new Error("Identifiant trop court (3 min)");
     if (r.error === "password_too_short") throw new Error("Mot de passe 8 caractères minimum");
+    if (r.error === "role_invalide") throw new Error("Rôle invalide");
+    throw new Error(r.error || "Erreur");
+  }
+  async function setRole(id, role) {
+    const r = await api("/api/auth/users/role", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, role }) });
+    if (r.ok) return true;
+    if (r.error === "role_invalide") throw new Error("Rôle invalide");
     throw new Error(r.error || "Erreur");
   }
   async function deleteUser(id) {
@@ -314,6 +321,6 @@ export const Store = (() => {
     getTheme, setTheme, initTheme,
     getRail, setRail, initRail,
     checkAuth, login, logout, changePassword, forgot, resetPassword,
-    loadUsers, createUser, deleteUser
+    loadUsers, createUser, setRole, deleteUser
   };
 })();

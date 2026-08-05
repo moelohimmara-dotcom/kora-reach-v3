@@ -51,8 +51,23 @@ def list_users():
     con, _ = db.conn()
     try:
         cur = con.cursor()
-        cur.execute(f"SELECT id, username, email, created_at FROM kora_users ORDER BY username")
+        cur.execute(f"SELECT id, username, email, role, created_at FROM kora_users ORDER BY username")
         return cur.fetchall()
+    finally:
+        con.close()
+
+
+def set_role(uid, role):
+    """Change le rôle d'un compte (advanced-only côté serveur)."""
+    if role not in ("normal", "advanced"):
+        return {"ok": False, "error": "role_invalide"}
+    ph = db.placeholder()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(f"UPDATE kora_users SET role={ph} WHERE id={ph}", (role, uid))
+        con.commit()
+        return {"ok": True}
     finally:
         con.close()
 
@@ -104,12 +119,28 @@ def init():
         cur.execute(
             "CREATE TABLE IF NOT EXISTS kora_users ("
             "id TEXT PRIMARY KEY, username TEXT UNIQUE, password_hash TEXT, "
-            "email TEXT, reset_token TEXT, reset_expires TEXT, created_at TEXT)"
+            "email TEXT, reset_token TEXT, reset_expires TEXT, role TEXT DEFAULT 'normal', created_at TEXT)"
         )
         cur.execute(
             "CREATE TABLE IF NOT EXISTS kora_sessions ("
             "session_id TEXT PRIMARY KEY, user_id TEXT, expires_at TEXT)"
         )
+        con.commit()
+    finally:
+        con.close()
+    # Migration : ajoute la colonne role si elle manque (tables pré-existantes)
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        try:
+            cur.execute("ALTER TABLE kora_users ADD COLUMN role TEXT DEFAULT 'normal'")
+            con.commit()
+        except Exception:
+            con.rollback()  # colonne déjà présente
+        # S'assure que l'admin défini dans .env est bien 'advanced' (même s'il pré-existait)
+        admin_user = os.environ.get("ADMIN_USER", "admin").strip()
+        ph = db.placeholder()
+        cur.execute(f"UPDATE kora_users SET role='advanced' WHERE username={ph}", (admin_user,))
         con.commit()
     finally:
         con.close()
@@ -125,24 +156,24 @@ def init():
             pw = os.environ.get("ADMIN_PASS", "").strip()
             email = os.environ.get("ADMIN_EMAIL", "").strip()
             if pw:
-                add_user(user, pw, email)
-                print(f"[auth] admin '{user}' créé depuis .env")
+                add_user(user, pw, email, role="advanced")
+                print(f"[auth] admin '{user}' créé depuis .env (role=advanced)")
             else:
                 print("[auth] ATTENTION: ADMIN_PASS non défini -> aucun compte créé")
     finally:
         con.close()
 
 
-def add_user(username, password, email=""):
+def add_user(username, password, email="", role="normal"):
     uid = _uid()
     ph = db.placeholder()
     con, _ = db.conn()
     try:
         cur = con.cursor()
         cur.execute(
-            f"INSERT INTO kora_users(id, username, password_hash, email, created_at) "
-            f"VALUES({ph},{ph},{ph},{ph},{ph})",
-            (uid, username, _hash_password(password), email, datetime.now().isoformat(timespec="seconds")),
+            f"INSERT INTO kora_users(id, username, password_hash, email, role, created_at) "
+            f"VALUES({ph},{ph},{ph},{ph},{ph},{ph})",
+            (uid, username, _hash_password(password), email, role, datetime.now().isoformat(timespec="seconds")),
         )
         con.commit()
         return {"ok": True, "id": uid}
