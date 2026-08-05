@@ -239,13 +239,22 @@ def get_session_user(sid):
         s = cur.fetchone()
         if not s:
             return None
-        exp = s["expires_at"] if isinstance(s, dict) else s[0]
+        # kora_sessions: session_id, user_id, created_at, expires_at
+        exp = s["expires_at"] if isinstance(s, dict) else (s[3] if len(s) > 3 else s[0])
         if exp and datetime.now().isoformat(timespec="seconds") > exp:
             delete_session(sid)
             return None
-        uid = s["user_id"] if isinstance(s, dict) else s[1]
-        cur.execute(f"SELECT * FROM kora_users WHERE id={ph}", (uid,))
-        return cur.fetchone()
+        uid = s["user_id"] if isinstance(s, dict) else (s[1] if len(s) > 1 else s[0])
+        # Renvoie TOUJOURS un dict (mode-agnostique SQLite/Postgres)
+        cur.execute(f"SELECT id, username, email, role, created_at FROM kora_users WHERE id={ph}", (uid,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        if isinstance(row, dict):
+            return row
+        # tuple -> dict (ordre de la SELECT ci-dessus)
+        cols = ["id", "username", "email", "role", "created_at"]
+        return dict(zip(cols, row))
     finally:
         con.close()
 
