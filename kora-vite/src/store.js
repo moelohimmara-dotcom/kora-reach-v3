@@ -168,14 +168,12 @@ export const Store = (() => {
       if (fav) {
         markEl.style.display = "";
         markEl.innerHTML = `<img src="${fav}" alt="" class="brand-fav-img">`;
+        // .brand-name reste le TEXTE du nom (pas le logo complet) -> evite la
+        // duplication du logo dans le header sur mobile (icone + logo complet).
         const nm = document.querySelector(".brand-name");
         const sb = document.querySelector(".brand-sub");
-        if (nm && s.logo_data && s.logo_data !== fav) {
-          nm.innerHTML = `<img src="${s.logo_data}" alt="" class="brand-logo-img">`;
-          if (sb) sb.style.display = "none";
-        } else if (nm && !s.logo_data) {
-          nm.innerHTML = (s.app_name || "KORA").split(" ")[0];
-        }
+        if (nm) nm.textContent = (s.app_name || "KORA").split(" ")[0];
+        if (sb) sb.textContent = (s.app_name || "KORA").split(" ").slice(1).join(" ");
         // favicon de l'onglet navigateur = icone kora seule
         try {
           let l = document.querySelector('link[rel="icon"]');
