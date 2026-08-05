@@ -715,4 +715,7 @@ body::after {
 .auth-link { background: none; border: none; color: var(--coral-strong, var(--coral)); font-size: 13px; margin-top: 12px; cursor: pointer; text-decoration: underline; }
 .auth-err { color: var(--md-sys-color-error); font-size: 13px; margin-top: 10px; min-height: 18px; }
 .auth-wordmark-wrap { display: flex; justify-content: center; margin: 0 auto 12px; }
-.auth-wordmark { width: 78%; max-width: 260px; height: auto; object-fit: contain; }
+.wm { display: inline-block; line-height: 0.92; text-align: left; font-family: "Montserrat", system-ui, sans-serif; }
+.wm-kora { display: block; font-weight: 800; font-size: 2.7rem; letter-spacing: .5px; color: var(--bordeaux); }
+.wm-agent { display: block; font-weight: 700; font-size: 1.25rem; letter-spacing: .3px; color: var(--coral); margin-left: 2px; }
+.wm-a { font-weight: 800; }

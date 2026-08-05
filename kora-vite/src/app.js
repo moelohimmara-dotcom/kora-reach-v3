@@ -931,13 +931,41 @@ function renderAuth(mode, token) {
   overlay.hidden = false;
   document.getElementById("app").style.display = "none";
   bindAuth(mode, token);
+  if (mode === "login") {
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => alignWordmark()).catch(() => {});
+    }
+    alignWordmark();
+  }
+}
+
+function viewWordmark() {
+  // Wordmark typographique : KORA (Montserrat ExtraBold, bordeaux) + Agent
+  // (plus petit, gras, A majuscule) avec le 't' aligné pile sous le 'A' de KORA.
+  return `<div class="wm">
+    <span class="wm-kora">KOR<span class="wm-kora-a">A</span></span>
+    <span class="wm-agent"><span class="wm-a">A</span>gent</span>
+  </div>`;
+}
+
+function alignWordmark() {
+  // Aligne le 'A' de « Agent » pile sous le 'A' de « KORA » (4e lettre, marqué .wm-kora-a).
+  try {
+    const koraA = document.querySelector(".wm-kora-a");
+    const agent = document.querySelector(".wm-agent");
+    if (!koraA || !agent) return;
+    const aRect = koraA.getBoundingClientRect();
+    const kRect = agent.parentElement.getBoundingClientRect();
+    const offset = aRect.left - kRect.left;
+    agent.style.marginLeft = (offset + 1) + "px";
+  } catch (e) {}
 }
 
 function viewLogin() {
-  const logo = (Store.state.settings && Store.state.settings.logo_data) ? `<img class="auth-wordmark" src="${Store.state.settings.logo_data}" alt="">` : icon("i-spark");
+  const wm = `<div class="auth-wordmark-wrap">${viewWordmark()}</div>`;
   return `<div class="auth-screen">
     <div class="auth-card">
-      ${logo && typeof logo === "string" && logo.startsWith("<img") ? `<div class="auth-wordmark-wrap">${logo}</div>` : `<div class="auth-mark">${logo}</div>`}
+      ${wm}
       <h1 class="auth-title">${esc(Store.state.app_name || "KORA Agent")}</h1>
       <p class="auth-sub">Connexion au poste de pilotage éditorial</p>
       <form id="authForm" autocomplete="off">
