@@ -159,7 +159,7 @@ export const Store = (() => {
     const subEl = document.querySelector(".brand-sub");
     const markEl = document.querySelector(".brand-mark");
     if (nameEl && s.app_name) {
-      const parts = s.app_name.split(/\s+(.+)/); // "KORA Reach" -> ["KORA","Reach"]
+      const parts = s.app_name.split(/\s+(.+)/); // "KORA Agent" -> ["KORA","Agent"]
       nameEl.textContent = parts[0] || s.app_name;
       if (subEl) subEl.textContent = parts[1] || "";
     }
@@ -184,7 +184,7 @@ export const Store = (() => {
         markEl.style.display = "";
         markEl.innerHTML = `<svg class="ic"><use href="#i-spark"/></svg>`;
         const nm = document.querySelector(".brand-name"); if (nm) nm.innerHTML = "KORA";
-        const sb = document.querySelector(".brand-sub"); if (sb) { sb.style.display = ""; sb.textContent = "Reach"; }
+        const sb = document.querySelector(".brand-sub"); if (sb) { sb.style.display = ""; sb.textContent = "Agent"; }
       }
     }
     // Libellés d'interface (white-label) : navitems par data-route + tagline

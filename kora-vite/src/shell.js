@@ -8,7 +8,7 @@ export const SHELL = `
       <div class="brand">
         <span class="brand-mark">${ic("i-spark")}</span>
         <span class="brand-name">KORA</span>
-        <span class="brand-sub">Reach</span>
+        <span class="brand-sub">Agent</span>
       </div>
     </div>
     <div class="topbar-right">

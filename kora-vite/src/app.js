@@ -259,7 +259,7 @@ function viewSettings(s) {
       ${theme === k ? `<span class="check">${icon("i-check")}</span>` : ""}
     </button>`;
   return `<div class="section-title">Paramètres</div>
-    <p class="muted" style="margin-bottom:16px">Réglages de l'interface et du compte ${esc(s.app_name || "KORA Reach")}.</p>
+    <p class="muted" style="margin-bottom:16px">Réglages de l'interface et du compte ${esc(s.app_name || "KORA Agent")}.</p>
 
     <section class="fact-group">
       <div class="group-head"><span class="group-ic">${icon("i-palette")}</span><h3 class="group-title">Apparence</h3></div>
@@ -273,7 +273,7 @@ function viewSettings(s) {
         <div class="meta" style="width:100%">
           <div class="name">Nom de l'application</div>
           <div class="sub">Affiché dans la barre supérieure et le rail.</div>
-          <input class="text-input" id="setAppName" type="text" maxlength="40" value="${esc(s.settings?.app_name || "KORA Reach")}" placeholder="KORA Reach">
+          <input class="text-input" id="setAppName" type="text" maxlength="40" value="${esc(s.settings?.app_name || "KORA Agent")}" placeholder="KORA Agent">
         </div>
       </div>
 
@@ -314,7 +314,7 @@ function viewSettings(s) {
             <label class="label-field">Sources<input class="text-input" id="setLblSources" type="text" maxlength="30" value="${esc(s.settings?.label_sources || "Sources")}"></label>
             <label class="label-field">Brouillons<input class="text-input" id="setLblDrafts" type="text" maxlength="30" value="${esc(s.settings?.label_drafts || "Brouillons")}"></label>
             <label class="label-field">Historique<input class="text-input" id="setLblAudit" type="text" maxlength="30" value="${esc(s.settings?.label_audit || "Historique")}"></label>
-            <label class="label-field label-full">Sous-titre (À propos)<input class="text-input" id="setTagline" type="text" maxlength="30" value="${esc(s.settings?.app_tagline || "Poste de pilotage éditorial v3")}"></label>
+            <label class="label-field label-full">Sous-titre (À propos)<input class="text-input" id="setTagline" type="text" maxlength="30" value="${esc(s.settings?.app_tagline || "Poste de pilotage de l'agent éditorial")}"></label>
           </div>
         </div>
       </div>
@@ -325,7 +325,7 @@ function viewSettings(s) {
       </div>
       <div class="setting-row">
         <span class="meta-ic">${icon("i-spark")}</span>
-        <div class="meta"><div class="name">Agent</div><div class="sub">agent Reach — collecte, fusion, rédaction</div></div>
+        <div class="meta"><div class="name">Agent</div><div class="sub">agent KORA — collecte, fusion, rédaction</div></div>
       </div>
       <div class="setting-row">
         <span class="meta-ic">${icon("i-sources")}</span>
@@ -389,7 +389,7 @@ function viewSettings(s) {
       <div class="group-head"><span class="group-ic">${icon("i-info")}</span><h3 class="group-title">À propos</h3></div>
       <div class="setting-row">
         <span class="meta-ic">${icon("i-spark")}</span>
-        <div class="meta"><div class="name">${esc(s.app_name || "KORA Reach")}</div><div class="sub about-tagline">${esc(s.settings?.app_tagline || "Poste de pilotage éditorial v3")}</div></div>
+        <div class="meta"><div class="name">${esc(s.app_name || "KORA Agent")}</div><div class="sub about-tagline">${esc(s.settings?.app_tagline || "Poste de pilotage de l'agent éditorial")}</div></div>
       </div>
     </section>`;
 }
@@ -538,11 +538,11 @@ function renderSheet(s) {
   bodyText = bodyText.replace(/^##\s*Le fait en bref\b[\s\S]*?(?=##\s*Décryptage)/i, "").trim();
   body.innerHTML = `
     <article class="sheet-article">
-      ${img ? `<figure class="sheet-figure"><img class="sheet-img" src="${esc(img)}" alt="" onerror="this.src='${ph}'"><figcaption class="sheet-cap">Illustration IA — KORA Reach</figcaption></figure>` : `<figure class="sheet-figure"><img class="sheet-img" src="${ph}" alt=""><figcaption class="sheet-cap">Illustration IA — KORA Reach</figcaption></figure>`}
+      ${img ? `<figure class="sheet-figure"><img class="sheet-img" src="${esc(img)}" alt="" onerror="this.src='${ph}'"><figcaption class="sheet-cap">Illustration IA — KORA Agent</figcaption></figure>` : `<figure class="sheet-figure"><img class="sheet-img" src="${ph}" alt=""><figcaption class="sheet-cap">Illustration IA — KORA Agent</figcaption></figure>`}
       <div class="sheet-head">
         ${icon("i-shield", "ic-l")}
         <div class="sheet-head-text">
-          <div class="sheet-eyebrow">Validation humaine · KORA Reach</div>
+          <div class="sheet-eyebrow">Validation humaine · KORA Agent</div>
           <h2 class="sheet-title">${esc(c.title)}</h2>
           <div class="sheet-meta-line">
             <span>${esc(c.source || "—")}</span>
@@ -938,7 +938,7 @@ function viewLogin() {
   return `<div class="auth-screen">
     <div class="auth-card">
       ${logo && typeof logo === "string" && logo.startsWith("<img") ? `<div class="auth-wordmark-wrap">${logo}</div>` : `<div class="auth-mark">${logo}</div>`}
-      <h1 class="auth-title">${esc(Store.state.app_name || "KORA Reach")}</h1>
+      <h1 class="auth-title">${esc(Store.state.app_name || "KORA Agent")}</h1>
       <p class="auth-sub">Connexion au poste de pilotage éditorial</p>
       <form id="authForm" autocomplete="off">
         <label class="auth-field">Identifiant

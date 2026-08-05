@@ -10,7 +10,7 @@ import db
 _HEX = re.compile(r"^#?[0-9A-Fa-f]{6}$")
 
 DEFAULTS = {
-    "app_name": "KORA Reach",
+    "app_name": "KORA Agent",
     "accent_coral": "#F2A98C",
     "accent_bordeaux": "#E08A84",
     # Libellés de l'interface (white-label)
@@ -20,7 +20,7 @@ DEFAULTS = {
     "label_sources": "Sources",
     "label_drafts": "Brouillons",
     "label_audit": "Historique",
-    "app_tagline": "Poste de pilotage éditorial v3",
+    "app_tagline": "Poste de pilotage de l'agent éditorial",
 }
 
 _LABEL_KEYS = [k for k in DEFAULTS if k.startswith("label_")] + ["app_tagline"]
