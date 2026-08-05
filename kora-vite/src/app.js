@@ -260,7 +260,6 @@ function viewSettings(s) {
   const advancedItems = isAdvanced ? [
     { id: "personalization", ic: "i-brush", title: "Personnalisation", sub: "Nom, logo, couleurs, libellés" },
     { id: "accounts", ic: "i-users", title: "Comptes & habilitations", sub: "Utilisateurs et rôles" },
-    { id: "sources", ic: "i-sources", title: "Sources", sub: "Liste whitelist (config projet)" },
   ] : [];
   const railItem = (it) => `<button class="settings-nav-item" data-setnav="${it.id}">
       <span class="meta-ic">${icon(it.ic)}</span>
@@ -395,13 +394,6 @@ function viewSettings(s) {
             <button class="btn btn-outline" id="setAddUser" style="margin-top:10px">Créer le compte</button>
           </div>
         </div>
-      </div>
-    </aside>
-
-    <aside class="drawer" id="drawer-sources" hidden>
-      <div class="drawer-head"><button class="drawer-close" data-setclose="1" aria-label="Fermer">${icon("i-close")}</button><h2>Sources</h2></div>
-      <div class="drawer-body" id="setSourcesBody">
-        <div class="muted">Chargement des sources…</div>
       </div>
     </aside>` : ""}
   </div>`;
@@ -818,7 +810,6 @@ function bindSettings() {
     account: "drawer-account",
     personalization: "drawer-personalization",
     accounts: "drawer-accounts",
-    sources: "drawer-sources",
   };
   const scrim = document.getElementById("setDrawerScrim");
   const openDrawer = (id) => {
@@ -828,7 +819,6 @@ function bindSettings() {
     d.hidden = false;
     if (scrim) scrim.hidden = false;
     view.querySelectorAll(".settings-nav-item").forEach(n => n.classList.toggle("active", n.dataset.setnav === id));
-    if (id === "sources") loadSourcesDrawer();
   };
   const closeDrawer = () => {
     Object.values(drawers).forEach(did => { const d = document.getElementById(did); if (d) d.hidden = true; });
@@ -841,18 +831,6 @@ function bindSettings() {
   // Escape ferme le tiroir settings (sans fermer la feuille HITL)
   const onKey = (e) => { if (e.key === "Escape") { const anyOpen = Object.values(drawers).some(did => { const d = document.getElementById(did); return d && !d.hidden; }); if (anyOpen) { closeDrawer(); e.stopPropagation(); } } };
   document.addEventListener("keydown", onKey);
-  async function loadSourcesDrawer() {
-    const body = document.getElementById("setSourcesBody");
-    if (!body) return;
-    try {
-      const srcs = await Store.api("/api/whitelist");
-      if (!Array.isArray(srcs) || !srcs.length) { body.innerHTML = '<div class="muted">Aucune source configurée.</div>'; return; }
-      body.innerHTML = srcs.map(s => `<div class="source-row">
-        <div class="meta"><div class="name">${esc(s.name)}</div><div class="sub">${esc(s.category || "")} · ${esc((s.domains||[]).join(", ") || s.entry_url || "")}</div></div>
-        <span class="chip chip-${s.status === "active" ? "tertiary" : "pending"}">${esc(s.status || "actif")}</span>
-      </div>`).join("");
-    } catch (e) { body.innerHTML = '<div class="muted">Chargement impossible (accès réservé).</div>'; }
-  }
 }
 
 function render() {
