@@ -84,9 +84,9 @@ class ReachAgent:
             pool = actual
             forced_stale = False
             if not pool and force and stale:
-                # Génération forcée : on limite aux 72h pour éviter le périmé,
-                # pas l'historique complet.
-                cutoff = cycle_start - timedelta(hours=72)
+                # Génération forcée : on limite aux 48h précédentes (fenêtre élargie
+                # par rapport aux 24h strictes, mais pas l'historique complet).
+                cutoff = cycle_start - timedelta(hours=48)
                 recent_stale = [
                     i for i in stale
                     if i.get("date_normalized") and _parse_date(i["date_normalized"]) >= cutoff
@@ -98,11 +98,15 @@ class ReachAgent:
                 f"items={len(items)} actual={len(actual)} rejected_intl={rejected_intl} anomalies={anomalies}")
 
             if not pool:
-                msg = "Aucune publication dans la fenêtre 24h."
+                # Aucune source n'a publié d'info FRAÎCHE (< 24h) : on n'invente rien.
+                msg = ("Pour l'instant, il n'y a pas d'informations. Aucune actualité "
+                       "fraîche n'a été publiée dans les dernières 24 heures. "
+                       "Reviens plus tard.")
                 if stale:
-                    msg = (f"{len(stale)} info(s) collectée(s) sont hors de la fenêtre 24h "
-                           f"(sources peu actives ou dates non fiables). Tu peux forcer la "
-                           f"génération sur ces derniers items si tu le souhaites.")
+                    msg = (f"Pour l'instant, il n'y a pas d'informations. "
+                           f"{len(stale)} info(s) collectée(s) datent de plus de 24h "
+                           f"(sources peu actives ou dates non fiables). Reviens plus tard "
+                           f"— ou utilise « Générer quand même » pour les 48h précédentes.")
                 end_cycle(cid, "EMPTY")
                 self.mutex = False
                 return {"status": "empty_or_stale", "message": msg,
@@ -125,7 +129,7 @@ class ReachAgent:
 
             clusters = cluster(uniq, config.LIMITS["cluster_sim_threshold"])
 
-            limit = demand or config.LIMITS["daily_article_limit"]
+            limit = 1  # 1 article par génération (règle métier 2026-08)
             facts = []
             for c in clusters[:limit]:
                 champ, ctx = pick_champion(c)

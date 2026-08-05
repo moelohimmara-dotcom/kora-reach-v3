@@ -805,9 +805,14 @@ function render() {
   const curTheme = Store.getTheme();
   $$("[data-theme-btn]").forEach(n => n.classList.toggle("active", n.dataset.themeBtn === curTheme));
   const sa = document.getElementById("stateAction");
-  if (sa) sa.onclick = () => { if (sa.dataset.force) Store.startCycle(3, true); else if (sa.textContent.trim() === "Réessayer") location.reload(); else Store.seed(); };
+  if (sa) sa.onclick = () => { if (sa.dataset.force) Store.startCycle(1, true); else if (sa.textContent.trim() === "Réessayer") location.reload(); else Store.seed(); };
   const cs = document.getElementById("cockpitSeed");
   if (cs) cs.onclick = () => Store.seed();
+  // Verrou visuel : on ne peut PAS relancer un cycle tant que le précédent n'est pas fini.
+  const tc = document.getElementById("topbarCycle");
+  if (tc) tc.disabled = !!s.ui.busy;
+  const fabCycle = document.querySelector('.fab-action[data-act="cycle"]');
+  if (fabCycle) fabCycle.style.pointerEvents = s.ui.busy ? "none" : "";
   const gl = document.getElementById("globalLoader");
   if (gl) { if (s.ui.busy) { gl.hidden = false; const t = document.getElementById("globalLoaderText"); if (t) t.textContent = s.ui.overlay || "Agent en cours…"; } else gl.hidden = true; }
   try { renderSheet(s); } catch (e) { console.error("renderSheet", e); }

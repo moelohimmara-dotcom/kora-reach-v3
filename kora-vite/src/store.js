@@ -207,7 +207,7 @@ export const Store = (() => {
     const f = (c) => Math.max(0, Math.min(255, Math.round(c + 255 * pct)));
     return "#" + ((1 << 24) + (f(r) << 16) + (f(g) << 8) + f(b)).toString(16).slice(1).toUpperCase();
   }
-  async function startCycle(demand = 3, force = false) {
+  async function startCycle(demand = 1, force = false) {
     setState({ ui: { ...state.ui, busy: true, overlay: force ? "Génération forcée (hors fenêtre 24h)…" : "Collecte des sources whitelist…" } });
     try {
       await api("/api/cycle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ demand, force }) });

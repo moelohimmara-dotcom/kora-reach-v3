@@ -49,10 +49,11 @@ def normalize_dates(published_at: str, cycle_start: datetime):
         dt = dt.replace(tzinfo=TZ)
     else:
         dt = dt.astimezone(TZ)
-    # Fenêtre glissante stricte 48h : [cycle_start - 48h, cycle_start]
-    # Règle métier : on garde les articles des dernières 48h (rythme lent des
-    # médias guinéens -> évite le "vide" le matin quand rien de <24h n'est dispo).
-    lower = cycle_start - timedelta(hours=48)
+    # Fenêtre glissante stricte 24h : [cycle_start - 24h, cycle_start]
+    # Règle métier (2026-08) : 1 article par génération, fraîcheur 24h.
+    # Les médias guinéens peuvent être lents, mais l'utilisateur veut de
+    # l'actualité FRAÎCHE : hors 24h => STALE (pas d'article généré).
+    lower = cycle_start - timedelta(hours=24)
     if dt > cycle_start:
         return dt, "FUTURE", False   # date future -> anomalie
     if dt < lower:
