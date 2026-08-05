@@ -246,160 +246,165 @@ function viewSources(s) {
 }
 function viewSettings(s) {
   const theme = Store.getTheme();
-  const roleLabel = { "chef_de_secteur": "Rédacteur en chef", "reporter": "Reporteur", "admin": "Administrateur" }[s.role || "chef_de_secteur"] || (s.role || "Rédacteur en chef");
+  const isAdvanced = (s.auth && s.auth.role === "advanced");
   const themes = [
     ["dark", "Sombre", "i-moon", "Fond sombre (par défaut)"],
     ["light", "Clair", "i-sun", "Fond clair"],
     ["cacao", "Cacao", "i-palette", "Chocolat chaud"]
   ];
-  const themeRow = ([k, label, icn, desc]) => `
-    <button class="setting-row theme-opt ${theme === k ? "active" : ""}" data-theme-btn="${k}">
-      <span class="meta-ic">${icon(icn)}</span>
-      <div class="meta"><div class="name">${label}</div><div class="sub">${desc}</div></div>
-      ${theme === k ? `<span class="check">${icon("i-check")}</span>` : ""}
+  // Rail de catégories (type Supabase) : Généraux (tous) / Avancés (role advanced)
+  const generalItems = [
+    { id: "appearance", ic: "i-palette", title: "Apparence", sub: "Thème de l'interface" },
+    { id: "account", ic: "i-user", title: "Compte", sub: "Mot de passe, session" },
+  ];
+  const advancedItems = isAdvanced ? [
+    { id: "personalization", ic: "i-brush", title: "Personnalisation", sub: "Nom, logo, couleurs, libellés" },
+    { id: "accounts", ic: "i-users", title: "Comptes & habilitations", sub: "Utilisateurs et rôles" },
+    { id: "sources", ic: "i-sources", title: "Sources", sub: "Liste whitelist (config projet)" },
+  ] : [];
+  const railItem = (it) => `<button class="settings-nav-item" data-setnav="${it.id}">
+      <span class="meta-ic">${icon(it.ic)}</span>
+      <div class="meta"><div class="name">${esc(it.title)}</div><div class="sub">${esc(it.sub)}</div></div>
+      <span class="chev">${icon("i-chevron-right")}</span>
     </button>`;
   return `<div class="section-title">Paramètres</div>
-    <p class="muted" style="margin-bottom:16px">Réglages de l'interface et du compte ${esc(s.app_name || "KORA Agent")}.</p>
+    <p class="muted" style="margin-bottom:16px">Réglages de l'interface, du compte et du projet ${esc(s.app_name || "KORA Agent")}.</p>
+    <div class="settings-layout">
+      <nav class="settings-rail">
+        <div class="settings-rail-group">Généraux</div>
+        ${generalItems.map(railItem).join("")}
+        ${advancedItems.length ? `<div class="settings-rail-group">Avancés</div>${advancedItems.map(railItem).join("")}` : ""}
+      </nav>
+      <div class="settings-hint muted">Sélectionne une catégorie pour ouvrir ses réglages.</div>
+    </div>
 
-    <section class="fact-group">
-      <div class="group-head"><span class="group-ic">${icon("i-palette")}</span><h3 class="group-title">Apparence</h3></div>
-      ${themes.map(themeRow).join("")}
-    </section>
+    <!-- Tiroirs (drawers) par catégorie -->
+    <div class="drawer-scrim" id="setDrawerScrim" hidden></div>
 
-    <section class="fact-group">
-      <div class="group-head"><span class="group-ic">${icon("i-user")}</span><h3 class="group-title">Personnalisation</h3></div>
+    <aside class="drawer" id="drawer-appearance" hidden>
+      <div class="drawer-head"><button class="drawer-close" data-setclose="1" aria-label="Fermer">${icon("i-close")}</button><h2>Apparence</h2></div>
+      <div class="drawer-body">
+        <div class="setting-row theme-opt ${theme === "dark" ? "active" : ""}" data-theme-btn="dark"><span class="meta-ic">${icon("i-moon")}</span><div class="meta"><div class="name">Sombre</div><div class="sub">Fond sombre (par défaut)</div></div>${theme === "dark" ? `<span class="check">${icon("i-check")}</span>` : ""}</div>
+        <div class="setting-row theme-opt ${theme === "light" ? "active" : ""}" data-theme-btn="light"><span class="meta-ic">${icon("i-sun")}</span><div class="meta"><div class="name">Clair</div><div class="sub">Fond clair</div></div>${theme === "light" ? `<span class="check">${icon("i-check")}</span>` : ""}</div>
+        <div class="setting-row theme-opt ${theme === "cacao" ? "active" : ""}" data-theme-btn="cacao"><span class="meta-ic">${icon("i-palette")}</span><div class="meta"><div class="name">Cacao</div><div class="sub">Chocolat chaud</div></div>${theme === "cacao" ? `<span class="check">${icon("i-check")}</span>` : ""}</div>
+      </div>
+    </aside>
 
-      <div class="setting-row setting-col">
-        <div class="meta" style="width:100%">
-          <div class="name">Nom de l'application</div>
-          <div class="sub">Affiché dans la barre supérieure et le rail.</div>
-          <input class="text-input" id="setAppName" type="text" maxlength="40" value="${esc(s.settings?.app_name || "KORA Agent")}" placeholder="KORA Agent">
+    <aside class="drawer" id="drawer-account" hidden>
+      <div class="drawer-head"><button class="drawer-close" data-setclose="1" aria-label="Fermer">${icon("i-close")}</button><h2>Compte</h2></div>
+      <div class="drawer-body">
+        <div class="setting-row setting-col">
+          <div class="meta" style="width:100%">
+            <div class="name">Changer le mot de passe</div>
+            <div class="sub">8 caractères minimum.</div>
+            <div class="labels-grid">
+              <label class="label-field label-full">Mot de passe actuel<input class="text-input" id="setCurPw" type="password" maxlength="64" autocomplete="current-password"></label>
+              <label class="label-field">Nouveau<input class="text-input" id="setNewPw" type="password" maxlength="64" autocomplete="new-password"></label>
+              <label class="label-field">Confirmer<input class="text-input" id="setNewPw2" type="password" maxlength="64" autocomplete="new-password"></label>
+            </div>
+            <button class="btn btn-outline" id="setChangePw" style="margin-top:10px">Mettre à jour le mot de passe</button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <span class="meta-ic">${icon("i-user")}</span>
+          <div class="meta"><div class="name">Session</div><div class="sub">Connecté en tant que ${esc(Store.state.auth.username || "—")}</div></div>
+          <button class="btn btn-ghost" id="setLogout">Se déconnecter</button>
         </div>
       </div>
+    </aside>
 
-      <div class="setting-row setting-col">
-        <div class="meta" style="width:100%">
-          <div class="name">Logo</div>
-          <div class="sub">Image carrée (SVG/PNG, ≤ 256 Ko). Laisse vide pour l'icône par défaut.</div>
-          <div class="logo-edit">
-            <div class="logo-preview" id="setLogoPreview">${s.settings?.has_logo ? `<img src="${esc(s.settings.logo_data)}" alt="">` : icon("i-spark")}</div>
-            <div class="logo-actions">
-              <label class="btn btn-ghost btn-sm"><input type="file" id="setLogoFile" accept="image/*" hidden>Choisir un fichier</label>
-              <button class="btn btn-ghost btn-sm" id="setLogoClear" ${s.settings?.has_logo ? "" : "disabled"}>Retirer</button>
+    ${isAdvanced ? `<aside class="drawer" id="drawer-personalization" hidden>
+      <div class="drawer-head"><button class="drawer-close" data-setclose="1" aria-label="Fermer">${icon("i-close")}</button><h2>Personnalisation</h2></div>
+      <div class="drawer-body">
+        <div class="setting-row setting-col">
+          <div class="meta" style="width:100%">
+            <div class="name">Nom de l'application</div>
+            <div class="sub">Affiché dans la barre supérieure et le rail.</div>
+            <input class="text-input" id="setAppName" type="text" maxlength="40" value="${esc(s.settings?.app_name || "KORA Agent")}" placeholder="KORA Agent">
+          </div>
+        </div>
+        <div class="setting-row setting-col">
+          <div class="meta" style="width:100%">
+            <div class="name">Logo</div>
+            <div class="sub">Image carrée (SVG/PNG, ≤ 256 Ko). Laisse vide pour l'icône par défaut.</div>
+            <div class="logo-edit">
+              <div class="logo-preview" id="setLogoPreview">${s.settings?.has_logo ? `<img src="${esc(s.settings.logo_data)}" alt="">` : icon("i-spark")}</div>
+              <div class="logo-actions">
+                <label class="btn btn-ghost btn-sm"><input type="file" id="setLogoFile" accept="image/*" hidden>Choisir un fichier</label>
+                <button class="btn btn-ghost btn-sm" id="setLogoClear" ${s.settings?.has_logo ? "" : "disabled"}>Retirer</button>
+              </div>
             </div>
           </div>
         </div>
+        <div class="setting-row setting-col">
+          <div class="meta" style="width:100%">
+            <div class="name">Couleurs d'accent</div>
+            <div class="sub">Coral (principal) et Bordeaux (secondaire). Aperçu en direct.</div>
+            <div class="color-edit">
+              <label class="color-field">Coral <input type="color" id="setCoral" value="${esc(s.settings?.accent_coral || "#F2A98C")}"></label>
+              <label class="color-field">Bordeaux <input type="color" id="setBordeaux" value="${esc(s.settings?.accent_bordeaux || "#E08A84")}"></label>
+              <span class="color-swatch" id="setSwatch" style="background:linear-gradient(135deg, ${esc(s.settings?.accent_coral || "#F2A98C")}, ${esc(s.settings?.accent_bordeaux || "#E08A84")})"></span>
+            </div>
+          </div>
+        </div>
+        <div class="setting-row setting-col">
+          <div class="meta" style="width:100%">
+            <div class="name">Libellés de l'interface</div>
+            <div class="sub">Personnalise le nom des onglets et le sous-titre (white-label).</div>
+            <div class="labels-grid">
+              <label class="label-field">Tableau de bord<input class="text-input" id="setLblCockpit" type="text" maxlength="30" value="${esc(s.settings?.label_cockpit || "Tableau de bord")}"></label>
+              <label class="label-field">Articles<input class="text-input" id="setLblFacts" type="text" maxlength="30" value="${esc(s.settings?.label_facts || "Articles")}"></label>
+              <label class="label-field">Validation<input class="text-input" id="setLblHitl" type="text" maxlength="30" value="${esc(s.settings?.label_hitl || "Validation")}"></label>
+              <label class="label-field">Sources<input class="text-input" id="setLblSources" type="text" maxlength="30" value="${esc(s.settings?.label_sources || "Sources")}"></label>
+              <label class="label-field">Brouillons<input class="text-input" id="setLblDrafts" type="text" maxlength="30" value="${esc(s.settings?.label_drafts || "Brouillons")}"></label>
+              <label class="label-field">Historique<input class="text-input" id="setLblAudit" type="text" maxlength="30" value="${esc(s.settings?.label_audit || "Historique")}"></label>
+              <label class="label-field label-full">Sous-titre (À propos)<input class="text-input" id="setTagline" type="text" maxlength="30" value="${esc(s.settings?.app_tagline || "Poste de pilotage de l'agent éditorial")}"></label>
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="setSave" style="margin-top:12px">Enregistrer les modifications</button>
       </div>
+    </aside>
 
-      <div class="setting-row setting-col">
-        <div class="meta" style="width:100%">
-          <div class="name">Couleurs d'accent</div>
-          <div class="sub">Coral (principal) et Bordeaux (secondaire). Aperçu en direct.</div>
-          <div class="color-edit">
-            <label class="color-field">Coral <input type="color" id="setCoral" value="${esc(s.settings?.accent_coral || "#F2A98C")}"></label>
-            <label class="color-field">Bordeaux <input type="color" id="setBordeaux" value="${esc(s.settings?.accent_bordeaux || "#E08A84")}"></label>
-            <span class="color-swatch" id="setSwatch" style="background:linear-gradient(135deg, ${esc(s.settings?.accent_coral || "#F2A98C")}, ${esc(s.settings?.accent_bordeaux || "#E08A84")})"></span>
+    <aside class="drawer" id="drawer-accounts" hidden>
+      <div class="drawer-head"><button class="drawer-close" data-setclose="1" aria-label="Fermer">${icon("i-close")}</button><h2>Comptes & habilitations</h2></div>
+      <div class="drawer-body">
+        <p class="muted" style="margin-bottom:12px">Gère qui fait quoi. Le rôle « Avancé » donne accès à tous les réglages, la gestion des comptes et les actions sensibles. Le rôle « Normal » est limité à la génération et à la validation.</p>
+        <div class="user-list" id="userList">
+          ${(s.users || []).map(u => `<div class="user-row" data-id="${esc(u.id)}">
+            <div class="meta"><div class="name">${esc(u.username)}</div><div class="sub">${esc(u.email || "—")}</div></div>
+            <div class="role-edit">
+              <select class="text-input role-select" data-id="${esc(u.id)}">
+                <option value="normal" ${(u.role || "normal") === "normal" ? "selected" : ""}>Normal</option>
+                <option value="advanced" ${(u.role || "normal") === "advanced" ? "selected" : ""}>Avancé</option>
+              </select>
+              <button class="btn btn-ghost btn-sm user-del" data-id="${esc(u.id)}">Retirer</button>
+            </div>
+          </div>`).join("")}
+        </div>
+        <div class="setting-row setting-col">
+          <div class="meta" style="width:100%">
+            <div class="name">Ajouter un compte</div>
+            <div class="sub">Identifiant (3+), email, mot de passe (8+), rôle.</div>
+            <div class="labels-grid">
+              <label class="label-field">Identifiant<input class="text-input" id="setNewUser" type="text" maxlength="40" placeholder="redacteur1"></label>
+              <label class="label-field">Email<input class="text-input" id="setNewEmail" type="email" maxlength="80" placeholder="redacteur@kora.reach"></label>
+              <label class="label-field">Mot de passe<input class="text-input" id="setNewUserPw" type="password" maxlength="64" placeholder="••••••••" autocomplete="new-password"></label>
+              <label class="label-field">Rôle<select class="text-input" id="setNewUserRole"><option value="normal" selected>Normal</option><option value="advanced">Avancé</option></select></label>
+            </div>
+            <button class="btn btn-outline" id="setAddUser" style="margin-top:10px">Créer le compte</button>
           </div>
         </div>
       </div>
+    </aside>
 
-      <div class="setting-row setting-col">
-        <div class="meta" style="width:100%">
-          <div class="name">Libellés de l'interface</div>
-          <div class="sub">Personnalise le nom des onglets et le sous-titre (white-label).</div>
-          <div class="labels-grid">
-            <label class="label-field">Tableau de bord<input class="text-input" id="setLblCockpit" type="text" maxlength="30" value="${esc(s.settings?.label_cockpit || "Tableau de bord")}"></label>
-            <label class="label-field">Articles<input class="text-input" id="setLblFacts" type="text" maxlength="30" value="${esc(s.settings?.label_facts || "Articles")}"></label>
-            <label class="label-field">Validation<input class="text-input" id="setLblHitl" type="text" maxlength="30" value="${esc(s.settings?.label_hitl || "Validation")}"></label>
-            <label class="label-field">Sources<input class="text-input" id="setLblSources" type="text" maxlength="30" value="${esc(s.settings?.label_sources || "Sources")}"></label>
-            <label class="label-field">Brouillons<input class="text-input" id="setLblDrafts" type="text" maxlength="30" value="${esc(s.settings?.label_drafts || "Brouillons")}"></label>
-            <label class="label-field">Historique<input class="text-input" id="setLblAudit" type="text" maxlength="30" value="${esc(s.settings?.label_audit || "Historique")}"></label>
-            <label class="label-field label-full">Sous-titre (À propos)<input class="text-input" id="setTagline" type="text" maxlength="30" value="${esc(s.settings?.app_tagline || "Poste de pilotage de l'agent éditorial")}"></label>
-          </div>
-        </div>
+    <aside class="drawer" id="drawer-sources" hidden>
+      <div class="drawer-head"><button class="drawer-close" data-setclose="1" aria-label="Fermer">${icon("i-close")}</button><h2>Sources</h2></div>
+      <div class="drawer-body" id="setSourcesBody">
+        <div class="muted">Chargement des sources…</div>
       </div>
-
-      <div class="setting-row">
-        <span class="meta-ic">${icon("i-user")}</span>
-        <div class="meta"><div class="name">Rôle</div><div class="sub">${esc(roleLabel)}</div></div>
-      </div>
-      <div class="setting-row">
-        <span class="meta-ic">${icon("i-spark")}</span>
-        <div class="meta"><div class="name">Agent</div><div class="sub">agent KORA — collecte, fusion, rédaction</div></div>
-      </div>
-      <div class="setting-row">
-        <span class="meta-ic">${icon("i-sources")}</span>
-        <div class="meta"><div class="name">Périmètre éditorial</div><div class="sub">Actualité Guinée · kakilambe.com</div></div>
-      </div>
-      <div class="setting-row setting-col">
-        <div class="meta" style="width:100%">
-          <div class="name">Clé d'administration (token)</div>
-          <div class="sub">Token partagé pour autoriser les modifications (option B). Valeur stockée en localStorage.</div>
-          <input class="text-input" id="setToken" type="password" maxlength="64" placeholder="Entrer le token partagé" value="${esc(localStorage.getItem("kora-token") || "")}">
-        </div>
-      </div>
-
-      <button class="btn btn-primary" id="setSave" style="margin-top:12px">Enregistrer les modifications</button>
-    </section>
-
-    <section class="fact-group">
-      <div class="group-head"><span class="group-ic">${icon("i-user")}</span><h3 class="group-title">Compte</h3></div>
-      <div class="setting-row setting-col">
-        <div class="meta" style="width:100%">
-          <div class="name">Changer le mot de passe</div>
-          <div class="sub">8 caractères minimum.</div>
-          <div class="labels-grid">
-            <label class="label-field label-full">Mot de passe actuel<input class="text-input" id="setCurPw" type="password" maxlength="64" autocomplete="current-password"></label>
-            <label class="label-field">Nouveau<input class="text-input" id="setNewPw" type="password" maxlength="64" autocomplete="new-password"></label>
-            <label class="label-field">Confirmer<input class="text-input" id="setNewPw2" type="password" maxlength="64" autocomplete="new-password"></label>
-          </div>
-          <button class="btn btn-outline" id="setChangePw" style="margin-top:10px">Mettre à jour le mot de passe</button>
-        </div>
-      </div>
-      <div class="setting-row">
-        <span class="meta-ic">${icon("i-user")}</span>
-        <div class="meta"><div class="name">Session</div><div class="sub">Connecté en tant que ${esc(Store.state.auth.username || "—")}</div></div>
-        <button class="btn btn-ghost" id="setLogout">Se déconnecter</button>
-      </div>
-    </section>
-
-    ${s.auth && s.auth.role === "advanced" ? `<section class="fact-group">
-      <div class="group-head"><span class="group-ic">${icon("i-user")}</span><h3 class="group-title">Comptes & habilitations</h3></div>
-      <p class="muted" style="margin-bottom:12px">Gère qui fait quoi. Le rôle « Avancé » donne accès à tous les réglages, la gestion des comptes et les actions sensibles. Le rôle « Normal » est limité à la génération et à la validation.</p>
-      <div class="user-list" id="userList">
-        ${(s.users || []).map(u => `<div class="user-row" data-id="${esc(u.id)}">
-          <div class="meta"><div class="name">${esc(u.username)}</div><div class="sub">${esc(u.email || "—")}</div></div>
-          <div class="role-edit">
-            <select class="text-input role-select" data-id="${esc(u.id)}">
-              <option value="normal" ${(u.role || "normal") === "normal" ? "selected" : ""}>Normal</option>
-              <option value="advanced" ${(u.role || "normal") === "advanced" ? "selected" : ""}>Avancé</option>
-            </select>
-            <button class="btn btn-ghost btn-sm user-del" data-id="${esc(u.id)}">Retirer</button>
-          </div>
-        </div>`).join("")}
-      </div>
-      <div class="setting-row setting-col">
-        <div class="meta" style="width:100%">
-          <div class="name">Ajouter un compte</div>
-          <div class="sub">Identifiant (3+), email, mot de passe (8+), rôle.</div>
-          <div class="labels-grid">
-            <label class="label-field">Identifiant<input class="text-input" id="setNewUser" type="text" maxlength="40" placeholder="redacteur1"></label>
-            <label class="label-field">Email<input class="text-input" id="setNewEmail" type="email" maxlength="80" placeholder="redacteur@kora.reach"></label>
-            <label class="label-field">Mot de passe<input class="text-input" id="setNewUserPw" type="password" maxlength="64" placeholder="••••••••" autocomplete="new-password"></label>
-            <label class="label-field">Rôle<select class="text-input" id="setNewUserRole"><option value="normal" selected>Normal</option><option value="advanced">Avancé</option></select></label>
-          </div>
-          <button class="btn btn-outline" id="setAddUser" style="margin-top:10px">Créer le compte</button>
-        </div>
-      </div>
-    </section>` : ""}
-
-    <section class="fact-group">
-      <div class="group-head"><span class="group-ic">${icon("i-info")}</span><h3 class="group-title">À propos</h3></div>
-      <div class="setting-row">
-        <span class="meta-ic">${icon("i-spark")}</span>
-        <div class="meta"><div class="name">${esc(s.app_name || "KORA Agent")}</div><div class="sub about-tagline">${esc(s.settings?.app_tagline || "Poste de pilotage de l'agent éditorial")}</div></div>
-      </div>
-    </section>`;
+    </aside>` : ""}
+  </div>`;
 }
 function viewAudit(s) {
   const data = s.audit || {};
@@ -807,6 +812,47 @@ function bindSettings() {
       render();
     } catch (e) { snack(e.message || "Erreur"); }
   });
+  // ---- Navigation tiroirs (pattern Supabase) ----
+  const drawers = {
+    appearance: "drawer-appearance",
+    account: "drawer-account",
+    personalization: "drawer-personalization",
+    accounts: "drawer-accounts",
+    sources: "drawer-sources",
+  };
+  const scrim = document.getElementById("setDrawerScrim");
+  const openDrawer = (id) => {
+    Object.values(drawers).forEach(did => { const d = document.getElementById(did); if (d) d.hidden = true; });
+    const d = document.getElementById(drawers[id]);
+    if (!d) return;
+    d.hidden = false;
+    if (scrim) scrim.hidden = false;
+    view.querySelectorAll(".settings-nav-item").forEach(n => n.classList.toggle("active", n.dataset.setnav === id));
+    if (id === "sources") loadSourcesDrawer();
+  };
+  const closeDrawer = () => {
+    Object.values(drawers).forEach(did => { const d = document.getElementById(did); if (d) d.hidden = true; });
+    if (scrim) scrim.hidden = true;
+    view.querySelectorAll(".settings-nav-item").forEach(n => n.classList.remove("active"));
+  };
+  view.querySelectorAll(".settings-nav-item").forEach(n => n.onclick = () => openDrawer(n.dataset.setnav));
+  if (scrim) scrim.onclick = closeDrawer;
+  view.querySelectorAll("[data-setclose]").forEach(b => b.onclick = closeDrawer);
+  // Escape ferme le tiroir settings (sans fermer la feuille HITL)
+  const onKey = (e) => { if (e.key === "Escape") { const anyOpen = Object.values(drawers).some(did => { const d = document.getElementById(did); return d && !d.hidden; }); if (anyOpen) { closeDrawer(); e.stopPropagation(); } } };
+  document.addEventListener("keydown", onKey);
+  async function loadSourcesDrawer() {
+    const body = document.getElementById("setSourcesBody");
+    if (!body) return;
+    try {
+      const srcs = await Store.api("/api/whitelist");
+      if (!Array.isArray(srcs) || !srcs.length) { body.innerHTML = '<div class="muted">Aucune source configurée.</div>'; return; }
+      body.innerHTML = srcs.map(s => `<div class="source-row">
+        <div class="meta"><div class="name">${esc(s.name)}</div><div class="sub">${esc(s.category || "")} · ${esc((s.domains||[]).join(", ") || s.entry_url || "")}</div></div>
+        <span class="chip chip-${s.status === "active" ? "tertiary" : "pending"}">${esc(s.status || "actif")}</span>
+      </div>`).join("");
+    } catch (e) { body.innerHTML = '<div class="muted">Chargement impossible (accès réservé).</div>'; }
+  }
 }
 
 function render() {

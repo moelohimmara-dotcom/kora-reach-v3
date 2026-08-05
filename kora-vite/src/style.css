@@ -704,6 +704,38 @@ body::after {
 .role-edit { display: flex; align-items: center; gap: 8px; }
 .role-select { width: auto; min-width: 96px; padding: 6px 8px; font-size: 13px; }
 
+/* ---- Settings type Supabase : rail + tiroirs ---- */
+.settings-layout { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+.settings-rail { flex: 0 0 240px; max-width: 280px; display: flex; flex-direction: column; gap: 4px; }
+.settings-rail-group { font-size: var(--t-label-xs); text-transform: uppercase; letter-spacing: 1.2px; color: var(--md-sys-color-on-surface-variant); font-weight: 800; margin: 14px 0 4px; }
+.settings-rail-group:first-child { margin-top: 0; }
+.settings-nav-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 11px 12px; border-radius: var(--radius-md); border: 1px solid transparent; background: transparent; color: inherit; cursor: pointer; font: inherit; transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease); }
+.settings-nav-item:hover { background: var(--glass-bg-hover); }
+.settings-nav-item.active { background: var(--glass-bg); border-color: var(--glass-border-strong); }
+.settings-nav-item .meta-ic { flex: none; width: 34px; height: 34px; border-radius: var(--radius-sm); display: grid; place-items: center; background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+.settings-nav-item .meta-ic .ic { width: 18px; height: 18px; }
+.settings-nav-item .meta { flex: 1; min-width: 0; }
+.settings-nav-item .name { font-weight: 700; font-size: var(--t-body); }
+.settings-nav-item .sub { font-size: var(--t-label-sm); color: var(--md-sys-color-on-surface-variant); }
+.settings-nav-item .chev { color: var(--md-sys-color-on-surface-variant); }
+.settings-nav-item .chev .ic { width: 16px; height: 16px; }
+.settings-hint { flex: 1; min-width: 200px; align-self: center; }
+
+/* Tiroir (drawer) latéral */
+.drawer-scrim { position: fixed; inset: 0; background: rgba(0,0,0,.42); z-index: 150; backdrop-filter: blur(1px); }
+.drawer { position: fixed; top: 0; right: 0; height: 100%; width: min(420px, 92vw); background: var(--md-sys-color-surface-container-high); border-left: 1px solid var(--glass-border); box-shadow: var(--shadow-4); z-index: 160; display: flex; flex-direction: column; animation: drawerIn .22s var(--ease); }
+.drawer[hidden] { display: none; }
+@keyframes drawerIn { from { transform: translateX(24px); opacity: .4; } to { transform: translateX(0); opacity: 1; } }
+.drawer-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--glass-border); }
+.drawer-head h2 { font-size: 17px; font-weight: 700; margin: 0; flex: 1; }
+.drawer-close { background: none; border: none; cursor: pointer; color: var(--md-sys-color-on-surface-variant); padding: 6px; border-radius: 8px; display: grid; place-items: center; }
+.drawer-close:hover { background: var(--glass-bg-hover); }
+.drawer-close .ic { width: 20px; height: 20px; }
+.drawer-body { padding: 16px; overflow-y: auto; flex: 1; }
+.source-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--glass-bg); border: 1px solid var(--glass-border); margin-bottom: 8px; }
+.source-row .name { font-weight: 600; font-size: var(--t-body); }
+.source-row .sub { font-size: var(--t-label-sm); color: var(--md-sys-color-on-surface-variant); }
+
 /* ---- Auth overlay ---- */
 #authOverlay[hidden] { display: none; }
 .auth-screen { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; background: var(--md-sys-color-background); padding: 24px; }
