@@ -69,5 +69,6 @@ export const SHELL = `
   <div class="global-loader" id="globalLoader" hidden>
     <div class="wave"><i></i><i></i><i></i><i></i><i></i></div>
     <span id="globalLoaderText">Agent en cours…</span>
+    <div id="quizBox" class="quiz-box"></div>
   </div>
 `;

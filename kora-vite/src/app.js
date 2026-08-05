@@ -2,6 +2,7 @@
    KORA — App (vues, routing, tiroir HITL). Module ES.
    ============================================================ */
 import { Store } from "./store.js";
+import { Quiz } from "./quiz.js";
 
 const $ = (id) => document.getElementById(id);
 const $$ = (sel, root = document) => root ? Array.from(root.querySelectorAll(sel)) : [];
@@ -861,7 +862,18 @@ function render() {
   const fabCycle = document.querySelector('.fab-action[data-act="cycle"]');
   if (fabCycle) fabCycle.style.pointerEvents = s.ui.busy ? "none" : "";
   const gl = document.getElementById("globalLoader");
-  if (gl) { if (s.ui.busy) { gl.hidden = false; const t = document.getElementById("globalLoaderText"); if (t) t.textContent = s.ui.overlay || "Agent en cours…"; } else gl.hidden = true; }
+  const quizBox = document.getElementById("quizBox");
+  if (gl) {
+    if (s.ui.busy) {
+      gl.hidden = false;
+      const t = document.getElementById("globalLoaderText");
+      if (t) t.textContent = s.ui.overlay || "Agent en cours…";
+      if (quizBox) { Quiz.reset(); Quiz.render(quizBox); }
+    } else {
+      gl.hidden = true;
+      if (quizBox) quizBox.innerHTML = "";
+    }
+  }
   try { renderSheet(s); } catch (e) { console.error("renderSheet", e); }
   try { if (s.route === "audit") bindAudit(); } catch (e) { console.error("bindAudit", e); }
   try { if (s.route === "settings") bindSettings(); } catch (e) { console.error("bindSettings", e); }

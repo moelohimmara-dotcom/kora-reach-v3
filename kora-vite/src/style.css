@@ -502,6 +502,18 @@ body::after {
 .wave i { width: 6px; height: 100%; background: linear-gradient(var(--coral), var(--bordeaux)); border-radius: 3px; animation: wave 1s ease-in-out infinite; }
 .wave i:nth-child(2){animation-delay:.1s}.wave i:nth-child(3){animation-delay:.2s}.wave i:nth-child(4){animation-delay:.3s}.wave i:nth-child(5){animation-delay:.4s}
 @keyframes wave { 0%,100%{transform:scaleY(.3)} 50%{transform:scaleY(1)} }
+/* Mini-quiz éditorial (loader cycle) */
+.quiz-box { width: min(420px, 90vw); margin-top: 8px; }
+.quiz-card { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 16px; text-align: left; box-shadow: var(--shadow-2); animation: quizIn .3s var(--ease); }
+@keyframes quizIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.quiz-badge { font-size: var(--t-label-xs); text-transform: uppercase; letter-spacing: 1px; color: var(--coral-strong, var(--coral)); font-weight: 800; margin-bottom: 6px; }
+.quiz-q { font-weight: 700; font-size: var(--t-body); line-height: 1.4; margin-bottom: 12px; }
+.quiz-actions { display: flex; gap: 10px; }
+.quiz-actions .quiz-ans { flex: 1; }
+.quiz-feedback { margin-top: 12px; padding: 10px 12px; border-radius: var(--radius-md); font-size: var(--t-label-sm); line-height: 1.4; }
+.quiz-feedback.ok { background: color-mix(in srgb, var(--md-sys-color-tertiary-container) 60%, transparent); color: var(--md-sys-color-on-tertiary-container); }
+.quiz-feedback.ko { background: color-mix(in srgb, var(--md-sys-color-error-container) 60%, transparent); color: var(--md-sys-color-on-error-container); }
+.quiz-score { margin-top: 10px; font-size: var(--t-label-sm); color: var(--md-sys-color-on-surface-variant); }
 
 .state-box { text-align: center; padding: var(--space-6) var(--space-4); max-width: 440px; margin: 9vh auto; }
 .state-ic { display: inline-grid; place-items: center; width: 68px; height: 68px; border-radius: 50%; background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); margin-bottom: var(--space-3); box-shadow: var(--glass-shadow); }
@@ -732,6 +744,13 @@ body::after {
 .drawer-close:hover { background: var(--glass-bg-hover); }
 .drawer-close .ic { width: 20px; height: 20px; }
 .drawer-body { padding: 16px; overflow-y: auto; flex: 1; }
+@media (max-width: 819px) {
+  /* Sur mobile, le tiroir passe en plein écran pour ne pas s'empiler sur le rail */
+  .drawer { width: 100%; max-width: 100%; left: 0; border-left: none; }
+  .settings-hint { display: none; }
+  .settings-layout { gap: 0; }
+  .settings-rail { flex: 1 1 100%; max-width: 100%; }
+}
 .source-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--glass-bg); border: 1px solid var(--glass-border); margin-bottom: 8px; }
 .source-row .name { font-weight: 600; font-size: var(--t-body); }
 .source-row .sub { font-size: var(--t-label-sm); color: var(--md-sys-color-on-surface-variant); }
