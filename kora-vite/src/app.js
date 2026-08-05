@@ -962,7 +962,8 @@ function alignWordmark() {
 }
 
 function viewLogin() {
-  const wm = `<div class="auth-wordmark-wrap">${viewWordmark()}</div>`;
+  const logo = (Store.state.settings && Store.state.settings.logo_data) ? `<img class="auth-wordmark" src="${Store.state.settings.logo_data}" alt="">` : icon("i-spark");
+  const wm = `<div class="auth-wordmark-wrap">${logo}</div>`;
   return `<div class="auth-screen">
     <div class="auth-card">
       ${wm}
