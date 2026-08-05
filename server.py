@@ -98,6 +98,9 @@ class Handler(BaseHTTPRequestHandler):
                                      "mutex": reach_agent.agent.mutex, "editor": EDITOR_NAME,
                                      "transmit_mode": transmit.mode()})
         if path == "/api/whitelist":
+            # Sources = configuration sensible -> advanced uniquement
+            if not self._require_role("advanced"):
+                return
             return self._send(200, [{
                 "id": e.id, "name": e.name, "category": e.category,
                 "entry_url": e.entry_url, "domains": list(e.allowed_domains),
@@ -105,14 +108,20 @@ class Handler(BaseHTTPRequestHandler):
                 "version": e.version, "status": e.status,
             } for e in wl.WHITELIST])
         if path == "/api/audit":
+            if not self._require_auth():
+                return
             return self._send(200, {"days": get_daily(), "total": sum(d["count"] for d in get_daily())})
         if path == "/api/state":
             return self._send(200, {"mutex": reach_agent.agent.mutex,
                                     "whitelist_version": wl.WHITELIST_VERSION,
                                     "editor": EDITOR_NAME, "transmit_mode": transmit.mode()})
         if path == "/api/settings":
+            # GET = lecture du branding (nom/logo/couleurs) -> public pour l'écran de connexion.
+            # La MODIFICATION (POST) reste advanced (voir do_POST).
             return self._send(200, settings.get_settings())
         if path == "/api/last":
+            if not self._require_auth():
+                return
             with _LAST_LOCK:
                 return self._send(200, {
                     "running": LAST_CYCLE["running"],
@@ -120,6 +129,9 @@ class Handler(BaseHTTPRequestHandler):
                     "ts": LAST_CYCLE["ts"],
                 })
         if path == "/api/seed_demo":
+            # Action de démo -> advanced uniquement (évite de polluer la prod par un anonyme)
+            if not self._require_role("advanced"):
+                return
             # DEV/démo : injecte des faits cohérents (générés via la logique reconçue)
             # dans LAST_CYCLE pour peupler le dashboard HITL sans collecte réseau.
             # Imports locaux pour autonomie (évite dépendance aux imports de niveau module).
@@ -177,6 +189,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"users": out})
         if path == "/api/hitl":
             # Tous les faits persistés (survit au redémarrage du service)
+            # Auth requis : un normal peut lire pour valider, un anonyme non.
+            if not self._require_auth():
+                return
             out = list_facts()
             return self._send(200, out)
         # fichier statique
