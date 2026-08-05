@@ -46,6 +46,34 @@ def rate_ok(ip, kind):
         return True
 
 
+# Audit des événements d'auth (fichier dédié, fail-open : n'échoue jamais l'action)
+import os as _os
+_AUTH_LOG = _os.environ.get("KORA_AUTH_LOG", _os.path.join(ROOT if (ROOT := _os.path.dirname(_os.path.abspath(__file__))) else ".", "auth_audit.log"))
+
+def log_auth_event(event, detail, ip=None):
+    try:
+        ts = datetime.now().isoformat(timespec="seconds")
+        line = f"{ts}\t{event}\t{ip or '-'}\t{detail}\n"
+        with open(_AUTH_LOG, "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception:
+        pass  # jamais bloquant
+
+
+def username_by_id(uid):
+    ph = db.placeholder()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(f"SELECT username FROM kora_users WHERE id={ph}", (uid,))
+        r = cur.fetchone()
+        return r["username"] if isinstance(r, dict) else (r[0] if r else None)
+    except Exception:
+        return None
+    finally:
+        con.close()
+
+
 def list_users():
     ph = db.placeholder()
     con, _ = db.conn()

@@ -31,9 +31,13 @@ import transmit
 ROOT = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.environ.get("KORA_STATIC", os.path.join(ROOT, "static"))
 EDITOR_NAME = os.environ.get("EDITOR_NAME", "Rédacteur en chef")
-# Auth légère : token partagé (option B choisie par le client).
-# Défini dans deploy/.env (KORA_API_TOKEN). Fail-closed : si absent -> écritures refusées.
+# Auth : sessions par cookie UNIQUEMENT. Le fallback X-API-Token legacy a été retiré
+# (il constituait un bypass d'auth si le token fuit). Monitoring/serveur-à-serveur doit
+# utiliser une session avancée, pas un token partagé.
 API_TOKEN = os.environ.get("KORA_API_TOKEN", "").strip()
+# Origine autorisée pour CORS (l'app est same-origin ; on épingle pour défense en profondeur)
+ALLOWED_ORIGIN = os.environ.get("KORA_ALLOWED_ORIGIN",
+                                 f"https://{os.environ.get('KORA_PUBLIC_HOST', '213-156-135-139.sslip.io')}")
 
 # Dernier cycle persisté (pour affichage dashboard au rechargement)
 LAST_CYCLE = {"result": None, "ts": None, "running": False}
@@ -48,23 +52,17 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
+        self.send_header("Access-Control-Allow-Credentials", "true")
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(data)
 
     def _session_ok(self):
-        # 1) Session par cookie (auth complète)
+        # Session par cookie (auth complète) UNIQUEMENT.
+        # Plus de fallback X-API-Token (bypass d'auth si fuite).
         sid = auth.read_cookie_sid(self.headers)
         if sid and auth.get_session_user(sid):
-            return True
-        # 2) Fallback legacy : token partagé (X-API-Token) — toléré pour ne pas casser les intégrations
-        client = (self.headers.get("X-API-Token") or "").strip()
-        if not client:
-            authz = self.headers.get("Authorization", "")
-            if authz.startswith("Bearer "):
-                client = authz[7:].strip()
-        if client and API_TOKEN and hmac.compare_digest(client, API_TOKEN):
             return True
         return False
 
@@ -90,6 +88,13 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def _actor_username(self):
+        sid = auth.read_cookie_sid(self.headers)
+        u = auth.get_session_user(sid) if sid else None
+        if not u:
+            return "anonymous"
+        return u["username"] if isinstance(u, dict) else u[1]
+
     def do_GET(self):
         p = urllib.parse.urlparse(self.path)
         path = p.path
@@ -112,6 +117,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             return self._send(200, {"days": get_daily(), "total": sum(d["count"] for d in get_daily())})
         if path == "/api/state":
+            if not self._require_auth():
+                return
             return self._send(200, {"mutex": reach_agent.agent.mutex,
                                     "whitelist_version": wl.WHITELIST_VERSION,
                                     "editor": EDITOR_NAME, "transmit_mode": transmit.mode()})
@@ -312,25 +319,32 @@ class Handler(BaseHTTPRequestHandler):
             pw = payload.get("password", "")
             r = auth.login(u, pw, self.client_address[0])
             if r.get("ok"):
+                auth.log_auth_event("login_success", u, self.client_address[0])
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Set-Cookie", auth.cookie_value(r["session_id"]))
-                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
+                self.send_header("Access-Control-Allow-Credentials", "true")
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
                 self.wfile.write(json.dumps({"ok": True, "username": u}, ensure_ascii=False).encode("utf-8"))
             else:
+                auth.log_auth_event("login_failure", u, self.client_address[0])
                 self._send(401, {"error": "invalid_credentials"})
             return
         if p.path == "/api/auth/logout":
             if not self._require_auth():
                 return
             sid = auth.read_cookie_sid(self.headers)
+            me = auth.get_session_user(sid)
+            if me:
+                auth.log_auth_event("logout", me["username"] if isinstance(me, dict) else me[1], self.client_address[0])
             if sid: auth.delete_session(sid)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Set-Cookie", "kora_sid=; Path=/; HttpOnly; Max-Age=0")
-            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
+            self.send_header("Access-Control-Allow-Credentials", "true")
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(b'{"ok":true}')
@@ -344,7 +358,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(401, {"error": "unauthorized"})
                 return
             uid = user["id"] if isinstance(user, dict) else user[0]
+            uname = user["username"] if isinstance(user, dict) else user[1]
             r = auth.change_password(uid, payload.get("current", ""), payload.get("new", ""))
+            if r.get("ok"):
+                auth.log_auth_event("password_changed", uname, self.client_address[0])
             self._send(200 if r.get("ok") else 400, r)
             return
         if p.path == "/api/auth/forgot":
@@ -354,6 +371,10 @@ class Handler(BaseHTTPRequestHandler):
         if p.path == "/api/auth/users":
             # Gestion des comptes (advanced-only) : création avec choix de rôle
             if not self._require_role("advanced"):
+                return
+            # Rate-limit création de compte (anti-abuse) par IP
+            if not auth.rate_ok(self.client_address[0], "create_user"):
+                self._send(429, {"error": "rate_limited"})
                 return
             uname = (payload.get("username") or "").strip()
             email = (payload.get("email") or "").strip().lower()
@@ -369,6 +390,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(400, {"error": "password_too_short"})
                 return
             r = auth.add_user(uname, pw, email, role)
+            if r.get("ok"):
+                actor = self._actor_username()
+                auth.log_auth_event("user_created", f"{uname} (role={role}) by {actor}", self.client_address[0])
             self._send(200 if r.get("ok") else 400, r)
             return
         if p.path == "/api/auth/users/role":
@@ -383,7 +407,11 @@ class Handler(BaseHTTPRequestHandler):
             if new_role not in ("normal", "advanced"):
                 self._send(400, {"error": "role_invalide"})
                 return
+            uname = auth.username_by_id(uid) or uid
+            actor = self._actor_username()
             r = auth.set_role(uid, new_role)
+            if r.get("ok"):
+                auth.log_auth_event("role_changed", f"{uname} -> {new_role} by {actor}", self.client_address[0])
             self._send(200 if r.get("ok") else 400, r)
             return
         if p.path == "/api/auth/reset":
@@ -412,7 +440,11 @@ class Handler(BaseHTTPRequestHandler):
             my_id = me["id"] if isinstance(me, dict) else me[0]
             if uid == my_id:
                 return self._send(400, {"error": "cannot_delete_self"})
+            uname = auth.username_by_id(uid) or uid
+            actor = self._actor_username()
             r = auth.delete_user(uid)
+            if r.get("ok"):
+                auth.log_auth_event("user_deleted", f"{uname} by {actor}", self.client_address[0])
             self._send(200 if r.get("ok") else 400, r)
             return
         if p.path == "/api/audit":
