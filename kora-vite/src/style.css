@@ -250,9 +250,9 @@ body::after {
 .brand { display: flex; align-items: center; gap: 11px; }
 .brand-mark {
   width: 30px; height: 30px; border-radius: var(--radius-xs); display: grid; place-items: center;
-  background: linear-gradient(135deg, var(--coral), var(--bordeaux)); color: #1a0c08; box-shadow: var(--glass-glow);
 }
-.brand-mark .ic { width: 17px; height: 17px; }
+.brand-mark .ic { width: 17px; height: 17px; background: linear-gradient(135deg, var(--coral), var(--bordeaux)); color: #1a0c08; border-radius: var(--radius-xs); padding: 4px; box-shadow: var(--glass-glow); }
+.brand-fav-img { width: 26px; height: 26px; object-fit: contain; display: block; border-radius: 6px; }
 .brand-name { font-weight: 800; font-size: 1.2rem; letter-spacing: .4px; }
 .brand-logo-img { height: 24px; width: auto; max-width: 180px; object-fit: contain; display: block; }
 .brand-sub { font-size: .78rem; color: var(--md-sys-color-on-surface-variant); font-weight: 600; letter-spacing: .3px; }

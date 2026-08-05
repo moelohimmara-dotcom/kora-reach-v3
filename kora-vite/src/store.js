@@ -164,11 +164,24 @@ export const Store = (() => {
       if (subEl) subEl.textContent = parts[1] || "";
     }
     if (markEl) {
-      if (s.has_logo && s.logo_data) {
-        markEl.style.display = "none";
+      const fav = s.favicon_data || s.logo_data;
+      if (fav) {
+        markEl.style.display = "";
+        markEl.innerHTML = `<img src="${fav}" alt="" class="brand-fav-img">`;
         const nm = document.querySelector(".brand-name");
         const sb = document.querySelector(".brand-sub");
-        if (nm) { nm.innerHTML = `<img src="${s.logo_data}" alt="" class="brand-logo-img">`; if (sb) sb.style.display = "none"; }
+        if (nm && s.logo_data && s.logo_data !== fav) {
+          nm.innerHTML = `<img src="${s.logo_data}" alt="" class="brand-logo-img">`;
+          if (sb) sb.style.display = "none";
+        } else if (nm && !s.logo_data) {
+          nm.innerHTML = (s.app_name || "KORA").split(" ")[0];
+        }
+        // favicon de l'onglet navigateur = icone kora seule
+        try {
+          let l = document.querySelector('link[rel="icon"]');
+          if (!l) { l = document.createElement("link"); l.rel = "icon"; document.head.appendChild(l); }
+          l.href = fav;
+        } catch (e) {}
       } else {
         markEl.style.display = "";
         markEl.innerHTML = `<svg class="ic"><use href="#i-spark"/></svg>`;

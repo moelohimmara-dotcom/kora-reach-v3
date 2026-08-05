@@ -69,6 +69,7 @@ def get_settings() -> dict:
     d["accent_bordeaux"] = _norm_hex(d.get("accent_bordeaux")) or DEFAULTS["accent_bordeaux"]
     d["app_name"] = (d.get("app_name") or "").strip() or DEFAULTS["app_name"]
     d["has_logo"] = bool(d.get("logo_data"))
+    d["has_favicon"] = bool(d.get("favicon_data"))
     return d
 
 
@@ -93,6 +94,7 @@ def save_settings(payload: dict) -> dict:
     coral = _norm_hex(payload.get("accent_coral"))
     bordeaux = _norm_hex(payload.get("accent_bordeaux"))
     logo = payload.get("logo_data")
+    favicon = payload.get("favicon_data")
 
     if not name:
         return {"ok": False, "error": "Nom d'application requis"}
@@ -105,6 +107,11 @@ def save_settings(payload: dict) -> dict:
             logo = None
         elif not _valid_logo(logo):
             return {"ok": False, "error": "Logo invalide (doit être data:image/...;base64, <256 Ko)"}
+    if favicon is not None:
+        if favicon == "":
+            favicon = None
+        elif not _valid_logo(favicon):
+            return {"ok": False, "error": "Favicon invalide (doit être data:image/...;base64, <256 Ko)"}
 
     # Libellés d'interface (white-label)
     labels = {}
@@ -136,6 +143,13 @@ def save_settings(payload: dict) -> dict:
                     cur.execute(f"INSERT INTO kora_config(key,value) VALUES({_ph()},{_ph()})", ("logo_data", logo))
             else:
                 cur.execute(f"INSERT OR REPLACE INTO kora_config(key,value) VALUES({_ph()},{_ph()})", ("logo_data", logo))
+        if favicon is not None:
+            if db.is_postgres():
+                cur.execute(f"DELETE FROM kora_config WHERE key={_ph()}", ("favicon_data",))
+                if favicon is not None:
+                    cur.execute(f"INSERT INTO kora_config(key,value) VALUES({_ph()},{_ph()})", ("favicon_data", favicon))
+            else:
+                cur.execute(f"INSERT OR REPLACE INTO kora_config(key,value) VALUES({_ph()},{_ph()})", ("favicon_data", favicon))
         con.commit()
     finally:
         con.close()
