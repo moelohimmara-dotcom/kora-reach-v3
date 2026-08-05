@@ -709,7 +709,7 @@ body::after {
 .auth-mark { width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 16px; background: linear-gradient(135deg, var(--coral), var(--bordeaux)); display: flex; align-items: center; justify-content: center; }
 .auth-mark .ic { width: 30px; height: 30px; color: #fff; }
 .auth-title { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
-.auth-sub { font-size: 13px; color: var(--md-sys-color-on-surface-variant); margin: 0 0 20px; }
+.auth-sub { font-size: 13px; color: var(--md-sys-color-on-surface-variant); margin: 0 auto 20px; max-width: 320px; line-height: 1.5; }
 .auth-field { display: flex; flex-direction: column; gap: 6px; text-align: left; font-size: var(--t-label-sm); color: var(--md-sys-color-on-surface-variant); margin-bottom: 14px; }
 .auth-field .text-input { width: 100%; }
 .auth-link { background: none; border: none; color: var(--coral-strong, var(--coral)); font-size: 13px; margin-top: 12px; cursor: pointer; text-decoration: underline; }
