@@ -967,7 +967,6 @@ function viewLogin() {
   return `<div class="auth-screen">
     <div class="auth-card">
       ${wm}
-      <h1 class="auth-title">${esc(Store.state.app_name || "KORA Agent")}</h1>
       <p class="auth-sub">Bonjour et bienvenue chez Kora, votre agent éditorialiste.</p>
       <form id="authForm" autocomplete="off">
         <label class="auth-field">Identifiant

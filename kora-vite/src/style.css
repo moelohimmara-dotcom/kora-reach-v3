@@ -714,9 +714,9 @@ body::after {
 .auth-field .text-input { width: 100%; }
 .auth-link { background: none; border: none; color: var(--coral-strong, var(--coral)); font-size: 13px; margin-top: 12px; cursor: pointer; text-decoration: underline; }
 .auth-err { color: var(--md-sys-color-error); font-size: 13px; margin-top: 10px; min-height: 18px; }
-.auth-wordmark-wrap { display: flex; justify-content: center; margin: 0 auto 12px; }
+.auth-wordmark-wrap { display: flex; justify-content: center; margin: 0 auto 22px; }
 .auth-wordmark { width: 80%; max-width: 280px; height: auto; object-fit: contain; }
-.wm { display: inline-block; line-height: 0.92; text-align: left; font-family: "Montserrat", system-ui, sans-serif; }
+.auth-sub { font-size: 14px; color: var(--md-sys-color-on-surface-variant); margin: 0 auto 26px; max-width: 320px; line-height: 1.55; text-align: center; font-weight: 500; }
 .wm-kora { display: block; font-weight: 800; font-size: 2.7rem; letter-spacing: .5px; color: #111; }
 .wm-agent { display: block; font-weight: 300; font-size: 1.15rem; letter-spacing: .3px; color: #111; margin-left: 2px; }
 .wm-a { font-weight: 400; }
