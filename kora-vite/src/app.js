@@ -131,7 +131,12 @@ function viewCockpit(s) {
         <section class="system-section sources-section" data-nav="sources" role="button" tabindex="0" aria-label="Voir la gouvernance des sources">
           <h2 class="section-title">Sources</h2>
           <div class="source-chips">
-            ${sources.length ? sources.map(src => sourceStatusChip(src)).join("") : '<span class="source-chip empty">Aucune source</span>'}
+            ${sources.length ? (() => {
+              // Guinee7 isolée en fin de liste (demande : séparée des autres sources)
+              const others = sources.filter(s => !/guin[ée]e?\s*7/i.test(s.name || s.id || ""));
+              const guinee7 = sources.filter(s => /guin[ée]e?\s*7/i.test(s.name || s.id || ""));
+              return [...others, ...guinee7].map(src => sourceStatusChip(src)).join("");
+            })() : '<span class="source-chip empty">Aucune source</span>'}
           </div>
         </section>
         <section class="system-section cycle-section">
