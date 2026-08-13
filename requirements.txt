@@ -1,5 +1,19 @@
+# KORA Reach v3 — dépendances backend (Python 3.10+)
+# Serveur = stdlib (http.server), aucune dépendance web lourde requise.
+# Install : pip install -r requirements.txt  (dans un venv recommandé)
+
+# --- Collecte / parsing ---
 feedparser==6.0.10
 trafilatura==2.2.0
 beautifulsoup4==4.12.2
 python-docx==0.8.11
 requests>=2.31.0
+
+# --- Base de données (PostgreSQL en prod) ---
+psycopg2-binary>=2.9.9
+
+# --- Transfert / SSH (sauvegardes, accès VPS) ---
+paramiko>=3.4.0
+
+# --- (optionnel) si FAL.ai direct est activé via SDK ---
+# fal_client (pip install fal_client) — requiert FAL_KEY

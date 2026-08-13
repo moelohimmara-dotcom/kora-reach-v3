@@ -166,6 +166,77 @@ sudo nginx -s reload      # IMPORTANT : le cache proxy nginx sert un index.html 
 
 ---
 
+## 5b. Setup local (reprise par un tiers / dev)
+
+Le dépôt est **récupérable et exploitable** : code source complet, aucun secret fuité,
+docs métier solides. Procédure pas-à-pas pour faire tourner en local sans le VPS.
+
+### Prérequis
+- Python 3.10+ et Node 18+ installés.
+- Une base **PostgreSQL** (recommandée) OU SQLite si le backend le supporte en dev.
+- (Optionnel) comptes Supabase / WordPress / FAL / Ollama pour les intégrations.
+
+### Backend
+```bash
+git clone https://github.com/moelohimmara-dotcom/kora-reach-v3.git
+cd kora-reach
+
+# 1) Environnement virtuel
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 2) Dépendances (toutes listées dans requirements.txt)
+pip install -r requirements.txt
+
+# 3) Configuration d'environnement
+cp deploy/.env.example .env
+# Éditer .env et renseigner AU MINIMUM :
+#   PG_HOST / PG_PORT / PG_DATABASE / PG_USER / PG_PASSWORD
+#   ADMIN_USER / ADMIN_PASS
+#   (le reste peut rester vide en dev)
+nano .env
+
+# 4) Base de données
+# Créer la base + lancer les migrations (voir docs/ ou deploy/*.sql si présents)
+createdb kora
+# (scripts de migration éventuels dans le dossier deploy/ ou docs/)
+
+# 5) Lancer le serveur (stdlib http.server, ThreadingHTTPServer)
+python server.py
+# → écoute sur $PORT (défaut 8766), sert kora-vite/dist + /api/*
+```
+
+### Frontend (dev)
+```bash
+cd kora-vite
+npm install
+npm run dev          # Vite dev server (HMR) sur http://localhost:5173
+# ou build + sert le dist via le backend :
+npm run build
+# le backend sert alors ./kora-vite/dist (KORA_STATIC)
+```
+
+### Vérification
+```bash
+curl -k https://localhost:8766/api/health        # ou /api/facts
+# Login admin
+curl -k -X POST https://localhost:8766/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"<ADMIN_PASS>"}' -c cookies.txt
+```
+
+### Points d'attention pour le repreneur
+- **`requirements.txt`** contient toutes les libs importées (dont `psycopg2-binary`,
+  `paramiko`). Vérifie après install qu'aucun `ModuleNotFoundError` ne survient.
+- **`.env.example`** liste **toutes** les variables lues par le code. Toute variable
+  manquante fait crasher le boot (ex : `PG_PASSWORD` requis pour PostgreSQL).
+- Le serveur est en **stdlib** (`http.server`), pas aiohttp/flask — aucune dépendance
+  web lourde n'est requise.
+- Le front utilise un **cache-busting par build** (`vite.config.js`) : après un rebuild,
+  forcer un reload (`Ctrl+Maj+R`) côté navigateur.
+
+---
+
 ## 6. Authentification
 
 - Endpoint : `POST /kora-v2/api/auth/login` → `Set-Cookie kora_sid`
