@@ -68,7 +68,8 @@ export const Store = (() => {
     // Timeout réseau : évite que le fetch reste en "pending" indéfiniment
     // (qui figeait le bouton "Connexion…" si le backend ne répond pas).
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 15000);
+    const TIMEOUT_MS = (opts && opts.timeout) || 15000;
+    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
     fetchOpts.signal = ctrl.signal;
     try {
       const res = await fetch(url, fetchOpts);
@@ -545,6 +546,7 @@ export const Store = (() => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fact_id, suggestion: suggestion || null }),
+        timeout: 120000,
       });
       if (r.error) throw new Error(r.error);
       return r;  // { fact_id, article, model, status, suggestion_applied, angle }
