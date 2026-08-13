@@ -128,7 +128,7 @@ function viewCockpit(s) {
           <h2 class="section-title">Santé système</h2>
           ${systemHealthPill(health)}
         </section>
-        <section class="system-section sources-section">
+        <section class="system-section sources-section" data-nav="sources" role="button" tabindex="0" aria-label="Voir la gouvernance des sources">
           <h2 class="section-title">Sources</h2>
           <div class="source-chips">
             ${sources.length ? sources.map(src => sourceStatusChip(src)).join("") : '<span class="source-chip empty">Aucune source</span>'}
@@ -1337,6 +1337,11 @@ function render() {
     // Bouton "Sélectionner" est re-rendu à chaque render -> on le câble ici (pas dans bind())
     const enterSel = document.getElementById("enterSelect");
     if (enterSel) enterSel.onclick = () => Store.setSelectMode(!Store.state.selectMode);
+    // Sections du dashboard cliquables -> navigation (ex: Sources -> page Sources)
+    document.querySelectorAll("[data-nav]").forEach(n => {
+      n.onclick = () => { const r = n.getAttribute("data-nav"); if (r) navigate(r); };
+      n.onkeydown = (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); const r = n.getAttribute("data-nav"); if (r) navigate(r); } };
+    });
   } catch (e) { console.error("selectBar", e); }
   // Corbeille : boutons restaurer / supprimer définitivement
   try {
