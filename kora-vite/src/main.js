@@ -9,6 +9,7 @@ import { styles as typescaleStyles } from "@material/web/typography/md-typescale
 import "@fontsource/roboto/400.css";
 import "@fontsource/roboto/500.css";
 import "@fontsource/roboto/700.css";
+import "@fontsource/material-icons/400.css";
 if (document.adoptedStyleSheets) {
   document.adoptedStyleSheets.push(typescaleStyles.styleSheet);
 }
