@@ -396,6 +396,8 @@ function viewFacts(s) {
       + factGroup(facts, s, "REJECTED", "Rejetés", "i-close", s.selectMode)
       + factGroup(facts, s, "EDITED", "Brouillons", "i-edit", s.selectMode);
   } else if (f === "pending") body = factGroup(facts, s, "PENDING_REVIEW", "En attente de validation", "i-check", s.selectMode);
+  else if (f === "transmitted") body = factGroup(facts, s, "TRANSMITTED", "Transmis à la rédaction", "i-send", s.selectMode);
+  else if (f === "rejected") body = factGroup(facts, s, "REJECTED", "Rejetés", "i-close", s.selectMode);
   else if (f === "drafts") body = factGroup(facts, s, "EDITED", "Brouillons", "i-edit", s.selectMode);
   return filterBar + body;
 }
