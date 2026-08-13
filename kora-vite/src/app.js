@@ -91,7 +91,7 @@ function statusBadge(st) {
 function viewCockpit(s) {
   const facts = s.facts || [];
   const total = facts.length;
-  const approved = facts.filter(f => (s.decisions[f.fact_id] || f.status || "PENDING_REVIEW") === "TRANSMITTED" || (s.decisions[f.fact_id] || f.status || "PENDING_REVIEW") === "APPROVED").length;
+  const approved = facts.filter(f => (s.decisions[f.fact_id] || f.status) === "APPROVED").length;
   const pending = facts.filter(f => (s.decisions[f.fact_id] || f.status || "PENDING_REVIEW") === "PENDING_REVIEW").length;
   const draft = facts.filter(f => (s.decisions[f.fact_id] || f.status || "PENDING_REVIEW") === "EDITED").length;
   const health = s.health;
