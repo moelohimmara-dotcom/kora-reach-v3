@@ -1836,9 +1836,16 @@ function bindAuth(mode, token) {
       const p = overlay.querySelector("#authPass").value;
       const btn = overlay.querySelector("#authSubmit");
       const orig = btn ? btn.textContent : "";
+      // Timer de sécurité : si le login ne revient pas (backend lent/bloqué),
+      // on restaure le bouton et on affiche une erreur au lieu de figer.
+      const safety = setTimeout(() => {
+        if (btn) { btn.disabled = false; btn.textContent = orig || "Se connecter"; }
+        setErr("Connexion trop lente — le serveur ne répond pas. Réessaie ou contacte l'admin.");
+      }, 16000);
       try {
         if (btn) { btn.disabled = true; btn.textContent = "Connexion…"; }
         await Store.login(u, p);
+        clearTimeout(safety);
         overlay.hidden = true;
         document.getElementById("app").style.display = "";
         Store.loadUsers().catch(() => {});
@@ -1846,7 +1853,7 @@ function bindAuth(mode, token) {
         render();
         snack("Connecté");
       } catch (ex) { setErr(ex.message || "Erreur de connexion"); }
-      finally { if (btn) { btn.disabled = false; btn.textContent = orig; } }
+      finally { clearTimeout(safety); if (btn) { btn.disabled = false; btn.textContent = orig; } }
     };
   } else if (mode === "forgot") {
     const back = overlay.querySelector("#authBack");
