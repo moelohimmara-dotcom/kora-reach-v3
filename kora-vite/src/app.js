@@ -1191,14 +1191,20 @@ function bindSettings() {
 let _authRendered = false;  // évite de reconstruire le formulaire à chaque setState
 
 function render() {
-  // Garde anti-récursion : si render est rappelé en boucle (ex: render->X->setState->render)
-  // on lève une erreur EXPLICITE plutôt que de figer le navigateur.
+  // Garde anti-récursion STRICT : si render est rappelé en boucle (sync ou async),
+  // on lève une erreur EXPLICITE AVEC LE STACK au 6e appel rapproché, plutôt que
+  // de saturer le thread JS et figer le navigateur. Le stack révèle la fonction coupable.
   const now = Date.now();
-  if (window.__renderCount && now - (window.__renderT || 0) < 500 && window.__renderCount > 40) {
-    throw new Error("RECURSION render() détectée (x" + window.__renderCount + ") — stack: " + (new Error().stack || ""));
-  }
-  if (now - (window.__renderT || 0) > 500) { window.__renderCount = 0; window.__renderT = now; }
+  if (now - (window.__renderT || 0) > 1000) { window.__renderCount = 0; window.__renderT = now; }
   window.__renderCount = (window.__renderCount || 0) + 1;
+  if (window.__renderCount > 5) {
+    const stack = new Error().stack || "";
+    const msg = "RECURSION render() x" + window.__renderCount + "\n" + stack;
+    console.error(msg);
+    const v = document.getElementById("view");
+    if (v) v.innerHTML = '<pre style="color:#F2A199;padding:20px;white-space:pre-wrap;font-size:13px">' + msg.replace(/</g, "&lt;") + "</pre>";
+    throw new Error(msg);
+  }
   const s = Store.state;
   // Garde-fou session : si déconnecté (logout ou changement de mdp), on ramène
   // immédiatement à l'écran d'authentification, sans laisser l'app visible.
