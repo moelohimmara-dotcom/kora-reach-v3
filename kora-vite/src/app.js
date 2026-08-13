@@ -1720,11 +1720,11 @@ function bind() {
       else if (action === "nav-drafts") { Store.setFactFilter("EDITED"); navigate("drafts"); }
     });
 
-    // SourceChip clicks -> open settings -> sources tab
+    // SourceChip clicks -> open the Sources page (demande : bulle directement reliée à la page Sources)
     document.addEventListener("click", (e) => {
       const chip = e.target.closest(".source-chip[data-source-id]");
       if (!chip) return;
-      navigate("settings");
+      navigate("sources");
     });
 
     // Refresh button
