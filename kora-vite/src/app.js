@@ -1191,6 +1191,14 @@ function bindSettings() {
 let _authRendered = false;  // évite de reconstruire le formulaire à chaque setState
 
 function render() {
+  // Garde anti-récursion : si render est rappelé en boucle (ex: render->X->setState->render)
+  // on lève une erreur EXPLICITE plutôt que de figer le navigateur.
+  const now = Date.now();
+  if (window.__renderCount && now - (window.__renderT || 0) < 500 && window.__renderCount > 40) {
+    throw new Error("RECURSION render() détectée (x" + window.__renderCount + ") — stack: " + (new Error().stack || ""));
+  }
+  if (now - (window.__renderT || 0) > 500) { window.__renderCount = 0; window.__renderT = now; }
+  window.__renderCount = (window.__renderCount || 0) + 1;
   const s = Store.state;
   // Garde-fou session : si déconnecté (logout ou changement de mdp), on ramène
   // immédiatement à l'écran d'authentification, sans laisser l'app visible.
