@@ -105,12 +105,12 @@ export const SHELL = `
 
   <!-- Barre d'action de sélection multiple -->
   <div class="select-bar" id="selectBar" hidden>
-    <div class="select-bar-info"><b id="selectCount">0</b> sélectionné(s)</div>
+    <div class="select-bar-info"><b id="selectCount">0</b> <span class="sel-word">sélectionné(s)</span></div>
     <div class="select-bar-actions">
-      <button class="btn btn-tonal" data-bulk="pending" title="Remettre en attente de validation (sans publier)">En attente</button>
-      <button class="btn btn-tonal" data-bulk="trash" title="Mettre à la corbeille">Corbeille</button>
-      <button class="btn btn-tonal" data-bulk="draft" title="Placer en brouillon">Brouillon</button>
-      <button class="btn btn-primary" data-bulk="approve" title="Publier l'article">Publier</button>
+      <button class="btn btn-tonal" data-bulk="pending" title="Remettre en attente de validation (sans publier)">${ic("i-undo")}<span>Attente</span></button>
+      <button class="btn btn-tonal" data-bulk="trash" title="Mettre à la corbeille">${ic("i-trash")}<span>Corbeille</span></button>
+      <button class="btn btn-tonal" data-bulk="draft" title="Placer en brouillon">${ic("i-edit")}<span>Brouillon</span></button>
+      <button class="btn btn-primary" data-bulk="approve" title="Publier l'article">${ic("i-send")}<span>Publier</span></button>
     </div>
   </div>
 

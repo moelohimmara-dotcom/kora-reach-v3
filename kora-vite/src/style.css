@@ -920,25 +920,32 @@ button:disabled > .ic { color: var(--icon-color-disabled); opacity: .55; }
 .select-bar-actions .btn { white-space: nowrap; }
 /* CTA principal (Publier) : hauteur tactile standard 48dp, cohérent avec les autres */
 .select-bar-actions .btn-primary { min-height: var(--btn-h); }
-/* ---- SMARTPHONE (<=819px) : barre CENTRÉE, équidistante des bords, une seule ligne ---- */
+/* ---- SMARTPHONE (<=819px) : barre CENTRÉE, équidistante des bords, 2 lignes ---- */
 @media (max-width: 819px) {
   .select-bar {
     left: 50%; right: auto; transform: translateX(-50%); width: auto;
     bottom: calc(env(safe-area-inset-bottom, 0px) + 80px);
-    gap: 8px; padding: 8px 12px; border-radius: var(--radius-lg);
-    max-width: calc(100vw - 32px);
-    flex-wrap: nowrap; justify-content: center; align-items: center;
+    gap: 6px; padding: 8px 12px; border-radius: var(--radius-lg);
+    max-width: calc(100vw - 24px);
+    flex-wrap: wrap; justify-content: center; align-items: center;
   }
-  .select-bar-info { flex: 0 0 auto; padding: 0 4px; font-size: var(--t-label-xs); white-space: nowrap; }
+  .select-bar-info {
+    flex: 1 1 100%; text-align: center; padding: 0 4px;
+    font-size: var(--t-label-sm); white-space: nowrap;
+  }
+  .select-bar-info .sel-word { font-weight: 400; }
   .select-bar-actions {
-    flex: 1 1 auto; min-width: 0; display: flex; gap: 6px; justify-content: center;
-    overflow: visible;
+    flex: 1 1 100%; min-width: 0; display: flex; gap: 6px;
+    justify-content: center; align-items: stretch; overflow: visible;
   }
   .select-bar-actions .btn {
-    flex: 0 0 auto; min-height: var(--btn-h);
-    padding: 6px 10px; font-size: var(--t-label-xs); line-height: 1; width: auto; white-space: nowrap;
+    flex: 1 1 0; min-width: 0; min-height: var(--btn-h);
+    padding: 8px 6px; font-size: var(--t-label-xs); line-height: 1;
+    width: auto; white-space: nowrap;
+    display: inline-flex; align-items: center; justify-content: center; gap: 4px;
   }
-  .select-bar-actions .btn .ic { width: 15px; height: 15px; }
+  .select-bar-actions .btn .ic { width: 15px; height: 15px; flex: 0 0 auto; }
+  .select-bar-actions .btn span { overflow: hidden; text-overflow: ellipsis; }
   .select-bar-actions .btn-primary { min-height: var(--btn-h); }
 }
 /* ---- TABLETTE (820-1023px) : barre centrée contrainte, taille confort ---- */
