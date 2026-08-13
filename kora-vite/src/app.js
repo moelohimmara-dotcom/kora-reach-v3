@@ -1682,9 +1682,14 @@ function bind() {
   // Call cockpit binding
   bindCockpitEvents();
 
-  // =========================================================
-  // --- Auth au démarrage : reset (?reset=), sinon check session ---
-  // Charge les settings (nom/logo) AVANT de rendre l'écran de connexion
+  // NOTE: tout le chargement initial (settings, health, auth, routing, auto-refresh)
+  // est fait UNE FOIS dans boot() (appelé par main.js), PAS ici. Sinon bind()
+  // (exécuté à chaque render) relancerait des setState -> render -> bind = boucle.
+}
+
+// Boot unique : chargement initial + auth + routing + auto-refresh.
+// Appelé UNE FOIS par main.js, jamais depuis render()/bind().
+function boot() {
   const resetToken = new URLSearchParams(location.search).get("reset");
   Store.loadSettings().then(() => {
     if (resetToken) {
@@ -1696,17 +1701,14 @@ function bind() {
     }
   });
   const r = location.pathname.split("/")[1] || "cockpit";
-  // Router initial selon l'URL, mais SANS déclencher de setState (qui ferait
-  // render()->bind()->setState = boucle infinie). On pose la route directement
-  // dans l'état (sans notifier les subscribers) ; le 1er render sera déclenché
-  // par checkAuth/loadSettings plus bas.
   if (Store.state.route !== r) Store.state.route = r;
   Store.loadHealth();
   Store.loadSettings();
-  Store.loadTrash().catch(() => {});  // corbeille
-  Store.loadUsers().catch(() => {});  // peupler la liste des comptes (si session)
-  Store.startAutoRefresh(30000);  // auto-refresh cockpit every 30s
+  Store.loadTrash().catch(() => {});
+  Store.loadUsers().catch(() => {});
+  Store.startAutoRefresh(30000);
 }
+
 
 // ---- Écrans d'authentification (overlay plein écran) ----
 function renderAuth(mode, token, force = false) {
@@ -1912,4 +1914,4 @@ function showApp() {
   if (app) app.style.display = "";
 }
 
-export const App = { render, snack, bind, navigate, openFact, renderAuth, showApp };
+export const App = { render, snack, bind, boot, navigate, openFact, renderAuth, showApp };

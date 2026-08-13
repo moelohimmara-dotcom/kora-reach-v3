@@ -42,6 +42,7 @@ Store.state.ui.theme = bootTheme;
 const bootRail = Store.initRailMode();
 Store.state.ui.railMode = bootRail;
 App.bind();
+App.boot();
 Store.subscribe(() => App.render());
 // debug : expose Store pour tests navigateur
 window.Store = Store; window.App = App;
