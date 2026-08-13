@@ -1240,9 +1240,22 @@ function render() {
   if (cs) cs.onclick = () => Store.seed();
   // Verrou visuel : on ne peut PAS relancer un cycle tant que le précédent n'est pas fini.
   const tc = document.getElementById("topbarCycle");
-  if (tc) tc.disabled = !!s.ui.busy;
+  if (tc) {
+    tc.disabled = !!s.ui.busy;
+    const lbl = tc.querySelector(".topbar-cta-label");
+    if (lbl) lbl.textContent = s.ui.busy ? "En cours…" : "Lancer un cycle";
+  }
   const fabCycle = document.querySelector('.fab-action[data-act="cycle"]');
   if (fabCycle) fabCycle.style.pointerEvents = s.ui.busy ? "none" : "";
+  // État de vérité du système dans la barre de statut (prêt / en cours / erreur)
+  const am = document.getElementById("agentMode");
+  if (am) {
+    if (s.ui.busy) am.textContent = "en cours";
+    else if (s.health && s.health.status === "error") am.textContent = "erreur";
+    else am.textContent = "prêt";
+  }
+  const amDot = document.querySelector("#agentStatus .dot");
+  if (amDot) amDot.className = "dot " + (s.ui.busy ? "dot-busy" : (s.health && s.health.status === "error" ? "dot-err" : "dot-ok"));
   const gl = document.getElementById("globalLoader");
   if (gl) {
     const t = document.getElementById("globalLoaderText");
