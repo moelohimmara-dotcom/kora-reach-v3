@@ -341,8 +341,10 @@ export const Store = (() => {
     setState({ ui: { ...state.ui, theme: t } });
   }
   function initTheme() {
+    // KORA = neumorphisme SOMBRE par défaut (charte imposée). On ignore
+    // prefers-color-scheme pour éviter d'afficher le thème clair cassé.
     let t = "dark";
-    try { t = localStorage.getItem("kora-theme") || (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"); } catch (e) {}
+    try { t = localStorage.getItem("kora-theme") || "dark"; } catch (e) {}
     if (!THEMES.includes(t)) t = "dark";
     applyTheme(t);
     return t;
