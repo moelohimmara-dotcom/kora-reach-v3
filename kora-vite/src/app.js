@@ -333,6 +333,7 @@ function factGroup(facts, s, status, label, iconName, ignoreImg = false) {
     if (status === "PENDING_REVIEW") return st === "PENDING_REVIEW";
     if (status === "TRANSMITTED") return st === "TRANSMITTED";
     if (status === "REJECTED") return st === "REJECTED";
+    if (status === "EDITED") return st === "EDITED";
     return false;
   }).filter(f => ignoreImg || true);  // En mode sélection, on autorise les cartes sans image
   if (!list.length) return `<div class="group-empty">Aucun article dans « ${label} ».</div>`;

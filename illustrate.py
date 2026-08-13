@@ -124,8 +124,8 @@ def _call_loremflickr(title: str, salt: str = "", lock_override: int = None):
                 ctype = r.headers.get("Content-Type", "")
                 if "image" not in ctype:
                     raise ValueError(f"LoremFlickr a répondu {ctype}")
-                if "defaultImage" in final:
-                    continue
+                # On accepte l'image (meme defaultImage de LoremFlickr) : c'est une
+                # photo reelle, bien preferable au placeholder vide cote frontend.
                 return url, "loremflickr"
         except urllib.error.HTTPError:
             continue
@@ -154,6 +154,7 @@ def illustrate(fact: dict, title: str, chapeau: str = "", lock_seed: int = None)
     else:
         fal_err = "FAL a échoué"
     # 2) LoremFlickr (photos réelles par mot-clé, gratuit, sans clé)
+    lf_err = ""
     try:
         url, provider = _call_loremflickr(title, salt=fact.get("fact_id", ""),
                                           lock_override=lock_seed)
@@ -162,9 +163,19 @@ def illustrate(fact: dict, title: str, chapeau: str = "", lock_seed: int = None)
                     "detail": "FAL indisponible -> photo réelle (LoremFlickr) liée au sujet."}
     except Exception as e:
         lf_err = f"LoremFlickr indisponible ({type(e).__name__})"
+    # 2b) Picsum (photo générique gratuite, sans clé) — ultime repli pour éviter
+    # le placeholder vide côté frontend. Verrouillé par fact_id pour éviter les doublons.
+    try:
+        import hashlib as _hl
+        seed = int(_hl.sha256((fact.get("fact_id", "") or title).encode()).hexdigest()[:8], 16) % 100000
+        picsum = f"https://picsum.photos/seed/{seed}/800/450"
+        return {"image": picsum, "provider": "picsum", "generated": True,
+                "detail": f"{fal_err}; {lf_err} -> photo générique (Picsum) en repli."}
+    except Exception as e:
+        picsum_err = f"Picsum indisponible ({type(e).__name__})"
     # 3) Fallback OG du champion (photo réelle du site source)
     return {"image": og, "provider": "og_fallback", "generated": False,
-            "detail": f"{fal_err}; {lf_err} -> image OG du champion conservée."}
+            "detail": f"{fal_err}; {lf_err}; {picsum_err} -> image OG du champion conservée."}
 
 
 def illustrate_all(facts: list) -> list:

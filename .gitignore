@@ -40,3 +40,44 @@ _test_*.py
 _migrate_*.py
 diag_*.py
 *.log
+
+# --- Artifacts de debug / preuves locales (JAMAIS versionnés) ---
+# Tests Playwright de diagnostic (gardés en local, pas sur GitHub)
+kora-vite/test_*.mjs
+kora-vite/test_*.js
+kora-vite/audit_*.mjs
+kora-vite/dump*.mjs
+kora-vite/repro*.mjs
+kora-vite/mock_*.mjs
+kora-vite/check-*.js
+kora-vite/check-*.mjs
+kora-vite/test-entry.js
+kora-vite/test-login*.js
+kora-vite/test-*.spec.js
+kora-vite/test_jsdom.mjs
+kora-vite/check-components*.js
+kora-vite/check-components*.mjs
+kora-vite/core.*
+kora-vite/facts_test.html
+kora-vite/icon_*.html
+kora-vite/nav_*.html
+kora-vite/rail_*.html
+kora-vite/sheet_test.html
+kora-vite/icon_realistic.html
+kora-vite/AUDIT-M3-PHASE4.md
+# Anciennes versions / sauvegardes M3 (non déployées)
+kora-vite/src/m3-backup/
+kora-vite/src/*.m3.js
+kora-vite/src/style.m3*.css
+kora-vite/src/app.m3.js
+kora-vite/src/main.m3.js
+kora-vite/src/shell.m3.js
+_quarantine/
+test-results/
+__test__/
+# --- Scripts utilitaires locaux (non requis pour le déploiement) ---
+start_kora_backend.sh
+watch_kora.sh
+deploy_push.py
+test_auth_flow.py
+test_logout_timing.py

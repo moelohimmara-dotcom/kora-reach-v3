@@ -226,40 +226,22 @@ class Handler(BaseHTTPRequestHandler):
         with open(fp, "rb") as f:
             data = f.read()
         if fp.endswith(".html"):
-            # Cache-busting : on force le navigateur à revalider le HTML et on
-            # ajoute un suffixe de version sur les assets référencés.
-            import re as _re, time as _t
-            txt = data.decode("utf-8")
-            ts = str(int(_t.time()))
-            txt = _re.sub(r'(src="([^"]+\.js))"', r'\1?v=' + ts + '"', txt)
-            txt = _re.sub(r'(href="([^"]+\.css))"', r'\1?v=' + ts + '"', txt)
-            # KILL-SWITCH inline (anti-cache résiduel) : a chaque chargement de
-            # l'HTML (no-store), on enregistre un SW ephemer qui vide tous les
-            # caches et se desenregistre. Cela eclatse meme un SW M3 old actif
-            # qui servirait un bundle perime, sans aucune action utilisateur.
-            kill_sw = (
-                "<script>(function(){if(!('serviceWorker'in navigator))return;"
-                "var c=\"self.addEventListener('activate',function(e){e.waitUntil((function(){"
-                "var k;return caches.keys().then(function(x){k=x;return Promise.all(k.map(function(y){"
-                "return caches.delete(y)}))}).then(function(){return self.registration.unregister()})"
-                "})())});self.addEventListener('fetch',function(e){e.respondWith(fetch(e.request))});\";"
-                "var b=new Blob([c],{type:'text/javascript'});var u=URL.createObjectURL(b);"
-                "navigator.serviceWorker.register(u).then(function(r){return r.update()}).catch(function(){});"
-                "})();</script>"
-            )
-            if "</head>" in txt:
-                txt = txt.replace("</head>", kill_sw + "</head>", 1)
-            else:
-                txt = kill_sw + txt
-            data = txt.encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", ctype)
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(data)
-            return
+                    # Cache-busting : on force le navigateur à revalider le HTML et on
+                    # ajoute un suffixe de version sur les assets référencés.
+                    import re as _re, time as _t
+                    txt = data.decode("utf-8")
+                    ts = str(int(_t.time()))
+                    txt = _re.sub(r'(src="([^\"]+\.js))"', r'\1?v=' + ts + '"', txt)
+                    txt = _re.sub(r'(href="([^\"]+\.css))"', r'\1?v=' + ts + '"', txt)
+                    data = txt.encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", ctype)
+                    self.send_header("Content-Length", str(len(data)))
+                    self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
         return self._send(200, data, ctype)
 
     def do_OPTIONS(self):
@@ -463,14 +445,14 @@ class Handler(BaseHTTPRequestHandler):
                 auth.log_auth_event("logout", me["username"] if isinstance(me, dict) else me[1], self.client_address[0])
             if sid: auth.delete_session(sid)
             # IMPORTANT : le cookie doit être effacé avec les MÊMES attributs
-            # que lors du login (Path=/; HttpOnly; SameSite=Strict; Secure en
+            # que lors du login (Path=/kora-v2/; HttpOnly; SameSite=Lax; Secure en
             # prod). Sinon, sous HTTPS, le navigateur refuse d'écraser le cookie
             # Secure existant par un Set-Cookie non-Secure -> la session reste
             # vivante après "Se déconnecter" (anomalie de fermeture de session).
             _sec = "; Secure" if os.environ.get("KORA_HTTPS", "1") == "1" else ""
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
-            self.send_header("Set-Cookie", f"kora_sid=; Path=/; HttpOnly; SameSite=Strict{_sec}; Max-Age=0")
+            self.send_header("Set-Cookie", f"kora_sid=; Path=/kora-v2/; HttpOnly; SameSite=Lax{_sec}; Max-Age=0")
             self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
             self.send_header("Access-Control-Allow-Credentials", "true")
             self.send_header("Cache-Control", "no-store")
@@ -596,7 +578,21 @@ def _fact_by_id(fid):
     import json as _json
     champ = _json.loads(row["champion"]) if row["champion"] else {}
     ctx = _json.loads(row["contexts"]) if row["contexts"] else []
-    art = _json.loads(row["article"]) if row["article"] and row["article"].startswith("{") else row["article"]
+    # B1 fix : article stocké en JSON string ("{}" = vide) -> traiter comme ""
+    # Ne parser que si c'est un objet/array JSON non-vide (démarre par { ou [)
+    art_raw = row["article"]
+    if art_raw and (art_raw.startswith("{") or art_raw.startswith("[")):
+        try:
+            parsed = _json.loads(art_raw)
+            # Si c'est un dict/list vide -> considérer comme article vide
+            if isinstance(parsed, (dict, list)) and not parsed:
+                art = ""
+            else:
+                art = parsed
+        except _json.JSONDecodeError:
+            art = art_raw
+    else:
+        art = art_raw or ""
     img_meta = _json.loads(row["image_meta"]) if row["image_meta"] else {}
     return {
         "fact_id": row["fact_id"], "champion": champ, "contexts": ctx,

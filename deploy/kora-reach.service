@@ -1,9 +1,10 @@
-# kora-reach.service — systemd unit (durci)
+# kora-reach.service — systemd unit (bulletproof)
 # Install : cp kora-reach.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now kora-reach
 [Unit]
 Description=KORA Reach — agent de collecte + HITL éditorial
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -11,9 +12,13 @@ User=kora
 Group=kora
 WorkingDirectory=/opt/kora-reach
 EnvironmentFile=/opt/kora-reach/deploy/.env
+Environment=PORT=8766
 ExecStart=/opt/kora-reach/.venv/bin/python /opt/kora-reach/server.py
-Restart=on-failure
-RestartSec=5
+# Toujours relancer : crash, OOM, kill, ou sortie inattendue.
+Restart=always
+RestartSec=3
+# Pas de limite de tentatives (StartLimitIntervalSec=0) : on ne veut jamais
+# que le service reste mort après N échecs.
 # --- Durcissement ---
 NoNewPrivileges=true
 PrivateTmp=true
