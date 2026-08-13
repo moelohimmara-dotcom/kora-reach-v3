@@ -316,9 +316,9 @@ function factCard(f, s, idx) {
       ${check}
       <img class="fact-img" src="${src}" alt="" loading="lazy" onerror="this.src='${ph}'">
       <div class="fact-body">
-        <h3 class="fact-title">${esc(c.title)}</h3>
+        <h3 class="fact-title">${esc(c.title || "(sans titre)")}</h3>
         <div class="fact-chips">${factMeta(f, undefined, true)}</div>
-        <div class="fact-status">${statusBadge(status)} <span class="muted">${esc(c.source || "")}</span></div>
+        <div class="fact-status">${statusBadge(status)} <span class="muted">${esc(c.source || "Source")}</span></div>
       </div>
     </article>`;
 }
