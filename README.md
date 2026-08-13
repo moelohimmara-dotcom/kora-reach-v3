@@ -1,113 +1,226 @@
-# KORA Reach V3
+# KORA Reach v3 — Poste de pilotage éditorial
 
-Agent de collecte d'actualités guinéennes + workflow éditorial humain (HITL).
-Le système collecte, normalise, clusterise et résume des faits d'actualité depuis une
-liste blanche de sources guinéennes, génère un article illustré, puis soumet à validation
-humaine avant transmission vers WordPress et Supabase.
+**KORA Agent** est un agent LLM de veille et de rédaction pour un média guinéen.
+Cette application (`kora-reach`) est son **poste de pilotage éditorial** : tableau de
+bord de supervision, file de validation HITL (Human-In-The-Loop), gestion des articles
+(Articles / Brouillons / Corbeille), sources, et déclenchement des cycles de collecte.
 
-> Projet déployé sur VPS (nginx `/kora-v2/`). Toute décision de transmission est
-> verrouillée : aucune publication automatique sans action explicite de l'éditeur.
+> Stack : backend Python (aiohttp) + agent `reach_agent` + frontend **Vite** (vanilla JS,
+> pas de framework) servi en statique. Déployé sur un VPS Debian 12, service `systemd`
+> `kora-reach` (port 8766), derrière nginx (`/kora-v2/`).
 
-## Architecture
+---
+
+## 1. Architecture
 
 ```
-┌──────────────┐     ┌──────────────────────────┐     ┌────────────────────┐
-│  Frontend    │     │  Backend (API JSON)       │     │  Sources + LLM     │
-│  Vite / MD3  │ <-> │  server.py (stdlib, zéro  │ <-> │  whitelist guin.   │
-│  thèmes      │     │  dépendance) :8765        │     │  Ollama Cloud      │
-│  clair/sombre│     │  + HITL store (SQLite)    │     │  (gemma4:31b)      │
-└──────────────┘     └──────────────────────────┘     └────────────────────┘
-                                  │
-                       ┌──────────┴───────────┐
-                       │  Transmission HITL   │
-                       │  WordPress (WP) +    │
-                       │  Supabase (articles) │
-                       └──────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  Navigateur (mobile / desktop)                               │
+│  Frontend Vite  →  /opt/kora-reach/static/  (index.html + JS) │
+└───────────────┬─────────────────────────────────────────────┘
+                │  HTTPS  /kora-v2/   (nginx reverse proxy)
+┌───────────────▼─────────────────────────────────────────────┐
+│  nginx  →  /kora-v2/        → static/  (front)               │
+│          →  /kora-v2/api/   → 127.0.0.1:8766/api/  (backend) │
+└───────────────┬─────────────────────────────────────────────┘
+                │
+┌───────────────▼─────────────────────────────────────────────┐
+│  Backend Python (aiohttp)  — service systemd `kora-reach`     │
+│   • server.py      : API REST + auth (cookie kora_sid)        │
+│   • auth.py        : PBKDF2-SHA256, rate-limit, reset         │
+│   • reach_agent.py : orchestration du cycle de collecte       │
+│   • writer.py      : publication WordPress                    │
+│   • hitl_store.py  : décisions humaines (APPROVED/REJECTED…)  │
+│   • normalizer.py  : normalisation des faits                  │
+│   • illustrate.py  : génération d'images                      │
+│   • db.py / config.py : Postgres + configuration              │
+└───────────────┬─────────────────────────────────────────────┘
+                │
+        ┌───────▼────────┐      ┌──────────────┐
+        │  Postgres       │      │  Ollama LLM   │
+        │  (127.0.0.1:5432)│      │  (gemma4)     │
+        └────────────────┘      └──────────────┘
 ```
 
-### Composants backend (`/`)
-- `server.py` — serveur HTTP stdlib. Expose `/api/hitl` (faits + décisions),
-  `/api/last` (dernier cycle), `/api/cycle` (déclenche une collecte), `/api/hitl/decide`
-  (validation APPROUVER/REJETER/MODIFIER), `/api/hitl/retract` (droit de rectification).
-- `reach_agent.py` — orchestrateur du cycle : whitelist → collecte → normalisation
-  (fenêtre glissante 48h) → filtre Guinée/INTL → dédoublonnage → clustering Jaccard →
-  champion → rédaction LLM → illustration → persistance.
-- `illustrate.py` — illustration par article. Source par défaut : LoremFlickr
-  (photos réelles liées au sujet, par mot-clé). Chaque article reçoit une image
-  **unique** (lock dérivé du fact_id + dédoublonnage au niveau cycle). Fallback :
-  image OpenGraph du champion.
-- `hitl_store.py` — machine à états persistée (SQLite `reach_state.db`) :
-  `PENDING_REVIEW → EDITED → APPROVED → TRANSMITTED`, plus `REJECTED` et `RETRACTED`.
-  Chaque décision porte `decided_by` + `decided_at` (traçabilité, jamais anonyme).
-- `writer.py` — rédaction de l'article (LLM Ollama Cloud, modèle `gemma4:31b`).
-- `fetchers.py` / `normalizer.py` / `dedup.py` / `clusterer.py` — collecte,
-  normalisation, dédoublonnage par hash d'URL, regroupement par similarité.
-- `whitelist.py` — sources autorisées (liste blanche), vérifiées au démarrage.
-- `transmit.py` — transmission vers WordPress (API REST) et Supabase (table `articles`).
-- `guardrails.py` / `config.py` / `state_store.py` / `audit.py` — garde-fous
-  (ex. fuseau Conakry, niveau 1/2), configuration, verrou de cycle, journal d'audit.
+### Frontend (Vite, vanilla JS)
+- `kora-vite/src/app.js` — cœur : rendu des vues (`viewCockpit`, `viewFacts`,
+  `viewDrafts`, `viewTrash`, `viewSources`, `viewAudit`, `viewrapide`), `factCard`,
+  `factGroup`, `statCard`, binding des événements, `render()`.
+- `kora-vite/src/store.js` — état global (state, `setState` anti-récursion, `checkAuth`
+  idempotent, `loadFacts`, `loadHITL`, `getFactFilter`/`setFactFilter`).
+- `kora-vite/src/shell.js` — coquille HTML (header, rail, bottom-nav, drawers,
+  barre de sélection multiple `select-bar`, mini-fenêtres WP/corbeille).
+- `kora-vite/src/icons.js` — sprite SVG des icônes (`i-trash`, `i-undo`, `i-edit`, …).
+- `kora-vite/src/main.js` — bootstrap : import des Material Icons, `App.bind()` + `App.boot()`.
+- `kora-vite/src/style.css` — charte **neumorphisme sombre** KORA (tokens `:root`,
+  variantes par thème, layout responsive mobile/tablette/desktop).
+- `kora-vite/vite.config.js` — build relatif + cache-busting (nom de fichier unique par
+  build pour contourner tout cache navigateur résiduel).
 
-### Frontend (`kora-vite/`)
-Application Vite, zéro dépendance au runtime (stdlib serveur statique).
-- `src/app.js` — UI : tableau de bord, cartes d'articles, **tiroir de validation**
-  type média (hero image + chapeau + corps), fermeture par croix / clic-dehors / Échap.
-- `src/store.js` — état client, chargement persistant des faits (`/api/hitl`),
-  décisions HITL.
-- `src/style.css` — thèmes **clair / sombre / cacao** (tokens CSS), ombres soft MD3.
-- `src/shell.js` / `src/icons.js` / `src/main.js` — shell applicatif, icônes SVG,
-  bootstrap.
+---
 
-## Prérequis
-- Python 3.11+ (venv fourni : `.venv/`)
-- Node 22 + Vite (pour rebuild le frontend)
-- Accès au VPS de déploiement (clés SSH ed25519)
-- Variables d'environnement (voir `deploy/.env.example`) :
-  `OLLAMA_API_KEY`, `OLLAMA_MODEL`, `SUPABASE_URL`, `SUPABASE_KEY`,
-  `WP_USER`, `WP_APP_PASS`
+## 2. Charte graphique KORA (contraintes respectées)
 
-## Setup local (dev)
-1. Créer le venv et installer les dépendances Python.
-2. Copier `deploy/.env.example` vers `deploy/.env` et renseigner les clés.
-3. Lancer le backend : `python server.py` (écoute :8765).
-4. Lancer le frontend en dev : `cd kora-vite && npm run dev`.
+| Élément | Valeur |
+|---------|--------|
+| Thème par défaut | **Neumorphisme sombre** (`#1A1D24` / `#E0E5EC` / cacao `#241712`) |
+| Police | Oswald (titres) + Source Sans Pro (texte) — `@fontsource/oswald` + `@fontsource/source-sans-3` |
+| Accent | Corail `#FF6B4A` |
+| Ombres | Douces, diffuses, teintées, faible opacité (~0.1–0.45), **pas** de glow néon (`0 0 Npx`) |
+| Touch targets | iOS 44pt / Android 48dp, grille 8pt, marges 16dp |
+| Mobile | bottom-nav centrée/équidistante (pas de bouton "Plus" superflu) |
+| Desktop | rail 260px ; tablette rail 72px→hover expand |
 
-## Déploiement (VPS)
-Les scripts et unités systemd sont dans `deploy/` :
-- `kora-reach.service` — backend API (:8765)
-- `kora-preview.service` — frontend statique (:8766)
-- `nginx-kora-v2.conf` — reverse proxy `/kora-v2/` (Cache-Control no-store) + `/kora-v2/api/`
-- `ufw-setup.sh` / `fail2ban-jail.local` — durcissement réseau
+> **Règle mémoire** : le thème sombre est **imposé** (`initTheme` force `"dark"`).
+> Les icônes utilisent la **font Material Icons** importée en JS (pas `@import` CSS
+> perdu au build). Les éléments flottants (FAB, barre de sélection) sont **centrés
+> dans la zone de contenu** via l'attribut `[data-rail]`, pas en `left:0` fixe.
 
-Workflow de mise à jour :
-1. Modifier le code.
-2. Rebuild frontend : `cd kora-vite && npm run build` (sortie dans `dist/`).
-3. SCP `dist/` vers `/opt/kora-reach/kora-vite-dist/` et `server.py` + modules vers `/opt/kora-reach/`.
-4. `systemctl restart kora-reach kora-preview`.
+---
 
-## Règles métier (résumé)
-- **Fenêtre de fraîcheur** : 48h glissantes (rythme lent des médias GN).
-- **Transmission** : uniquement après décision `APPROUVER` explicite (HITL verrouillé).
-- **Illustrations** : une image réelle et unique par article ; jamais deux articles
-  avec la même image.
-- **Persistance** : les faits comme les décisions survivent au redémarrage
-  (SQLite). Les articles en attente ne disparaissent pas au rechargement.
-- **Anti-hallucination** : pas de visage réel, source vérifiée, traçabilité des décisions.
+## 3. Écrans / Fonctionnalités
 
-## Structure des dossiers
+| Route | Vue | Contenu |
+|-------|-----|---------|
+| `#cockpit` | Tableau de bord | 4 statCards cliquables (Articles / Validés / En attente / Brouillons), santé système, sources, contrôle cycle, activité récente |
+| `#facts` | Articles | Filtres (Tous / En attente / Transmis / Rejetés / Brouillons) + grille de cartes + barre de sélection multiple |
+| `#drafts` | Brouillons | Articles en cours d'édition (décision `EDITED`) |
+| `#trash` | Corbeille | Articles supprimés (restauration 11 jours) |
+| `#sources` | Sources | Gouvernance de la whitelist (Niveau 1 / Niveau 2) |
+| `#audit` | Validation / Historique | File HITL + journal d'activité |
+| `#settings` | Paramètres | Compte, changement mot de passe, personnalisation, libellés |
+
+### Bulles / barres flottantes
+- **Barre de sélection multiple** (`#selectBar`) : apparaît en mode sélection (Articles) ;
+  4 actions (Attente / Corbeille / Brouillon / Publier), centrée, 2 lignes sur mobile.
+- **FAB cycle** : bouton flottant bas-droite (desktop) pour lancer un cycle.
+
+---
+
+## 4. Historique des corrections récentes (UI/UX)
+
+Toutes déployées en production et vérifiées par tests Playwright (contexte frais, cache
+désactivé) + capture visuelle.
+
+| Commit | Correction |
+|--------|-----------|
+| `5a67da0` | Thème force **dark neumorphisme** par défaut (était en clair) |
+| `0aaf7d1` | **Material Icons** importées en JS (icônes affichées comme texte brut avant) |
+| `56f1245` | **Corbeille** ajoutée au menu (rail / drawer / bottom-nav / overflow) |
+| `007a4da` | `checkAuth` `_checking` reset + boot route strip `/kora-v2` (dashboard vide après login) |
+| `1b34494` | `checkAuth` idempotent + render guard (récursion `Maximum call stack`) |
+| `a1c6591` | `factCard` fallback titre/source (évite `"undefined"` affiché) |
+| `33a9e25` | **"Lancer un cycle"** (header) branché + état de vérité (busy/health) dans le statut |
+| `3d8c453` | `cycle-force` + FAB désactivés pendant un cycle (verrou visuel) |
+| `9385cdd` | Bulle sélection mobile : icône seule sur actions secondaires (plus de troncature) |
+| `fe6563f` | Bulle sélection mobile : 2 lignes + icônes |
+| `45a2ed8` | Carte "Validés" compte **APPROVED** uniquement (état de vérité) |
+| `2c679ad` | `factGroup` affiche cartes sans image + état vide cohérent |
+| `8278c89` | `viewFacts` : branches **transmitted/rejected** manquantes (page "undefined") |
+| `afa1b56` | `viewFacts` : normalise `factFilter` en minuscules (bug `undefined` Transmis/Rejetés/Attente/Brouillons) |
+| `babf162` | `factCard` `onerror` → **picsum** fiable (plus de placeholder vide) |
+| *(courant)* | `factGroup` : branche **EDITED** ajoutée → filtre "Brouillons" dans Articles affiche les 4 brouillons |
+
+### Bugs récurrents résolus (patterns)
+1. **Cache navigateur** : après chaque déploiement, le navigateur (et le browser tool)
+   garde l'ancien build. → `vite.config.js` génère un **nom de fichier unique par build**
+   (`index-<BUILD_ID>.js`) + `?v=BUILD_ID` dans `index.html`. **L'utilisateur doit faire
+   un `Ctrl+Maj+R`** pour voir les changements.
+2. **Récursion** au boot/navigation → extraction de `boot()` hors de `bind()`,
+   `checkAuth` idempotent, garde-fou `setState` (cap 8).
+3. **Cohérence des filtres** : `factGroup` doit gérer TOUS les statuts
+   (`PENDING_REVIEW`, `TRANSMITTED`, `REJECTED`, `EDITED`) ; `viewFacts` compare le
+   filtre **normalisé en minuscules**.
+
+---
+
+## 5. Déploiement (VPS)
+
+**Service** : `kora-reach` (systemd, port 8766, user `kora`), VPS `213.156.135.139`
+(Debian 12). Front servi depuis `/opt/kora-reach/static/`.
+
+### Backend
+```bash
+# Sur le VPS, repo cloné dans ~/kora-deploy
+cd ~/kora-deploy
+git pull
+# (les fichiers Python sont copiés au build via le script de déploiement interne)
+sudo systemctl restart kora-reach
+```
+
+### Frontend
+```bash
+cd ~/kora-deploy/kora-vite
+npm install
+npm run build
+sudo cp -rf dist/. /opt/kora-reach/static/
+sudo chown -R kora:kora /opt/kora-reach/static/
+sudo systemctl restart kora-reach
+sudo nginx -s reload      # IMPORTANT : le cache proxy nginx sert un index.html stale sinon
+```
+
+### Règle d'or (mémoire utilisateur)
+- **Ne JAMAIS reset le mot de passe admin** pendant un déploiement (verrouillage du compte).
+- Toujours `nginx -s reload` après copie du `dist/` (sinon l'ancien `index.html` est servi).
+- Vérifier le build déployé : `cat /opt/kora-reach/static/index.html` + `curl` de l'API.
+
+---
+
+## 6. Authentification
+
+- Endpoint : `POST /kora-v2/api/auth/login` → `Set-Cookie kora_sid`
+- Cookie : `kora_sid`, `Path=/kora-v2/`, `SameSite=Lax`, `Secure`, `HttpOnly`
+- Hash : **PBKDF2-SHA256** (rounds configurables via `KORA_PBKDF2_ROUNDS`)
+- Admin (prod) : `admin` / mot de passe dans `/opt/kora-reach/deploy/.env` (`ADMIN_PASS`)
+- Rate-limit login : 20 tentatives / 10 min par IP (mémoire)
+- Reset mot de passe : email + token temporisé (`KORA_RESET_TTL_MIN`)
+
+> ⚠️ Le fichier `.env` contient des secrets (DB password, admin pass, clés API) et est
+> **gitignored** — il n'est **jamais** commité ni poussé sur GitHub.
+
+---
+
+## 7. Bonnes pratiques de dépannage (validateurs)
+
+1. **Tester le réel**, ne pas théoriser : Playwright en contexte frais avec
+   `Cache-Control: no-store` + `serviceWorkers: 'block'` + `caches.delete()`.
+2. **Isoler la zone** : ne modifier QUE la fonction/le sélecteur CSS concerné (pas de
+   dérapage sur le rendu global).
+3. **Vérifier par le code + le DOM**, pas par l'œil du modèle de vision (il lisse les
+   défauts). Capturer une vraie capture d'écran et la confirmer.
+4. **Commit + push AVANT de déclarer fini** : un fichier modifié non committé ne sera pas
+   servi par le VPS (cause racine d'une Corbeille manquante par le passé).
+5. **Reload forcé** côté utilisateur (`Ctrl+Maj+R`) après chaque déploiement.
+
+---
+
+## 8. Structure du dépôt
+
 ```
 kora-reach/
-├── server.py, reach_agent.py, illustrate.py, hitl_store.py
-├── writer.py, fetchers.py, normalizer.py, dedup.py, clusterer.py
-├── whitelist.py, transmit.py, guardrails.py, config.py, state_store.py, audit.py
-├── kora-vite/            # frontend (Vite)
-├── deploy/               # configs VPS (nginx, systemd, .env.example)
-├── CDC-KORA-REACH.md     # cahier des charges
-├── HITL-LOGIQUE.md       # logique de validation
-├── SPEC-KORA-V3.md       # spécification
-└── backups/              # sauvegardes DB (hors git)
+├── README.md                 # ce fichier
+├── .gitignore                # secrets, dist/, node_modules/, artifacts de debug
+├── auth.py  server.py  db.py  config.py
+├── reach_agent.py  writer.py  hitl_store.py  normalizer.py  illustrate.py
+├── deploy/                   # systemd units (.service), .env (gitignored)
+├── kora-vite/
+│   ├── vite.config.js
+│   ├── package.json
+│   ├── dist/                 # build généré (gitignored)
+│   └── src/
+│       ├── main.js  app.js  store.js  shell.js  icons.js  style.css
+│       └── (m3-backup/ ignoré — ancienne version non déployée)
+└── _quarantine/  test-results/  __test__/   # artifacts locaux (gitignored)
 ```
 
-## Sécurité
-- Clés jamais committées (`.env`, `_key.txt` ignorés par git).
-- Accès VPS en clé ed25519 uniquement, utilisateur non-root `kora`.
-- Révoquer les tokens d'accès après usage.
+---
+
+## 9. URLs
+
+- **App (prod)** : `https://213-156-135-139.sslip.io/kora-v2/#cockpit`
+- API : `https://213-156-135-139.sslip.io/kora-v2/api/...`
+- Admin : `admin` / (voir `deploy/.env` → `ADMIN_PASS`)
+
+---
+
+*Dernière mise à jour : 2026-08-13 — corrections UI/UX terminées et déployées.*

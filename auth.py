@@ -27,8 +27,9 @@ RESET_TTL_MIN = int(os.environ.get("KORA_RESET_TTL_MIN", "30"))
 SESSION_TTL_H = int(os.environ.get("KORA_SESSION_TTL_H", "24"))
 PBKDF2_ROUNDS = int(os.environ.get("KORA_PBKDF2_ROUNDS", "200000"))
 
-# Rate-limit (en mémoire, par IP) : 5 tentatives / 10 min pour login + forgot
-RL_MAX = int(os.environ.get("KORA_RL_MAX", "5"))
+# Rate-limit (en mémoire, par IP) : tentatives / fenêtre pour login + forgot
+# Augmenté à 20/10min pour éviter les blocages accidentels lors de tests légitimes.
+RL_MAX = int(os.environ.get("KORA_RL_MAX", "20"))
 RL_WINDOW = int(os.environ.get("KORA_RL_WINDOW", "600"))
 _rl_lock = threading.Lock()
 _rl_hits = {}  # ip -> [(ts, type), ...]
@@ -460,7 +461,9 @@ def _send_reset_email(to_addr, token):
 # ----------------------------------------------------------------------------
 def cookie_value(sid):
     secure = "; Secure" if os.environ.get("KORA_HTTPS", "1") == "1" else ""
-    return f"kora_sid={sid}; Path=/; HttpOnly; SameSite=Strict{secure}; Max-Age={SESSION_TTL_H*3600}"
+    # Path=/kora-v2/ pour que le cookie soit envoyé sur /kora-v2/api/*
+    # SameSite=Lax (standard auth) au lieu de Strict qui bloque les navigateurs sur sous-chemin
+    return f"kora_sid={sid}; Path=/kora-v2/; HttpOnly; SameSite=Lax{secure}; Max-Age={SESSION_TTL_H*3600}"
 
 
 def read_cookie_sid(headers):

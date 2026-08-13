@@ -396,16 +396,16 @@ def _proofread(raw: str, fact: Dict) -> str:
         fixed = _ollama_chat(msg, 3000)
         if fixed and len(fixed.split()) >= len(raw.split()) * 0.8:
             return fixed
-    except Exception:
-        pass
+    except Exception as e:
+        # B4 fix : log explicite de l'échec (ne pas avaler silencieusement)
+        import traceback
+        print(f"[PROOFREAD_ERROR] {type(e).__name__}: {e}")
+        traceback.print_exc()
+
+    return raw
+
 
 def validate_article(raw: str, fact: Dict) -> Dict:
-    """Valide la sortie LLM contre l'injection de prompt et les liens exterires.
-    Retourne {"ok": bool, "article": str, "flags": [str], "blocked": bool}.
-    - marqueurs d'obéissance résiduels (ignore previous, system:, instructions:, etc.)
-    - liens http(s) vers un domaine NON fourni dans les sources du fact.
-    Si bloquant -> on sanitise (on retire les lignes/liens suspects). Si trop vide -> blocked=True.
-    """
     import re as _re
     # Les URLs d'images (illustrations IA générées, OG source, extensions images,
     # domaines d'illustration) NE sont PAS des liens d'injection -> on les preserve.

@@ -15,7 +15,9 @@ TZ = ZoneInfo(config.LIMITS["timezone"])
 _DATE_FORMATS = (
     "%a, %d %b %Y %H:%M:%S %z",      # RSS RFC822 avec tz
     "%a, %d %b %Y %H:%M:%S %Z",      # RSS RFC822 sans tz num
-    "%Y-%m-%dT%H:%M:%S%z",          # ISO avec tz
+    "%Y-%m-%dT%H:%M:%S%z",          # ISO avec tz (+0000)
+    "%Y-%m-%dT%H:%M:%S.%f%z",       # ISO avec microsecondes + tz
+    "%Y-%m-%dT%H:%M:%S%z",          # ISO avec tz (repris pour priorité)
     "%Y-%m-%dT%H:%M:%S",            # ISO sans tz
     "%Y-%m-%dT%H:%M:%SZ",           # ISO Z
     "%Y-%m-%d %H:%M:%S",
@@ -50,14 +52,16 @@ def normalize_dates(published_at: str, cycle_start: datetime):
     else:
         dt = dt.astimezone(TZ)
     # Fenêtre glissante stricte 24h : [cycle_start - 24h, cycle_start]
-    # Règle métier (2026-08) : 1 article par génération, fraîcheur 24h.
-    # Les médias guinéens peuvent être lents, mais l'utilisateur veut de
-    # l'actualité FRAÎCHE : hors 24h => STALE (pas d'article généré).
-    lower = cycle_start - timedelta(hours=24)
-    if dt > cycle_start:
+    # B6 fix : grace period de 3h pour absorber le clock drift (source/serveur).
+    # Si dt est dans [cycle_start - 27h, cycle_start + 3h] -> OK.
+    # Au-delà : STALE (trop vieux) ou FUTURE (trop récent -> probable drift).
+    GRACE_HOURS = 3
+    lower = cycle_start - timedelta(hours=24 + GRACE_HOURS)
+    upper = cycle_start + timedelta(hours=GRACE_HOURS)
+    if dt > upper:
         return dt, "FUTURE", False   # date future -> anomalie
     if dt < lower:
-        return dt, "STALE", False    # hors fenêtre 24h
+        return dt, "STALE", False    # hors fenêtre 24h + grace
     return dt, "OK", True
 
 

@@ -50,7 +50,7 @@ LIMITS = {
     "rate_limit_per_host_sec": 2.0,
     "timeout_sec": 10,
     "retry": 2,
-    "cluster_sim_threshold": 0.7,
+    "cluster_sim_threshold": 0.5,
     "daily_article_limit": 10,
     "timezone": "Africa/Conakry",
 }

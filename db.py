@@ -25,7 +25,8 @@ def _pg_url():
     host = os.environ.get("PG_HOST", "127.0.0.1")
     port = os.environ.get("PG_PORT", "5432")
     db = os.environ.get("PG_DATABASE", "kora")
-    return f"postgresql://{user}:{pwd}@{host}:{port}/{db}"
+    # Connexion locale -> désactiver SSL pour éviter les problèmes de certificat
+    return f"postgresql://{user}:{pwd}@{host}:{port}/{db}?sslmode=disable"
 
 
 def conn():

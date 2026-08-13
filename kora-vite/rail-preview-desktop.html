@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KORA Rail Preview — Desktop ≥1024px</title>
+<style>
+/* ===== NEUMORPHISM TOKENS (copiés de style.css) ===== */
+:root {
+  --neu-base: #1A1D24;
+  --neu-raised: 6px 6px 12px #15171C, -6px -6px 12px #1F222C;
+  --neu-pressed: inset 4px 4px 8px #15171C, inset -4px -4px 8px #1F222C;
+  --glass-bg: rgba(26,29,36,0.7);
+  --glass-bg-strong: rgba(26,29,36,0.9);
+  --glass-bg-hover: rgba(255,107,74,0.08);
+  --glass-border: rgba(255,255,255,0.06);
+  --glass-border-strong: rgba(255,255,255,0.12);
+  --glass-blur: blur(12px);
+  --glass-shadow: 0 8px 32px rgba(0,0,0,0.35);
+  --glass-glow: 0 0 24px rgba(255,107,74,0.15);
+  --coral: #FF6B4A;
+  --coral-text: #FF8A6B;
+  --bordeaux: #B5573A;
+  --md-sys-color-surface: #1A1D24;
+  --md-sys-color-surface-container: #241712;
+  --md-sys-color-surface-container-high: #2E211A;
+  --md-sys-color-on-surface: #F0ECE8;
+  --md-sys-color-on-surface-variant: #B8B0A8;
+  --md-sys-color-outline: #6E6760;
+  --md-sys-color-scrim: rgba(0,0,0,0.6);
+  --md-sys-color-primary-container: #FF6B4A;
+  --md-sys-color-on-primary-container: #20100B;
+  --md-sys-color-tertiary-container: #3A2E28;
+  --md-sys-color-on-tertiary-container: #F2D9D0;
+  --md-sys-color-error: #F2A199;
+  --md-sys-color-error-container: #4A1A18;
+  --md-sys-color-on-error-container: #F2D9D0;
+  --md-sys-color-warning-container: #3D331A;
+  --md-sys-color-on-warning-container: #F2D9C0;
+  --font-display: 'Oswald', sans-serif;
+  --font: 'Source Sans 3', sans-serif;
+  --t-display: clamp(2.5rem, 5vw, 4rem);
+  --t-headline: clamp(1.5rem, 3vw, 2.25rem);
+  --t-title-lg: 1.375rem;
+  --t-body: 1rem;
+  --t-body-sm: 0.875rem;
+  --t-label: 0.875rem;
+  --t-label-sm: 0.8125rem;
+  --t-label-xs: 0.75rem;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --radius-xs: 4px; --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px; --radius-xl: 20px; --radius-pill: 999px;
+  --dur-fast: 150ms; --dur-med: 250ms; --ease: cubic-bezier(0.2, 0, 0, 1);
+  --z-topbar: 20; --z-nav: 25; --z-fab: 30; --z-scrim: 40; --z-sheet: 41; --z-snack: 50; --z-loader: 60;
+  --shadow-rail: var(--neu-raised);
+  --shadow-drawer: var(--neu-raised);
+  --icon-color-active: var(--coral);
+  --icon-color-muted: var(--md-sys-color-on-surface-variant);
+  --icon-color-disabled: var(--md-sys-color-outline);
+}
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700;800&family=Source+Sans+3:wght@300;400;500;600;700;800&display=swap');
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font); background: var(--neu-base); color: var(--md-sys-color-on-surface); min-height: 100vh; }
+.ic { display: inline-block; width: 24px; height: 24px; background: currentColor; mask: var(--svg); -webkit-mask: var(--svg); mask-size: contain; -webkit-mask-size: contain; }
+
+/* ===== TOPBAR ===== */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: var(--z-topbar);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--space-3) var(--space-4); padding-top: calc(var(--space-3) + env(safe-area-inset-top));
+  background: var(--glass-bg); backdrop-filter: var(--glass-blur); border-bottom: 1px solid var(--glass-border);
+}
+.brand { display: flex; align-items: center; gap: 11px; }
+.brand-mark { width: 36px; height: 36px; border-radius: var(--radius-xs); display: grid; place-items: center; }
+.brand-mark .ic { width: 17px; height: 17px; background: linear-gradient(135deg, var(--coral), var(--bordeaux)); color: #1a0c08; border-radius: var(--radius-xs); padding: 4px; box-shadow: var(--glass-glow); }
+.brand-name { font-family: var(--font-display); font-weight: 800; font-size: 1.2rem; letter-spacing: .4px; }
+.brand-sub { font-size: .78rem; color: var(--md-sys-color-on-surface-variant); font-weight: 600; letter-spacing: .3px; }
+
+/* ===== RAIL (Desktop ≥1024px) — Persistant 260px ===== */
+#app { display: flex; flex-direction: row; min-height: 100vh; }
+.rail {
+  position: fixed; left: 0; top: 64px; bottom: 0; width: 260px; z-index: var(--z-nav);
+  padding: var(--space-3) var(--space-2) var(--space-4); gap: 4px;
+  display: flex; flex-direction: column;
+  background: var(--md-sys-color-surface); border-right: 1px solid var(--glass-border-strong); box-shadow: var(--shadow-rail);
+  overflow-y: auto; overscroll-behavior: contain;
+}
+.rail .rail-toggle { display: none; } /* Hidden on desktop */
+.rail .navitem {
+  flex: 0 0 auto; flex-direction: row; justify-content: flex-start; gap: 16px;
+  padding: 10px 14px; min-height: 48px; border-radius: var(--radius-lg);
+  background: transparent; color: var(--md-sys-color-on-surface-variant);
+  font-size: 14px; font-weight: 600; line-height: 1.1; border: none; cursor: pointer;
+  font-family: var(--font); display: flex; align-items: center; transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.rail .navitem .ic { width: 24px; height: 24px; flex: none; }
+.rail .navitem span { display: inline; white-space: nowrap; }
+.rail .navitem:hover { background: var(--glass-bg-hover); color: var(--md-sys-color-on-surface); }
+.rail .navitem.active { background: var(--coral); color: #20100B; }
+.rail .navitem.active > .ic { color: #20100B; }
+.rail .navitem-center .ic { background: linear-gradient(135deg,var(--coral),var(--bordeaux)); color:#20100B; padding:0; box-shadow: var(--glass-glow); }
+.rail-sep { height: 1px; background: var(--glass-border-strong); margin: 8px 14px; opacity: .6; }
+
+/* ===== VIEW (content) — NE PUSH PAS, padding fixe ===== */
+.view {
+  flex: 1; padding: var(--space-5); padding-top: 84px; padding-left: calc(260px + var(--space-6));
+  max-width: 1180px; width: 100%; margin: 0 auto; margin-left: 260px;
+}
+
+/* ===== DRAWER OVERLAY (pour "Plus" / overflow) ===== */
+.drawer-scrim { position: fixed; inset: 0; background: var(--md-sys-color-scrim); z-index: var(--z-scrim); backdrop-filter: blur(5px); display: none; }
+.drawer-scrim.open { display: block; animation: fade var(--dur-fast); }
+.drawer {
+  position: fixed; right: 0; top: 64px; bottom: 0; width: 320px; max-width: 90vw; z-index: calc(var(--z-scrim) + 1);
+  background: var(--md-sys-color-surface); border-left: 1px solid var(--glass-border-strong); box-shadow: var(--shadow-drawer);
+  display: flex; flex-direction: column; transform: translateX(100%); transition: transform var(--dur-med) var(--ease);
+}
+.drawer.open { transform: translateX(0); }
+.drawer-head { position: sticky; top: 0; z-index: 2; flex: none; background: var(--md-sys-color-surface-container-high); border-bottom: 1px solid var(--glass-border); padding: 10px 14px; display: flex; align-items: center; gap: 10px; }
+.drawer-back { flex: none; width: 40px; height: 40px; border-radius: var(--radius-pill); border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--md-sys-color-on-surface-variant); cursor: pointer; display: grid; place-items: center; }
+.drawer-back:hover { background: var(--glass-bg-hover); color: var(--md-sys-color-on-surface); }
+.drawer-title { font-family: var(--font-display); font-size: 1.125rem; font-weight: 800; }
+.drawer-body { padding: 18px 16px; overflow-y: auto; flex: 1; }
+.drawer-item { display: flex; align-items: center; gap: 14px; padding: 14px 12px; border: none; background: none; cursor: pointer; font-family: var(--font); font-size: 15px; font-weight: 600; color: var(--md-sys-color-on-surface); border-radius: var(--radius-lg); width: 100%; text-align: left; }
+.drawer-item .ic { width: 22px; height: 22px; color: var(--coral); }
+.drawer-item:hover { background: var(--glass-bg-hover); }
+.drawer-sep { height: 1px; background: var(--glass-border-strong); margin: 8px 14px; opacity: .6; }
+
+/* ===== BOTTOM NAV (hidden on desktop) ===== */
+.bottomnav { display: none; }
+.topbar-menu { display: none; }
+
+/* ===== DEMO CONTENT ===== */
+.section-title { font-family: var(--font-display); font-size: var(--t-headline); font-weight: 800; margin: var(--space-6) 0 var(--space-3); }
+.card { background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-border); border-radius: var(--radius-xl); padding: var(--space-6); box-shadow: var(--glass-shadow); }
+.pulse-card { position: relative; overflow: hidden; background: var(--neu-base); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-border-strong); border-radius: var(--radius-xl); box-shadow: var(--glass-shadow), var(--glass-glow); padding: var(--space-6); margin-bottom: var(--space-5); }
+.pulse-card::before { content: ""; position: absolute; right: -70px; top: -70px; width: 240px; height: 240px; border-radius: 50%; background: radial-gradient(circle, var(--coral) 0%, transparent 70%); opacity: .18; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* SVG Icons inline for preview */
+:root {
+  --svg-dashboard: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='currentColor' d='M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z'/%3E%3C/svg%3E");
+  --svg-facts: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='currentColor' d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm2 16H6V4h7v5h5v11z'/%3E%3C/svg%3E");
+  --svg-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='currentColor' d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z'/%3E%3C/svg%3E");
+  --svg-edit: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='currentColor' d='M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 0 0 0-1.41l-2.34-2.34a.996.996 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z'/%3E%3C/svg%3E");
+  --svg-sources: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='currentColor' d='M8 4a6 6 0 1 1 6 6 6 6 0 0 1-6-6zm0 2a4 4 0 1 0 4 4 4 4 0 0 0-4-4z'/%3E%3C/svg%3E");
+  --svg-trash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='currentColor' d='M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z'/%3E%3C/svg%3E");
+  --svg-settings: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='currentColor' d='M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.59-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.56.24-1.09.56-1.59.94l-2.39-.96c-.22-.08-.47 0-.59.22L7.05 9.82c-.12.21-.07.47.12.61l2.03 1.58c-.12.21-.07.47-.12.61l-2.03 1.58c-.04.31-.06.63-.06.94zm-7.14 4.86c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z'/%3E%3C/svg%3E");
+  --svg-more: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='currentColor' d='M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z'/%3E%3C/svg%3E");
+  --svg-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='currentColor' d='M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z'/%3E%3C/svg%3E");
+  --svg-close: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='currentColor' d='M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z'/%3E%3C/svg%3E");
+  --svg-spark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='currentColor' d='M12 2l2.39 7.39L22 9.27l-6.2 5.1 1.47 8.21L12 17.8l-5.27 3.68 1.47-8.21L2 9.27l7.61-.88L12 2z'/%3E%3C/svg%3E");
+  --svg-refresh: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='currentColor' d='M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z'/%3E%3C/svg%3E");
+}
+.ic-dashboard { --svg: var(--svg-dashboard); }
+.ic-facts { --svg: var(--svg-facts); }
+.ic-check { --svg: var(--svg-check); }
+.ic-edit { --svg: var(--svg-edit); }
+.ic-sources { --svg: var(--svg-sources); }
+.ic-trash { --svg: var(--svg-trash); }
+.ic-settings { --svg: var(--svg-settings); }
+.ic-more { --svg: var(--svg-more); }
+.ic-chevron { --svg: var(--svg-chevron); }
+.ic-close { --svg: var(--svg-close); }
+.ic-spark { --svg: var(--svg-spark); }
+.ic-refresh { --svg: var(--svg-refresh); }
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="brand">
+        <span class="brand-mark"><span class="ic ic-spark"></span></span>
+        <span class="brand-name">KORA</span>
+        <span class="brand-sub">Agent</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-status"><span class="dot dot-ok"></span><span>prêt</span></div>
+      <button class="btn btn-primary topbar-cta"><span class="ic ic-refresh"></span><span class="topbar-cta-label">Lancer un cycle</span></button>
+    </div>
+  </header>
+
+  <nav class="rail" id="rail">
+    <button class="rail-toggle" id="railToggle"><span class="ic ic-chevron"></span></button>
+    <button class="navitem" data-route="cockpit"><span class="ic ic-dashboard"></span><span>Tableau de bord</span></button>
+    <button class="navitem" data-route="facts"><span class="ic ic-facts"></span><span>Articles</span></button>
+    <button class="navitem navitem-center" data-route="hitl"><span class="ic ic-check"></span><span>Historique</span></button>
+    <button class="navitem" data-route="drafts"><span class="ic ic-edit"></span><span>Brouillons</span></button>
+    <button class="navitem" data-route="sources"><span class="ic ic-sources"></span><span>Sources</span></button>
+    <div class="rail-sep"></div>
+    <button class="navitem" data-route="trash"><span class="ic ic-trash"></span><span>Corbeille</span></button>
+    <button class="navitem" data-route="settings"><span class="ic ic-settings"></span><span>Paramètres</span></button>
+  </nav>
+
+  <main class="view" id="view">
+    <div class="pulse-card">
+      <div class="pulse-top">
+        <span class="pulse-eyebrow">Pouls de la rédaction</span>
+        <span class="live-pill"><span class="dot dot-busy"></span>En direct · 24h</span>
+      </div>
+      <div class="pulse-num">12</div>
+      <div class="pulse-sub">article(s) chaud(s) à valider dans la fenêtre 24h</div>
+      <div class="pulse-pills">
+        <span class="delta delta-warm">12 chauds</span>
+        <span class="delta delta-good">48 transmis</span>
+        <span class="delta delta-bad">3 rejetés</span>
+      </div>
+    </div>
+
+    <div class="section-head">
+      <h2 class="section-title">Vue d'ensemble</h2>
+      <span class="muted">156 article(s) suivi(s)</span>
+    </div>
+    <div class="stat-row">
+      <div class="stat-card"><div class="stat-head"><span class="stat-label">Sources OK</span><span class="delta delta-good">✓</span></div><div class="n">87</div><div class="stat-foot">liste de sources autorisées</div></div>
+      <div class="stat-card"><div class="stat-head"><span class="stat-label">Éléments</span><span class="delta">cycle</span></div><div class="n">24</div><div class="stat-foot">collectés ce cycle</div></div>
+      <div class="stat-card"><div class="stat-head"><span class="stat-label">Articles</span><span class="delta delta-warm">12 chauds</span></div><div class="n">156</div><div class="stat-foot">en file de validation</div></div>
+      <div class="stat-card"><div class="stat-head"><span class="stat-label">Rejetés International</span><span class="delta delta-bad">3</span></div><div class="n">3</div><div class="stat-foot">hors périmètre Guinée</div></div>
+    </div>
+
+    <div class="card" style="margin-top: var(--space-6);">
+      <h3 style="font-family: var(--font-display); font-size: 1.25rem; margin-bottom: var(--space-4);">Contenu de démonstration</h3>
+      <p style="color: var(--md-sys-color-on-surface-variant); line-height: 1.7;">Ceci est un aperçu du layout **Desktop ≥1024px** avec le rail persistant (260px) qui <strong>ne push pas</strong> le contenu. Le drawer "Plus" s'ouvre en overlay à droite.</p>
+      <button class="btn btn-primary" style="margin-top: var(--space-4);" id="openDrawerDemo"><span class="ic ic-more"></span> Ouvrir drawer overlay (démo)</button>
+    </div>
+  </main>
+
+  <div class="drawer-scrim" id="drawerScrim"></div>
+  <div class="drawer" id="drawer">
+    <div class="drawer-head">
+      <button class="drawer-back" id="drawerBack"><span class="ic ic-chevron"></span></button>
+      <span class="drawer-title">Navigation</span>
+    </div>
+    <div class="drawer-body">
+      <button class="drawer-item" data-route="cockpit"><span class="ic ic-dashboard"></span><span>Tableau de bord</span></button>
+      <button class="drawer-item" data-route="facts"><span class="ic ic-facts"></span><span>Articles</span></button>
+      <button class="drawer-item active" data-route="hitl"><span class="ic ic-check"></span><span>Historique</span></button>
+      <button class="drawer-item" data-route="drafts"><span class="ic ic-edit"></span><span>Brouillons</span></button>
+      <button class="drawer-item" data-route="sources"><span class="ic ic-sources"></span><span>Sources</span></button>
+      <div class="drawer-sep"></div>
+      <button class="drawer-item" data-route="trash"><span class="ic ic-trash"></span><span>Corbeille</span></button>
+      <button class="drawer-item" data-route="settings"><span class="ic ic-settings"></span><span>Paramètres</span></button>
+    </div>
+  </div>
+</div>
+
+<script>
+const drawer = document.getElementById('drawer');
+const scrim = document.getElementById('drawerScrim');
+const openBtn = document.getElementById('openDrawerDemo');
+const closeBtn = document.getElementById('drawerBack');
+
+function openDrawer() { drawer.classList.add('open'); scrim.classList.add('open'); document.body.style.overflow = 'hidden'; }
+function closeDrawer() { drawer.classList.remove('open'); scrim.classList.remove('open'); document.body.style.overflow = ''; }
+
+openBtn?.addEventListener('click', openDrawer);
+closeBtn?.addEventListener('click', closeDrawer);
+scrim?.addEventListener('click', closeDrawer);
+</script>
+</body>
+</html>
