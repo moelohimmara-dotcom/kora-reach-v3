@@ -1197,13 +1197,11 @@ function render() {
   const now = Date.now();
   if (now - (window.__renderT || 0) > 1000) { window.__renderCount = 0; window.__renderT = now; }
   window.__renderCount = (window.__renderCount || 0) + 1;
-  if (window.__renderCount > 5) {
-    const stack = new Error().stack || "";
-    const msg = "RECURSION render() x" + window.__renderCount + "\n" + stack;
-    console.error(msg);
-    const v = document.getElementById("view");
-    if (v) v.innerHTML = '<pre style="color:#F2A199;padding:20px;white-space:pre-wrap;font-size:13px">' + msg.replace(/</g, "&lt;") + "</pre>";
-    throw new Error(msg);
+  if (window.__renderCount > 40) {
+    // Garde-fou ultime : on ne rend plus pour éviter de saturer le thread,
+    // mais on n'écrase PAS la vue (l'erreur est seulement loggée).
+    console.error("RECURSION render() x" + window.__renderCount + "\n" + (new Error().stack || ""));
+    return;
   }
   const s = Store.state;
   // Garde-fou session : si déconnecté (logout ou changement de mdp), on ramène

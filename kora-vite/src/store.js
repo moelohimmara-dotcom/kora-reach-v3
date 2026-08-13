@@ -84,22 +84,26 @@ export const Store = (() => {
   }
 
   // ---- Auth ----
+  let _checking = false;
   async function checkAuth() {
+    if (_checking) return false; // idempotent : évite la boucle render->checkAuth->render
+    _checking = true;
     try {
       const r = await api("/api/auth/me");
       if (r.ok) {
-        setState({ auth: { loggedIn: true, username: r.username, email: r.email, role: r.role || "normal" } });
+        const next = { loggedIn: true, username: r.username, email: r.email, role: r.role || "normal" };
+        // Ne pas notifier si identique (évite render->checkAuth->render)
+        const a = state.auth || {};
+        if (!a.loggedIn || a.username !== next.username || a.role !== next.role) {
+          setState({ auth: next });
+        }
         return true;
       }
-      // r.ok === false (ex: 401) → session invalide côté serveur
       console.warn("[auth] /api/auth/me a répondu ok=false", r);
     } catch (e) {
-      // Erreur réseau / CORS / cookie pas encore prêt → on NE logout PAS silencieusement
-      // On loggue et on garde l'état actuel (le login vient de réussir)
       console.warn("[auth] /api/auth/me a échoué, session conservée :", e.message);
-      return false; // ne pas toucher à state.auth
+      return false;
     }
-    // Si on arrive ici, c'est que r.ok === false → session invalide
     setState({ auth: { loggedIn: false, username: null, email: null, role: null } });
     return false;
   }
