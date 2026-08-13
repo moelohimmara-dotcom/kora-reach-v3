@@ -346,6 +346,46 @@ function factGroup(facts, s, status, label, iconName, ignoreImg = false) {
     <div class="fact-grid">${list.map(f => factCard(f, s, (s.facts || []).indexOf(f))).join("")}</div>
   </section>`;
 }
+
+// --- Traçage par jour de génération (création) ---
+function dayLabel(dateStr) {
+  if (!dateStr) return "Date inconnue";
+  const d = new Date(dateStr);
+  if (isNaN(d)) return "Date inconnue";
+  const today = new Date();
+  const dayMs = 24 * 3600 * 1000;
+  const startOf = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diffDays = Math.round((startOf(today) - startOf(d)) / dayMs);
+  const fmt = d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  if (diffDays === 0) return "Aujourd'hui \u00b7 " + fmt;
+  if (diffDays === 1) return "Hier \u00b7 " + fmt;
+  if (diffDays === 2) return "Avant-hier \u00b7 " + fmt;
+  return diffDays + " jours avant \u00b7 " + fmt;
+}
+function factGroupsByDay(facts, s) {
+  const byDay = new Map();
+  for (const f of facts) {
+    const key = (f.created_at || "").slice(0, 10) || "____";
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key).push(f);
+  }
+  const keys = [...byDay.keys()].filter(k => k !== "____").sort((a, b) => b.localeCompare(a));
+  if (byDay.has("____")) keys.push("____");
+  if (!keys.length) return '<div class="group-empty">Aucun article \u00e0 afficher.</div>';
+  return keys.map(k => {
+    const list = byDay.get(k);
+    const label = k === "____" ? "Date inconnue" : dayLabel(k);
+    return '<section class="fact-group day-group">'
+      + '<div class="group-head">'
+      + '<span class="group-ic">' + icon("i-date") + '</span>'
+      + '<h3 class="group-title">' + esc(label) + '</h3>'
+      + '<span class="group-count">' + list.length + '</span>'
+      + '</div>'
+      + '<div class="fact-grid">' + list.map(f => factCard(f, s, (s.facts || []).indexOf(f))).join("") + '</div>'
+      + '</section>';
+  }).join("");
+}
+
 function viewDrafts(s) {
   const facts = s.facts || [];
   // Un brouillon = décision EDITED (statut réel dans s.decisions, alimenté par loadHITL).
@@ -395,15 +435,20 @@ function viewFacts(s) {
       <button class="btn btn-tonal" id="enterSelect">${s.selectMode ? "Annuler la sélection" : "Sélectionner"}</button>
     </div>`;
   let body;
+  const statusOf = (fact) => { const d = s.decisions[fact.fact_id]; return (d || fact.status || "PENDING_REVIEW"); };
   if (f === "all") {
-    body = factGroup(facts, s, "PENDING_REVIEW", "En attente de validation", "i-check", s.selectMode)
-      + factGroup(facts, s, "TRANSMITTED", "Transmis à la rédaction", "i-send", s.selectMode)
-      + factGroup(facts, s, "REJECTED", "Rejetés", "i-close", s.selectMode)
-      + factGroup(facts, s, "EDITED", "Brouillons", "i-edit", s.selectMode);
-  } else if (f === "pending") body = factGroup(facts, s, "PENDING_REVIEW", "En attente de validation", "i-check", s.selectMode);
-  else if (f === "transmitted") body = factGroup(facts, s, "TRANSMITTED", "Transmis à la rédaction", "i-send", s.selectMode);
-  else if (f === "rejected") body = factGroup(facts, s, "REJECTED", "Rejetés", "i-close", s.selectMode);
-  else if (f === "drafts") body = factGroup(facts, s, "EDITED", "Brouillons", "i-edit", s.selectMode);
+    body = factGroupsByDay(facts, s);
+  } else if (f === "pending") {
+    body = factGroupsByDay(facts.filter(x => statusOf(x) === "PENDING_REVIEW"), s);
+  } else if (f === "transmitted") {
+    body = factGroupsByDay(facts.filter(x => statusOf(x) === "TRANSMITTED"), s);
+  } else if (f === "rejected") {
+    body = factGroupsByDay(facts.filter(x => statusOf(x) === "REJECTED"), s);
+  } else if (f === "drafts") {
+    body = factGroupsByDay(facts.filter(x => statusOf(x) === "EDITED"), s);
+  } else {
+    body = factGroupsByDay(facts, s);
+  }
   return filterBar + body;
 }
 function trashCard(f, s) {
