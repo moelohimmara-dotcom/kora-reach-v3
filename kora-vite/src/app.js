@@ -304,6 +304,10 @@ function factCard(f, s, idx) {
   const status = dec || (f.status || "PENDING_REVIEW");
   const ph = placeholderSvg(Store.getTheme());
   const src = img ? esc(img) : ph;
+  // Fallback fiable : si l'image (réelle ou picsum) échoue, on bascule vers
+  // picsum (service qui répond) plutôt que vers un placeholder vide.
+  const seed = (f.fact_id || f.id || f.title || "kora").split("").reduce((a, ch) => a + ch.charCodeAt(0), 0) % 100000;
+  const fallback = `https://picsum.photos/seed/${seed}/800/450`;
   // fallback : si fact_id absent, on utilise l'index de la carte
   const fid = f.fact_id || ("idx" + idx);
   const sel = s.selectMode && s.selection[fid];
@@ -314,7 +318,7 @@ function factCard(f, s, idx) {
   return `
     <article class="fact-card ${s.selectMode ? "selectable" : ""} ${sel ? "selected" : ""}" data-fact="${esc(fid)}" data-index="${idx}" ${click}>
       ${check}
-      <img class="fact-img" src="${src}" alt="" loading="lazy" onerror="this.src='${ph}'">
+      <img class="fact-img" src="${src}" alt="" loading="lazy" onerror="this.onerror=null; this.src='${esc(fallback)}'">
       <div class="fact-body">
         <h3 class="fact-title">${esc(c.title || "(sans titre)")}</h3>
         <div class="fact-chips">${factMeta(f, undefined, true)}</div>
