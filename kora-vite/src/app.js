@@ -330,8 +330,8 @@ function factGroup(facts, s, status, label, iconName, ignoreImg = false) {
     if (status === "TRANSMITTED") return st === "TRANSMITTED";
     if (status === "REJECTED") return st === "REJECTED";
     return false;
-  }).filter(f => ignoreImg || hasImg);  // En mode sélection, on autorise les cartes sans image
-  if (!list.length) return "";
+  }).filter(f => ignoreImg || true);  // En mode sélection, on autorise les cartes sans image
+  if (!list.length) return `<div class="group-empty">Aucun article dans « ${label} ».</div>`;
   return `<section class="fact-group">
     <div class="group-head">
       <span class="group-ic">${icon(iconName)}</span>
