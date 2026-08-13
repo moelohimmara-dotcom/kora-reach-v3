@@ -26,12 +26,13 @@ export const Store = (() => {
   const subs = new Set();
   let _notifying = false;
   let _pendingPatch = null;
+  let _reentry = 0;
   function setState(patch) {
     Object.assign(state, patch);
     if (_notifying) {
       // Anti-récursion : un subscriber (render) a déclenché setState pendant
-      // la notification -> on fusionne dans _pendingPatch et on NOTIFIE APRES,
-      // jamais en réentrance. Sinon boucle infinie (Maximum call stack / freeze).
+      // la notification -> on fusionne dans _pendingPatch et on NOTIFIE APRÈS
+      // (en microtask, hors pile), jamais en réentrance. Sinon boucle infinie.
       _pendingPatch = Object.assign(_pendingPatch || {}, patch);
       return;
     }
@@ -41,9 +42,13 @@ export const Store = (() => {
     } finally {
       _notifying = false;
     }
-    if (_pendingPatch) {
+    if (_pendingPatch && _reentry < 8) {
       const p = _pendingPatch; _pendingPatch = null;
-      setState(p); // relance une seule fois avec l'état accumulé
+      _reentry++;
+      queueMicrotask(() => { _reentry--; setState(p); });
+    } else if (_pendingPatch) {
+      // Boucle suspectée : on abandonne le patch en attente pour ne pas figer.
+      _pendingPatch = null;
     }
   }
   function subscribe(fn) { subs.add(fn); return () => subs.delete(fn); }
