@@ -1089,7 +1089,7 @@ button:disabled > .ic { color: var(--icon-color-disabled); opacity: .55; }
 .list-row .meta { flex: 1; }
 .list-row .name { font-weight: 700; }
 .list-row .sub { font-size: var(--t-label-sm); color: var(--md-sys-color-on-surface-variant); }
-.src-row, .audit-row { align-items: flex-start; gap: var(--space-3); padding: var(--space-3) var(--space-2); border-radius: var(--radius-md); border-bottom: 1px solid var(--glass-border); }
+.src-row, .audit-row { align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-2); border-radius: var(--radius-md); border-bottom: 1px solid var(--glass-border); }
 .src-row:hover, .audit-row:hover { background: var(--glass-bg-hover); }
 .src-row .meta-ic, .audit-row .meta-ic { flex: none; width: 36px; height: 36px; border-radius: var(--radius-sm); display: grid; place-items: center; background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
 .src-row .meta-ic .ic { width: 18px; height: 18px; }
