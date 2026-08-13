@@ -42,8 +42,14 @@ export const Store = (() => {
       headers["X-API-Token"] = token;
     }
     const fetchOpts = Object.assign({}, opts, { headers, credentials: "include" });
+    // Timeout réseau : évite que le fetch reste en "pending" indéfiniment
+    // (qui figeait le bouton "Connexion…" si le backend ne répond pas).
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    fetchOpts.signal = ctrl.signal;
     try {
       const res = await fetch(url, fetchOpts);
+      clearTimeout(timer);
       const ct = res.headers.get("content-type") || "";
       if (!ct.includes("application/json")) {
         throw new Error("Réponse non-JSON du serveur (code " + res.status + ")");
