@@ -944,8 +944,11 @@ button:disabled > .ic { color: var(--icon-color-disabled); opacity: .55; }
     width: auto; white-space: nowrap;
     display: inline-flex; align-items: center; justify-content: center; gap: 4px;
   }
+  /* Sur mobile étroit : les actions secondaires passent en icône seule
+     (le CTA Publier garde son libellé) -> aucune troncature, lisibilité max */
+  .select-bar-actions .btn:not(.btn-primary) span { display: none; }
   .select-bar-actions .btn .ic { width: 15px; height: 15px; flex: 0 0 auto; }
-  .select-bar-actions .btn span { overflow: hidden; text-overflow: ellipsis; }
+  .select-bar-actions .btn-primary span { overflow: hidden; text-overflow: ellipsis; }
   .select-bar-actions .btn-primary { min-height: var(--btn-h); }
 }
 /* ---- TABLETTE (820-1023px) : barre centrée contrainte, taille confort ---- */
