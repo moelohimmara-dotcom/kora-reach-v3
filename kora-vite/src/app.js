@@ -481,8 +481,10 @@ function viewTrash(s) {
 function viewSources(s) {
   const src = s.sources || [];
   if (!src.length) return stateBox("i-sources", "Sources en chargement…", "Récupération de la liste de sources autorisées.", !!s.ui.loading);
-  const g1 = src.filter(e => e.category === "GN_NAT");
-  const g2 = src.filter(e => e.category !== "GN_NAT");
+  const g1 = src.filter(e => e.category === "GN_NAT" && !/guin[ée]e?\s*7/i.test(e.name || e.id || ""));
+  const g2 = src.filter(e => e.category !== "GN_NAT" && !/guin[ée]e?\s*7/i.test(e.name || e.id || ""));
+  // "Guinee7" isolée en dessous (demande utilisateur : séparée des autres sources)
+  const gOther = src.filter(e => /guin[ée]e?\s*7/i.test(e.name || e.id || ""));
   const srcRow = (e) => `
     <div class="list-row src-row">
       <span class="meta-ic">${icon(e.guinee_filter ? "i-shield" : "i-sources")}</span>
@@ -501,7 +503,11 @@ function viewSources(s) {
     <section class="fact-group">
       <div class="group-head"><span class="group-ic">${icon("i-level2")}</span><h3 class="group-title">Niveau 2 · International filtrées</h3><span class="group-count">${g2.length}</span></div>
       ${g2.map(srcRow).join("") || `<div class="muted" style="padding:8px 0">Aucune source de niveau 2.</div>`}
-    </section>`;
+    </section>
+    ${gOther.length ? `<section class="fact-group">
+      <div class="group-head"><span class="group-ic">${icon("i-sources")}</span><h3 class="group-title">Autres sources</h3><span class="group-count">${gOther.length}</span></div>
+      ${gOther.map(srcRow).join("")}
+    </section>` : ""}`;
 }
 function viewSettings(s) {
   const theme = Store.getTheme();
