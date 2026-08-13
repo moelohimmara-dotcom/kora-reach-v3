@@ -1696,7 +1696,10 @@ function bind() {
     }
   });
   const r = location.pathname.split("/")[1] || "cockpit";
-  navigate(["cockpit", "facts", "sources", "audit", "drafts", "settings", "trash"].includes(r) ? r : "cockpit");
+  // Router initial selon l'URL, mais SANS rappeler navigate() (qui fait
+  // render()->bind()->navigate() = boucle infinie). On ne fait que positionner
+  // la route ; le render initial est déjà déclenché par le subscriber.
+  Store.setRoute(r);
   Store.loadHealth();
   Store.loadSettings();
   Store.loadTrash().catch(() => {});  // corbeille
