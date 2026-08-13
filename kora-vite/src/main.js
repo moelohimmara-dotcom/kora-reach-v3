@@ -4,6 +4,15 @@ import { SHELL } from "./shell.js";
 import { Store } from "./store.js";
 import { App } from "./app.js";
 
+// === Material Design 3 : typographie officielle (typescale tokens) ===
+import { styles as typescaleStyles } from "@material/web/typography/md-typescale-styles.js";
+import "@fontsource/roboto/400.css";
+import "@fontsource/roboto/500.css";
+import "@fontsource/roboto/700.css";
+if (document.adoptedStyleSheets) {
+  document.adoptedStyleSheets.push(typescaleStyles.styleSheet);
+}
+
 mountSprite();
 
 window.addEventListener("error", (e) => {
@@ -11,26 +20,28 @@ window.addEventListener("error", (e) => {
   if (v) v.innerHTML = '<pre style="color:#F2A199;padding:20px;white-space:pre-wrap">ERREUR: ' + (e.message || e.error) + "\n" + (e.error && e.error.stack ? e.error.stack : "") + "</pre>";
 });
 
-// Le JS possède le DOM : on injecte le shell dans #app, puis on bind.
+// NETTOYAGE SW ORPHELIN : on désenregistre TOUT SW résiduel d'une ancienne
+// version (qui interceptait les fetch et bloquait les clics). On ne fait PAS
+// de location.reload() automatique pour éviter une boucle de reload infinie si
+// le SW se ré-enregistrait. Un reload manuel (Ctrl+Shift+R) suffit.
+async function purgeServiceWorkers() {
+  if (!('serviceWorker' in navigator)) return false;
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (const r of regs) { try { await r.unregister(); } catch (e) {} }
+    return regs.length > 0;
+  } catch (e) { return false; }
+}
+purgeServiceWorkers();
+
 // Le JS possède le DOM : on injecte le shell dans #app, puis on bind.
 const app = document.getElementById("app");
 app.innerHTML = SHELL;
 const bootTheme = Store.initTheme();
 Store.state.ui.theme = bootTheme;
-const bootRail = Store.initRail();
-Store.state.ui.rail = bootRail;
+const bootRail = Store.initRailMode();
+Store.state.ui.railMode = bootRail;
 App.bind();
 Store.subscribe(() => App.render());
 // debug : expose Store pour tests navigateur
 window.Store = Store; window.App = App;
-
-// NETTOYAGE SW ORPHELIN : désenregistre tout Service Worker résiduel dans le
-// profil navigateur (un SW orphelin intercepte les clics physiques mais pas
-// les clics programmatiques -> le clic ne marchait qu'en navigation privée).
-// Le front se charge déjà, donc ce code s'exécute chez l'utilisateur et nettoie.
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations()
-    .then(regs => regs.forEach(r => r.unregister()))
-    .catch(() => {});
-}
-
