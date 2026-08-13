@@ -525,6 +525,8 @@ export const Store = (() => {
     getFactFilter, setFactFilter,
     getTheme, setTheme, initTheme,
     getRailMode, setRailMode, initRailMode, applyRailMode,
+    // alias rétro-compat (certains appels utilisent initRail)
+    initRail: initRailMode,
     getRail, setRail,
     checkAuth, login, logout, changePassword, forgot, resetPassword,
     loadUsers, createUser, setRole, deleteUser,
