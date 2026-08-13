@@ -21,11 +21,21 @@ echo "==> Restart service + nginx reload"
 sudo systemctl restart "$SERVICE"
 sudo nginx -s reload
 
-echo "==> Smoke test (non-régression)"
+echo "==> Smoke test (non-régression A)"
 export TMPDIR="$HOME/tmp"
 if node smoke_test.mjs "https://213-156-135-139.sslip.io/kora-v2"; then
-  echo "DEPLOY_OK_SMOKE_PASS"
+  echo "SMOKE_A_PASS"
 else
-  echo "DEPLOY_OK_SMOKE_FAIL"
+  echo "SMOKE_A_FAIL"
   exit 1
 fi
+
+echo "==> Parcours B (Sources/Params/Audit/Corbeille/Sélection)"
+if node test_parcours_b.mjs "https://213-156-135-139.sslip.io/kora-v2"; then
+  echo "SMOKE_B_PASS"
+else
+  echo "SMOKE_B_FAIL"
+  exit 1
+fi
+
+echo "DEPLOY_OK_ALL_PASS"
