@@ -126,7 +126,10 @@ def fetch_source(source) -> List[Dict]:
         return fetch_html(source)
     if fmt == "gnews":
         from alt_sources import fetch_google_news
-        return fetch_google_news(source.url)
+        # Collecte Google News (query fixe = Guinée) : le filtre strict
+        # guinee_filter s'applique APRES dans reach_agent (comme pour les autres
+        # vecteurs). On ne laisse PAS passer d'articles mondiaux non liés.
+        return fetch_google_news("Guinée")
     if fmt == "sitemap":
         from alt_sources import fetch_sitemap
         return fetch_sitemap(source)

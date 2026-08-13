@@ -19,7 +19,9 @@ def _pg_url():
     if url:
         return url
     user = os.environ.get("PG_USER", "kora")
-    pwd = os.environ.get("PG_PASSWORD", "K0raP0stgr3s!2026")
+    pwd = os.environ.get("PG_PASSWORD")
+    if not pwd:
+        raise RuntimeError("PG_PASSWORD manquant dans l'environnement (requis pour PostgreSQL)")
     host = os.environ.get("PG_HOST", "127.0.0.1")
     port = os.environ.get("PG_PORT", "5432")
     db = os.environ.get("PG_DATABASE", "kora")

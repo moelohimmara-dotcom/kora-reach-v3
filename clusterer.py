@@ -46,16 +46,22 @@ def _ent_set(text: str, n: int = 5) -> set:
 def cluster(items: list, thr: float = 0.5) -> list:
     """Regroupe les items par ENTITÉS communes (même fait). 1 fait = 1 cluster.
     Seuil 0.5 : partage >=50% des entités distinctives = même sujet.
-    Compare les ensembles réduits d'entités (pas le texte brut, qui dilue)."""
+    Compare les ensembles réduits d'entités (pas le texte brut, qui dilue).
+    CORRECTION : compare le nouvel item contre l'UNION des entités de TOUS les
+    membres du cluster (pas seulement le premier), pour un regroupement correct."""
     clusters = []
     for it in items:
         key = it["title"] + " " + it.get("raw_content", "")[:300]
         es = _ent_set(key)
         placed = False
         for c in clusters:
-            ckey = c[0]["title"] + " " + c[0].get("raw_content", "")[:300]
-            ces = _ent_set(ckey)
-            if len(es & ces) / min(len(es), len(ces)) >= thr:
+            # Union des entités de tous les membres du cluster
+            c_union = set()
+            for cm in c:
+                cmkey = cm["title"] + " " + cm.get("raw_content", "")[:300]
+                c_union |= _ent_set(cmkey)
+            denom = min(len(es), len(c_union)) or 1
+            if len(es & c_union) / denom >= thr:
                 c.append(it)
                 placed = True
                 break

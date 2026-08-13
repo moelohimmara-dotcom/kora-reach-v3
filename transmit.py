@@ -85,12 +85,13 @@ def _build_supabase_payload(fact: dict, final_text: str) -> dict:
     }
 
 
-def transmit(fact: dict, final_text: str, provider: str = None) -> dict:
+def transmit(fact: dict, final_text: str, provider: str = None, wp_status: str = "publish") -> dict:
     """Transmet l'article. Retourne {status, provider, http_status, detail}.
     - provider explicite: force un seul backend.
     - sinon: si WP ET Supabase configurés -> écrit dans LES DEUX (multicast).
       (Supabase = base d'articles validés KORA ; WP = site public kakilambe.com)
     - sinon: dry_run (aucun réseau).
+    - wp_status: "publish" (public) ou "draft" (brouillon WP, invisible).
     """
     m = provider or mode()
     payload = _build_payload(fact, final_text)
@@ -103,7 +104,7 @@ def transmit(fact: dict, final_text: str, provider: str = None) -> dict:
     if m in ("wordpress", "supabase", "postgres"):
         # force un seul backend
         if m == "wordpress":
-            return _to_wordpress(payload)
+            return _to_wordpress(payload, wp_status=wp_status)
         if m == "postgres":
             return _to_postgres(fact, final_text)
         return _to_supabase(fact, final_text)
@@ -119,10 +120,23 @@ def transmit(fact: dict, final_text: str, provider: str = None) -> dict:
     if not results:
         return {"status": "ERROR", "provider": "both", "http_status": 0,
                 "detail": "Aucun backend configuré."}
-    ok = any(r["status"] in ("TRANSMITTED", "SKIPPED_DUPLICATE") for r in results)
-    return {"status": "TRANSMITTED" if ok else "FAILED", "provider": "both",
-            "http_status": results[0]["http_status"], "detail": " | ".join(
-                f"{r['provider']}:{r['status']}" for r in results), "results": results}
+    return _merge_both_results(results)
+
+
+def _merge_both_results(results: list) -> dict:
+    """Agrège les résultats multi-backend ('both').
+    Règle : TRANSMITTED uniquement si TOUS les backends ont réussi
+    (TRANSMITTED ou SKIPPED_DUPLICATE). Sinon PARTIAL (échec partiel) ou
+    FAILED (tous en échec). Évite le faux positif 'TRANSMITTED' si un backend
+    a échoué."""
+    ok = all(r["status"] in ("TRANSMITTED", "SKIPPED_DUPLICATE") for r in results)
+    failures = [r for r in results if r["status"] == "FAILED"]
+    status = "TRANSMITTED" if ok else ("PARTIAL" if not failures else "FAILED")
+    return {"status": status, "provider": "both",
+            "http_status": results[0]["http_status"],
+            "detail": " | ".join(
+                f"{r['provider']}:{r['status']}" for r in results),
+            "results": results}
 
 
 def mode() -> str:
@@ -194,7 +208,7 @@ def _upload_media(image_url: str, fallback_url: str = "") -> int:
     return -1
 
 
-def _to_wordpress(payload: dict) -> dict:
+def _to_wordpress(payload: dict, wp_status: str = "publish") -> dict:
     # L'app-password WP peut contenir des espaces (affichage) -> on les retire
     app_pass = (WP_APP_PASS or "").replace(" ", "")
     # 1) Upload de l'image à la une (visuel adaptatif obligatoire)
@@ -209,7 +223,7 @@ def _to_wordpress(payload: dict) -> dict:
     body = json.dumps({
         "title": payload["title"],
         "content": payload["content"],
-        "status": "publish",  # HITL déjà validé côté KORA -> publication réelle
+        "status": wp_status,  # "publish" (public) ou "draft" (brouillon WP, invisible)
         "meta": {"source_url": payload.get("source_url", "")},
         "featured_media": media_id,
     }).encode()

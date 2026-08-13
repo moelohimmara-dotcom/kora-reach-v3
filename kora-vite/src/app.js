@@ -2,30 +2,42 @@
    KORA — App (vues, routing, tiroir HITL). Module ES.
    ============================================================ */
 import { Store } from "./store.js";
-import { Quiz } from "./quiz.js";
+
+import { marked } from "marked";
+import DOMPurify from "dompurify";
 
 const $ = (id) => document.getElementById(id);
 const $$ = (sel, root = document) => root ? Array.from(root.querySelectorAll(sel)) : [];
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>`"'$]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "`": "&#96;", '"': "&quot;", "'": "&#39;", "$": "&#36;" }[c]));
-// Markdown léger sécurisé : échappe d'abord, puis **gras** -> <strong>, *ital* -> <em>, ##/### titre -> <h*> (pour le corps), \n -> <br>
-const mdToHtml = (s) => {
-  let h = esc(s);
-  // titres de section (## Décryptage etc.) -> uniquement dans le corps, pas dans le chapeau
-  h = h.replace(/^###\s+(.+)$/gm, "<h3 class=\"sheet-h3\">$1</h3>")
-       .replace(/^##\s+(.+)$/gm, "<h2 class=\"sheet-h2\">$1</h2>")
-       .replace(/^#\s+(.+)$/gm, "<strong class=\"sheet-h1\">$1</strong>");
-  h = h.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-       .replace(/\*([^*]+)\*/g, "<em>$1</em>");
-  return h;
+// Markdown + HTML rendu de façon SÛRE (sanitisé).
+// Avant on échappait tout le texte -> un article contenant du HTML (ex: un
+// <a href> Google News ou du HTML brut de source) s'affichait comme du "code"
+// au lieu d'un texte. On parse maintenant le Markdown ET on laisse passer le
+// HTML inline, mais on le passe par DOMPurify pour bloquer tout XSS.
+marked.setOptions({ breaks: true, gfm: true });
+const _render = (s) => {
+  const raw = marked.parse(String(s == null ? "" : s));
+  return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } });
 };
-const mdToHtmlInline = (s) => {
-  // version chapeau : pas de titres de section, gras/italique seulement
-  let h = esc(s);
-  h = h.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-       .replace(/\*([^*]+)\*/g, "<em>$1</em>");
-  return h;
+const mdToHtml = (s) => _render(s);
+const mdToHtmlInline = (s) => _render(s);
+// Mapping des anciennes icônes (i-*) vers Google Material Icons (auto-hébergé via @fontsource)
+const MATERIAL = {
+  "i-dashboard": "dashboard", "i-facts": "article", "i-hitl": "fact_check", "i-audit": "history",
+  "i-sources": "source", "i-settings": "settings", "i-trash": "delete", "i-drafts": "draft",
+  "i-level1": "flag", "i-level2": "public", "i-fusion": "hub", "i-date": "event", "i-shield": "verified_user",
+  "i-check": "check", "i-close": "close", "i-send": "send", "i-edit": "edit", "i-reject": "block",
+  "i-undo": "undo", "i-chevron": "chevron_left", "i-chevron-right": "chevron_right", "i-lock": "lock",
+  "i-eye": "visibility", "i-eye-off": "visibility_off", "i-user": "person", "i-user-plus": "person_add",
+  "i-users": "group", "i-palette": "palette", "i-brush": "brush", "i-logo": "image",
+  "i-spark": "auto_awesome", "i-moon": "dark_mode", "i-sun": "light_mode", "i-info": "info",
+  "i-refresh": "refresh", "i-image": "image", "i-menu": "menu", "i-status": "pending",
+  "i-star": "star", "i-send-alt": "send", "i-download": "download", "i-upload": "upload",
+  "i-search": "search", "i-filter": "filter_list", "i-more": "more_vert", "i-add": "add",
+  "i-delete": "delete", "i-warning": "warning", "i-error": "error", "i-help": "help",
+  "i-grid": "grid_view", "i-list": "list", "i-doc": "description",
 };
-const icon = (id, cls = "") => `<svg class="ic ${cls}"><use href="#${id}"/></svg>`;
+const icon = (id, cls = "") => `<span class="material-icons ${cls}">${MATERIAL[id] || id.replace(/^i-/, "")}</span>`;
 function placeholderSvg(theme) {
   const pal = {
     dark:  ["#241C18", "#15110F", "#F2A98C"],
@@ -70,86 +82,238 @@ function statusBadge(st) {
     REJECTED: ["badge-rejected", "Rejeté"],
     TRANSMITTED: ["badge-transmitted", "Transmis"],
     EDITED: ["badge-pending", "Édité"],
+    TRASHED: ["badge-rejected", "Corbeille"],
   };
   const [k, t] = map[st] || ["badge-pending", st || "—"];
   return `<span class="badge ${k}">${t}</span>`;
 }
 
 function viewCockpit(s) {
-  const f = s.facts || [];
-  const pending = f.filter(x => !(s.decisions[x.fact_id] === "REJECTED" || s.decisions[x.fact_id] === "TRANSMITTED")).length;
-  const transmitted = f.filter(x => s.decisions[x.fact_id] === "TRANSMITTED" || s.decisions[x.fact_id] === "APPROVED").length;
-  const rejected = f.filter(x => s.decisions[x.fact_id] === "REJECTED").length;
-  const sourcesOk = (s.health && s.health.whitelist_sources_ok != null) ? s.health.whitelist_sources_ok : "—";
-  const items = (s.lastCycle && s.lastCycle.result) ? (s.lastCycle.result.items || 0) : 0;
+  const facts = s.facts || [];
+  const total = facts.length;
+  const approved = facts.filter(f => (s.decisions[f.fact_id] || f.status || "PENDING_REVIEW") === "TRANSMITTED" || (s.decisions[f.fact_id] || f.status || "PENDING_REVIEW") === "APPROVED").length;
+  const pending = facts.filter(f => (s.decisions[f.fact_id] || f.status || "PENDING_REVIEW") === "PENDING_REVIEW").length;
+  const draft = facts.filter(f => (s.decisions[f.fact_id] || f.status || "PENDING_REVIEW") === "EDITED").length;
+  const health = s.health;
+  const audit = s.audit;
+  const sources = s.sources || [];
+  const lastCycle = s.lastCycle;
+
   return `
-    <section class="pulse-card">
-      <div class="pulse-top">
-        <span class="pulse-eyebrow">Pouls de la rédaction</span>
-        <span class="live-pill"><span class="dot dot-busy"></span>En direct · 24h</span>
+    <div class="cockpit">
+      <div class="cockpit-header">
+        <div>
+          <h1 class="cockpit-title">Tableau de bord</h1>
+          <p class="cockpit-sub">Supervision de l'agent Kora</p>
+        </div>
+        <div class="cockpit-header-actions">
+          <button class="btn btn-tonal btn-sm" id="btnRefresh" aria-label="Rafraîchir" data-action="refresh">
+            <span class="material-icons" style="font-size:18px;vertical-align:middle">refresh</span>
+          </button>
+          <span class="last-refresh" id="lastRefresh">${s.ui?.lastRefresh ? new Date(s.ui.lastRefresh).toLocaleTimeString("fr-FR") : "—"}</span>
+        </div>
       </div>
-      <div class="pulse-num${pending ? "" : " alert"}">${pending}</div>
-      <div class="pulse-sub">article(s) chaud(s) à valider dans la fenêtre 24h</div>
-      <div class="pulse-pills">
-        <span class="delta delta-warm">${pending} chauds</span>
-        <span class="delta delta-good">${transmitted} transmis</span>
-        <span class="delta delta-bad">${rejected} rejetés</span>
-      </div>
-    </section>
 
-    <div class="section-head">
-      <h2 class="section-title">Vue d'ensemble</h2>
-      <span class="muted">${f.length} article(s) suivi(s)</span>
-    </div>
-    <div class="stat-row">
-      <div class="stat-card">
-        <div class="stat-head"><span class="stat-label">Sources OK</span><span class="delta delta-good">✓</span></div>
-        <div class="n">${sourcesOk}</div>
-        <div class="stat-foot">liste de sources autorisées</div>
+      <!-- ROW 1 : 4 StatCards cliquables -->
+      <div class="cockpit-grid stats-row">
+        ${statCard({ icon: "article", value: total, label: "Articles", variant: "primary", onClick: "nav-facts-all" })}
+        ${statCard({ icon: "fact_check", value: approved, label: "Validés", variant: "success", onClick: "nav-facts-approved" })}
+        ${statCard({ icon: "schedule", value: pending, label: "En attente", variant: "warning", onClick: "nav-hitl" })}
+        ${statCard({ icon: "edit", value: draft, label: "Brouillons", variant: "info", onClick: "nav-drafts" })}
       </div>
-      <div class="stat-card">
-        <div class="stat-head"><span class="stat-label">Éléments</span><span class="delta">cycle</span></div>
-        <div class="n">${items}</div>
-        <div class="stat-foot">collectés ce cycle</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-head"><span class="stat-label">Articles</span><span class="delta delta-warm">${pending} chauds</span></div>
-        <div class="n">${f.length}</div>
-        <div class="stat-foot">en file de validation</div>
-      </div>
-      <div class="stat-card ${rejected ? "alert" : ""}">
-        <div class="stat-head"><span class="stat-label">Rejetés International</span><span class="delta delta-bad">${rejected}</span></div>
-        <div class="n">${rejected}</div>
-        <div class="stat-foot">hors périmètre Guinée</div>
-      </div>
-    </div>
 
-    <div class="section-head">
-      <h2 class="section-title">Articles en attente de validation</h2>
-      <button class="btn btn-tonal btn-sm" id="cockpitSeed">Générer démo</button>
+      <!-- ROW 2 : System Health + Sources + Cycle Control -->
+      <div class="cockpit-grid system-row">
+        <section class="system-section">
+          <h2 class="section-title">Santé système</h2>
+          ${systemHealthPill(health)}
+        </section>
+        <section class="system-section sources-section">
+          <h2 class="section-title">Sources</h2>
+          <div class="source-chips">
+            ${sources.length ? sources.map(src => sourceStatusChip(src)).join("") : '<span class="source-chip empty">Aucune source</span>'}
+          </div>
+        </section>
+        <section class="system-section cycle-section">
+          <h2 class="section-title">Contrôle cycle</h2>
+          ${cycleControl(lastCycle)}
+        </section>
+      </div>
+
+      <!-- ROW 3 : Activity Feed (audit temps réel) -->
+      <section class="activity-section">
+        <div class="section-head">
+          <h2 class="section-title">Activité récente</h2>
+          <button class="activity-more-link" data-action="audit-all">Voir tout l'historique →</button>
+        </div>
+        ${activityFeed(audit, 6)}
+      </section>
     </div>
-    ${(s.lastCycle && s.lastCycle.result && s.lastCycle.result.status === "empty_or_stale")
-      ? staleBox(s)
-      : (factGroup(s.facts || [], s, "PENDING_REVIEW", "En attente de validation", "i-check") || stateBox("i-check", "Aucun article en attente", "Lance un cycle ou génère une démo pour générer des articles à valider.", false, "Générer démo", () => Store.seed()))}`;
+  `;
 }
 
+// ============================================================
+// COCKPIT COMPONENTS — Dynamiques, cliquables, temps réel
+// ============================================================
+
+function statCard({ icon, value, label, variant = "primary", onClick, trend, loading = false, error = false }) {
+  const cls = `stat-card stat-${variant}${loading ? " loading" : ""}${error ? " error" : ""}`;
+  const trendHtml = trend ? `<span class="stat-trend ${trend > 0 ? "up" : trend < 0 ? "down" : ""}">${trend > 0 ? "↑" : trend < 0 ? "↓" : "→"}${Math.abs(trend)}</span>` : "";
+  const clickAttr = onClick ? `data-action="${onClick}"` : "";
+  return `
+    <div class="${cls}" ${clickAttr} tabindex="0" role="button" aria-label="${label}: ${value}${trend ? ` (${trend > 0 ? "+" : ""}${trend})` : ""}">
+      <span class="material-icons stat-icon">${icon}</span>
+      <div class="stat-value">${loading ? '<span class="skeleton"></span>' : value}</div>
+      <div class="stat-label">${label}${trendHtml}</div>
+      ${error ? '<span class="material-icons stat-error">error</span>' : ""}
+    </div>`;
+}
+
+function systemHealthPill(health) {
+  if (!health) return `<div class="health-pill loading"><span class="skeleton"></span></div>`;
+  const mutex = health.mutex ? "🔴 Occupé" : "🟢 Libre";
+  const mutexCls = health.mutex ? "busy" : "free";
+  const llm = health.llm_circuit || {};
+  const llmStatus = llm.failures > 0 || (llm.open_until && llm.open_until > Date.now() / 1000) ? "🟡 Dégradé" : "🟢 OK";
+  const llmCls = (llm.failures > 0 || (llm.open_until && llm.open_until > Date.now() / 1000)) ? "degraded" : "ok";
+  const transmit = health.transmit_mode || "inconnu";
+  const version = health.whitelist_version || "—";
+  return `
+    <div class="health-pill">
+      <div class="health-row">
+        <span class="health-item ${mutexCls}" data-tooltip="Mutex agent">${mutex}</span>
+        <span class="health-item ${llmCls}" data-tooltip="Circuit LLM: ${llm.failures} échecs, open_until=${llm.open_until || 0}">${llmStatus}</span>
+        <span class="health-item" data-tooltip="Mode transmission">${transmit}</span>
+        <span class="health-item version" data-tooltip="Version whitelist">${version}</span>
+      </div>
+    </div>`;
+}
+
+function sourceStatusChip(source) {
+  const status = source.status || "unknown";
+  const statusIcon = { ok: "🟢", error: "🔴", warning: "🟡", unknown: "⚪" }[status] || "⚪";
+  const lastFetch = source.last_fetch ? new Date(source.last_fetch).toLocaleTimeString("fr-FR") : "—";
+  return `
+    <span class="source-chip" data-source-id="${source.id}" data-tooltip="${source.name || source.id} · Dernier: ${lastFetch}">
+      <span class="source-dot ${status}"></span>
+      <span class="source-name">${source.name || source.id}</span>
+      <span class="source-status">${statusIcon}</span>
+    </span>`;
+}
+
+function activityFeed(audit, limit = 6) {
+  if (!audit || !audit.days || !audit.days.length) {
+    return `<div class="activity-feed empty"><p>Aucune activité aujourd'hui</p></div>`;
+  }
+  const today = audit.days[0];
+  const events = (today.events || []).slice(0, limit);
+  if (!events.length) return `<div class="activity-feed empty"><p>Aucun événement aujourd'hui</p></div>`;
+
+  const ACTION_FR = {
+    GENERE: "Générés", TRANSMIS: "Transmis", APPROUVE: "Approuvés", REJETE: "Rejetés",
+    MODIFIE: "Modifiés", SUPPRIME: "Supprimés", CYCLE: "Cycles", PURGE: "Purges"
+  };
+
+  const evRow = (ev) => {
+    const blob = ((ev.transition || "") + " " + (ev.detail || "") + " " + (ev.action || "")).toUpperCase();
+    let label = ev.action || "Activité";
+    if (blob.includes("TRANSMITTED")) label = "Article transmis";
+    else if (blob.includes("REJECTED")) label = "Article rejeté";
+    else if (blob.includes("APPROVED")) label = "Article approuvé";
+    else if (blob.includes("EDITED") || blob.includes("EDIT ")) label = "Article modifié";
+    else if (blob.includes("CYCLE") || blob.includes("MODE=") || blob.includes("PROVIDER=")) label = "Cycle lancé";
+    else if (blob.includes("PURGE")) label = "Historique purgé";
+    else if (blob.includes("SOURCE") || blob.includes("SRC=")) label = "Source consultée";
+    const time = (ev.ts || "").slice(11, 16);
+    return `
+      <div class="activity-row" data-ev-id="${ev.id || ""}">
+        <span class="activity-dot"></span>
+        <div class="activity-body">
+          <span class="activity-label">${label}</span>
+          <span class="activity-sub">${auditSub(ev)}</span>
+        </div>
+        <span class="activity-time">${time}</span>
+      </div>`;
+  };
+
+  return `
+    <div class="activity-feed">
+      ${events.map(evRow).join("")}
+      <button class="activity-more" data-action="audit-all">Voir tout l'historique →</button>
+    </div>`;
+}
+
+function auditSub(ev) {
+  let d = ev.detail || "";
+  if (!d) return "";
+  if (/error|traceback|exception|attributeerror|keyerror|typeerror/i.test(d)) return "Erreur d'exécution (voir logs)";
+  const pairs = {};
+  (d.match(/(\w+)=([^\s]+)/g) || []).forEach(p => { const [k,v]=p.split("="); pairs[k]=v; });
+  const statusFr = { TRANSMITTED: "Transmis", APPROVED: "Approuvé", REJECTED: "Rejeté", EDITED: "Modifié", PENDING_REVIEW: "En attente" };
+  const parts = [];
+  if (pairs.src) parts.push("source : " + pairs.src);
+  const st = pairs.status || pairs.decision;
+  if (st) parts.push("statut : " + (statusFr[st.toUpperCase()] || st));
+  if (pairs.facts) parts.push(pairs.facts + " fait(s)");
+  if (pairs.clusters) parts.push(pairs.clusters + " groupe(s)");
+  if (parts.length) return parts.join(" · ");
+  const clean = d.replace(/\s+/g, " ").trim();
+  return clean.length > 90 ? clean.slice(0, 87).replace(/\s+\S*$/, "") + "…" : clean;
+}
+
+function cycleControl(lastCycle) {
+  const running = lastCycle?.running || false;
+  const lastResult = lastCycle?.result;
+  const lastTs = lastCycle?.ts ? new Date(lastCycle.ts).toLocaleTimeString("fr-FR") : "—";
+  const lastStatus = lastResult?.status || "—";
+  const lastCount = lastResult?.facts?.length || 0;
+  return `
+    <div class="cycle-control">
+      <div class="cycle-status">
+        <span class="cycle-indicator ${running ? "running" : "idle"}"></span>
+        <span class="cycle-text">${running ? "Cycle en cours…" : `Dernier: ${lastTs} · ${lastStatus} (${lastCount} faits)`}</span>
+      </div>
+      <div class="cycle-actions">
+        <button class="btn btn-primary" id="btnCycleNormal" ${running ? "disabled" : ""} data-action="cycle-normal">
+          <span class="material-icons" style="font-size:18px;vertical-align:middle;margin-right:6px">play_arrow</span>Lancer cycle
+        </button>
+        <button class="btn btn-tonal" id="btnCycleForce" ${running ? "disabled" : ""} data-action="cycle-force">
+          <span class="material-icons" style="font-size:18px;vertical-align:middle;margin-right:6px">flash_on</span>Forcer (hors 24h)
+        </button>
+      </div>
+    </div>`;
+}
+
+function imgSrc(f) {
+  const c = f.champion || {};
+  const base = (f.image_meta && f.image_meta.image) || f.image || c.image || "";
+  if (base && base.startsWith("http")) return base;
+  const seed = (f.fact_id || f.id || f.title || "kora").split("").reduce((a, ch) => a + ch.charCodeAt(0), 0) % 100000;
+  return `https://picsum.photos/seed/${seed}/800/450`;
+}
 function hasImg(f) {
   const c = f.champion || {};
-  const img = (f.image_meta && f.image_meta.image) || f.image || c.image || "";
+  const img = imgSrc(f);
   // Une image valide = URL http(s), pas le placeholder SVG data:
   return typeof img === "string" && img.startsWith("http");
 }
 function factCard(f, s, idx) {
   const c = f.champion || {};
   const dec = s.decisions[f.fact_id];
-  const img = (f.image_meta && f.image_meta.image) || f.image || c.image || "";
+  const img = imgSrc(f);
   const status = dec || (f.status || "PENDING_REVIEW");
   const ph = placeholderSvg(Store.getTheme());
   const src = img ? esc(img) : ph;
   // fallback : si fact_id absent, on utilise l'index de la carte
   const fid = f.fact_id || ("idx" + idx);
+  const sel = s.selectMode && s.selection[fid];
+  const check = s.selectMode
+    ? `<div class="fact-check ${sel ? "on" : ""}" data-check="${esc(fid)}">${sel ? icon("i-check") : ""}</div>`
+    : "";
+  const click = s.selectMode ? `onclick="Store.toggleSelect('${esc(fid)}')"` : `onclick="App.openFact('${esc(fid)}')"`;
   return `
-    <article class="fact-card" data-fact="${esc(fid)}" data-index="${idx}" onclick="App.openFact('${esc(fid)}')">
+    <article class="fact-card ${s.selectMode ? "selectable" : ""} ${sel ? "selected" : ""}" data-fact="${esc(fid)}" data-index="${idx}" ${click}>
+      ${check}
       <img class="fact-img" src="${src}" alt="" loading="lazy" onerror="this.src='${ph}'">
       <div class="fact-body">
         <h3 class="fact-title">${esc(c.title)}</h3>
@@ -158,7 +322,7 @@ function factCard(f, s, idx) {
       </div>
     </article>`;
 }
-function factGroup(facts, s, status, label, iconName) {
+function factGroup(facts, s, status, label, iconName, ignoreImg = false) {
   const list = facts.filter(f => {
     const d = s.decisions[f.fact_id];
     const st = d || f.status || "PENDING_REVIEW";
@@ -166,7 +330,7 @@ function factGroup(facts, s, status, label, iconName) {
     if (status === "TRANSMITTED") return st === "TRANSMITTED";
     if (status === "REJECTED") return st === "REJECTED";
     return false;
-  }).filter(hasImg);  // Point 1 : ne garder que les cartes avec illustration
+  }).filter(f => ignoreImg || hasImg);  // En mode sélection, on autorise les cartes sans image
   if (!list.length) return "";
   return `<section class="fact-group">
     <div class="group-head">
@@ -179,11 +343,30 @@ function factGroup(facts, s, status, label, iconName) {
 }
 function viewDrafts(s) {
   const facts = s.facts || [];
-  const drafts = facts.filter(f => s.decisions[f.fact_id] === "EDITED" || (f._edited && !(s.decisions[f.fact_id] === "TRANSMITTED" || s.decisions[f.fact_id] === "REJECTED")));
-  if (!drafts.length) return stateBox("i-edit", "Aucun brouillon", "Les faits que tu corriges avant validation apparaissent ici. Ouvre un fait depuis Faits ou Validation et clique « Modifier le texte ».", false);
+  // Un brouillon = décision EDITED (statut réel dans s.decisions, alimenté par loadHITL).
+  // On n'utilise PAS factGroup (qui filtre les cartes sans image) -> un brouillon
+  // sans image valide doit quand même s'afficher ici.
+  const drafts = facts.filter(f => {
+    const st = s.decisions[f.fact_id] || f.status || "PENDING_REVIEW";
+    return st === "EDITED";
+  });
+  if (!drafts.length) return stateBox("i-edit", "Aucun brouillon", "Les articles que tu places en brouillon (correction en cours) apparaissent ici. Ouvre un fait depuis le Tableau de bord ou Articles, clique « Modifier », puis valide la correction pour le mettre en brouillon.", false);
+  // Bouton Sélectionner (pour agir en masse depuis Brouillons : corbeille / remettre en attente)
+  const toolbar = `<div class="toolbar-row">
+      <button class="btn btn-tonal" id="enterSelect">${s.selectMode ? "Annuler la sélection" : "Sélectionner"}</button>
+    </div>`;
+  const cells = drafts.map(f => {
+    const idx = (s.facts || []).indexOf(f);
+    const card = factCard(f, s, idx);
+    const done = `<div class="draft-actions">
+        <button class="btn btn-tonal btn-sm" data-finish="${esc(f.fact_id)}">${icon("i-undo")} Remettre en attente</button>
+      </div>`;
+    return `<div class="draft-cell">${card}${done}</div>`;
+  }).join("");
   return `<div class="section-title">Brouillons (${drafts.length})</div>
-    <p class="muted" style="margin-bottom:16px">Contenus en cours d'édition, non encore transmis. Clique une carte pour reprendre la correction.</p>
-    ${factGroup(drafts, s, drafts[0] ? (s.decisions[drafts[0].fact_id] || drafts[0].status || "EDITED") : "EDITED", "En cours d'édition", "i-edit")}`;
+    <p class="muted" style="margin-bottom:16px">Contenu en cours d'édition, non encore transmis. « Remettre en attente » renvoie l'article en validation normale (sans le publier).</p>
+    ${toolbar}
+    <div class="fact-grid">${cells}</div>`;
 }
 function viewFacts(s) {
   const facts = s.facts || [];
@@ -192,33 +375,56 @@ function viewFacts(s) {
     pending: facts.filter(f => { const d = s.decisions[f.fact_id]; return (d || f.status || "PENDING_REVIEW") === "PENDING_REVIEW"; }).length,
     transmitted: facts.filter(f => (s.decisions[f.fact_id] || f.status) === "TRANSMITTED").length,
     rejected: facts.filter(f => (s.decisions[f.fact_id] || f.status) === "REJECTED").length,
+    drafts: facts.filter(f => (s.decisions[f.fact_id] || f.status) === "EDITED").length,
   };
   const f = Store.getFactFilter();
   if (!facts.length) return (s.lastCycle && s.lastCycle.result && s.lastCycle.result.status === "empty_or_stale") ? staleBox(s) : stateBox("i-check", "Aucun article à afficher", "Lance un cycle ou génère une démo pour générer des articles à valider.", false, "Générer démo", () => Store.seed());
   const filters = [
     ["all", "Tous", counts.all], ["pending", "En attente", counts.pending],
     ["transmitted", "Transmis", counts.transmitted], ["rejected", "Rejetés", counts.rejected],
+    ["drafts", "Brouillons", counts.drafts],
   ];
   const filterBar = `<div class="filter-bar">${filters.map(([k, lab, n]) =>
-    `<button class="filter-pill ${f === k ? "active" : ""}" data-fact-filter="${k}">${lab} <span class="pill-n">${n}</span></button>`).join("")}</div>`;
+    `<button class="filter-pill ${f === k ? "active" : ""}" data-fact-filter="${k}">${lab} <span class="pill-n">${n}</span></button>`).join("")}</div>
+    <div class="toolbar-row">
+      <button class="btn btn-tonal" id="enterSelect">${s.selectMode ? "Annuler la sélection" : "Sélectionner"}</button>
+    </div>`;
   let body;
   if (f === "all") {
-    body = factGroup(facts, s, "PENDING_REVIEW", "En attente de validation", "i-check")
-      + factGroup(facts, s, "TRANSMITTED", "Transmis à la rédaction", "i-send")
-      + factGroup(facts, s, "REJECTED", "Rejetés", "i-close");
-  } else if (f === "pending") body = factGroup(facts, s, "PENDING_REVIEW", "En attente de validation", "i-check");
-  else if (f === "transmitted") body = factGroup(facts, s, "TRANSMITTED", "Transmis à la rédaction", "i-send");
-  else if (f === "rejected") body = factGroup(facts, s, "REJECTED", "Rejetés", "i-close");
+    body = factGroup(facts, s, "PENDING_REVIEW", "En attente de validation", "i-check", s.selectMode)
+      + factGroup(facts, s, "TRANSMITTED", "Transmis à la rédaction", "i-send", s.selectMode)
+      + factGroup(facts, s, "REJECTED", "Rejetés", "i-close", s.selectMode)
+      + factGroup(facts, s, "EDITED", "Brouillons", "i-edit", s.selectMode);
+  } else if (f === "pending") body = factGroup(facts, s, "PENDING_REVIEW", "En attente de validation", "i-check", s.selectMode);
+  else if (f === "drafts") body = factGroup(facts, s, "EDITED", "Brouillons", "i-edit", s.selectMode);
   return filterBar + body;
 }
-function viewHITL(s) {
-  const facts = (s.facts || []).filter(f => !(s.decisions[f.fact_id] === "REJECTED" || s.decisions[f.fact_id] === "TRANSMITTED"));
-  if (s.ui.loading) return stateBox("i-check", "Chargement de la file…", "Récupération des décisions de validation humaine.", true);
-  if (s.ui.error) return stateBox("i-status", "Agent injoignable", s.ui.error + " — reprise automatique en cours.", false, "Réessayer", null, "error");
-  if (!facts.length) return (s.lastCycle && s.lastCycle.result && s.lastCycle.result.status === "empty_or_stale") ? staleBox(s) : stateBox("i-check", "File de validation vide", "Aucun article en attente. Lance un cycle ou génère une démo pour générer des articles à valider.", false, "Générer démo", () => Store.seed());
-  return `<div class="section-title">Validation humaine (${facts.length})</div>
-    <p class="muted" style="margin-bottom:16px">Chaque article doit être validé avant transmission. Tu peux corriger le titre/corps, rejeter, ou transmettre.</p>
-    <div class="fact-grid">${facts.map(f => factCard(f, s)).join("")}</div>`;
+function trashCard(f, s) {
+  const c = f.champion || {};
+  const img = imgSrc(f);
+  const ph = placeholderSvg(Store.getTheme());
+  const src = img ? esc(img) : ph;
+  const trashed = f.trashed_at ? new Date(f.trashed_at).toLocaleString("fr-FR") : "";
+  return `<article class="fact-card trash-card" data-fact="${esc(f.fact_id)}">
+    <img class="fact-img" src="${src}" alt="" loading="lazy" onerror="this.src='${ph}'">
+    <div class="fact-body">
+      <div class="trash-flag">${icon("i-trash")} Corbeille</div>
+      <h3 class="fact-title">${esc(c.title || "(sans titre)")}</h3>
+      <div class="fact-chips">${chip(c.source || "Source", "secondary", "i-source")}${chip(trashed || "Date inconnue", "tertiary", "i-date")}</div>
+      <div class="fact-status">${statusBadge("TRASHED")} <span class="muted">${esc(c.source || "")}</span></div>
+      <div class="trash-actions">
+        <button class="btn btn-tonal btn-sm" data-restore="${esc(f.fact_id)}">${icon("i-undo")} Restaurer</button>
+        <button class="btn btn-danger btn-sm" data-del="${esc(f.fact_id)}">${icon("i-trash")} Supprimer</button>
+      </div>
+    </div>
+  </article>`;
+}
+function viewTrash(s) {
+  const items = s.trash || [];
+  if (!items.length) return stateBox("i-trash", "Corbeille vide", "Les articles supprimés restent ici 11 jours, puis sont purgés automatiquement. Restaure-les ou supprime-les définitivement.", false);
+  return `<div class="section-title">Corbeille (${items.length})</div>
+    <p class="muted" style="margin-bottom:16px">Restauration possible pendant 11 jours. Au-delà, suppression définitive automatique.</p>
+    <div class="fact-grid">${items.map(f => trashCard(f, s)).join("")}</div>`;
 }
 function viewSources(s) {
   const src = s.sources || [];
@@ -248,6 +454,7 @@ function viewSources(s) {
 function viewSettings(s) {
   const theme = Store.getTheme();
   const isAdvanced = (s.auth && s.auth.role === "advanced");
+  const isAdmin = (s.auth && (s.auth.role === "admin" || s.auth.role === "advanced"));
   const themes = [
     ["dark", "Sombre", "i-moon", "Fond sombre (par défaut)"],
     ["light", "Clair", "i-sun", "Fond clair"],
@@ -262,150 +469,160 @@ function viewSettings(s) {
     { id: "personalization", ic: "i-brush", title: "Personnalisation", sub: "Nom, logo, couleurs, libellés" },
     { id: "accounts", ic: "i-users", title: "Comptes & habilitations", sub: "Utilisateurs et rôles" },
   ] : [];
-  const railItem = (it) => `<button class="settings-nav-item" data-setnav="${it.id}">
+  const adminItems = isAdmin ? [
+    { id: "auditlog", ic: "i-shield", title: "Journal d'audit", sub: "Connexions, mots de passe, paramètres" },
+  ] : [];
+  const railItem = (it, active) => `<button class="settings-nav-item ${active ? "active" : ""}" data-setnav="${it.id}">
       <span class="meta-ic">${icon(it.ic)}</span>
       <div class="meta"><div class="name">${esc(it.title)}</div><div class="sub">${esc(it.sub)}</div></div>
       <span class="chev">${icon("i-chevron-right")}</span>
     </button>`;
-  return `<div class="section-title">Paramètres</div>
+  return `<div class="section-title">Paramètres ${isAdvanced ? `<span class="role-badge role-advanced">Avancé</span>` : ""}</div>
     <p class="muted" style="margin-bottom:16px">Réglages de l'interface, du compte et du projet ${esc(s.app_name || "KORA Agent")}.</p>
     <div class="settings-layout">
-      <nav class="settings-rail">
+      <nav class="settings-rail" role="navigation" aria-label="Catégories de paramètres">
         <div class="settings-rail-group">Généraux</div>
-        ${generalItems.map(railItem).join("")}
-        ${advancedItems.length ? `<div class="settings-rail-group">Avancés</div>${advancedItems.map(railItem).join("")}` : ""}
+        ${generalItems.map(it => railItem(it, it.id === "appearance")).join("")}
+        ${advancedItems.length ? `<div class="settings-rail-group">Avancés</div>${advancedItems.map(it => railItem(it, false)).join("")}` : ""}
+        ${adminItems.length ? `<div class="settings-rail-group">Administrateur</div>${adminItems.map(it => railItem(it, false)).join("")}` : ""}
       </nav>
-      <div class="settings-hint muted">Sélectionne une catégorie pour ouvrir ses réglages.</div>
-    </div>
 
-    <!-- Tiroirs (drawers) par catégorie -->
-    <div class="drawer-scrim" id="setDrawerScrim" hidden></div>
+      <!-- Tiroirs (drawers) par catégorie — deviennent le panneau détail sur desktop/tablette via CSS -->
+      <div class="drawer-scrim" id="setDrawerScrim" hidden></div>
 
-    <aside class="drawer" id="drawer-appearance" hidden>
-      <div class="drawer-head"><button class="drawer-close" data-setclose="1" aria-label="Fermer">${icon("i-close")}</button><h2>Apparence</h2></div>
+      <aside class="settings-panel" id="drawer-appearance" hidden>
+      <div class="drawer-head"><button class="drawer-back" type="button" data-setback aria-label="Retour">${icon("i-chevron")}</button><h2>Apparence</h2></div>
       <div class="drawer-body">
-        <div class="setting-row theme-opt ${theme === "dark" ? "active" : ""}" data-theme-btn="dark"><span class="meta-ic">${icon("i-moon")}</span><div class="meta"><div class="name">Sombre</div><div class="sub">Fond sombre (par défaut)</div></div>${theme === "dark" ? `<span class="check">${icon("i-check")}</span>` : ""}</div>
-        <div class="setting-row theme-opt ${theme === "light" ? "active" : ""}" data-theme-btn="light"><span class="meta-ic">${icon("i-sun")}</span><div class="meta"><div class="name">Clair</div><div class="sub">Fond clair</div></div>${theme === "light" ? `<span class="check">${icon("i-check")}</span>` : ""}</div>
-        <div class="setting-row theme-opt ${theme === "cacao" ? "active" : ""}" data-theme-btn="cacao"><span class="meta-ic">${icon("i-palette")}</span><div class="meta"><div class="name">Cacao</div><div class="sub">Chocolat chaud</div></div>${theme === "cacao" ? `<span class="check">${icon("i-check")}</span>` : ""}</div>
+        <p class="muted" style="margin:0 0 14px">Choisis le fond de l'interface. L'aperçu se met à jour instantanément.</p>
+        <div class="theme-grid">
+          <button class="theme-card ${theme === "dark" ? "active" : ""}" data-theme-btn="dark" aria-pressed="${theme === "dark"}">
+            <span class="theme-preview theme-preview-dark"><span class="tp-bar"></span><span class="tp-card"></span><span class="tp-card short"></span></span>
+            <span class="theme-meta"><span class="name">Sombre</span><span class="sub">Fond sombre (par défaut)</span></span>
+            <span class="check">${theme === "dark" ? icon("i-check") : ""}</span>
+          </button>
+          <button class="theme-card ${theme === "light" ? "active" : ""}" data-theme-btn="light" aria-pressed="${theme === "light"}">
+            <span class="theme-preview theme-preview-light"><span class="tp-bar"></span><span class="tp-card"></span><span class="tp-card short"></span></span>
+            <span class="theme-meta"><span class="name">Clair</span><span class="sub">Fond clair</span></span>
+            <span class="check">${theme === "light" ? icon("i-check") : ""}</span>
+          </button>
+          <button class="theme-card ${theme === "cacao" ? "active" : ""}" data-theme-btn="cacao" aria-pressed="${theme === "cacao"}">
+            <span class="theme-preview theme-preview-cacao"><span class="tp-bar"></span><span class="tp-card"></span><span class="tp-card short"></span></span>
+            <span class="theme-meta"><span class="name">Cacao</span><span class="sub">Chocolat chaud</span></span>
+            <span class="check">${theme === "cacao" ? icon("i-check") : ""}</span>
+          </button>
+        </div>
       </div>
     </aside>
 
-    <aside class="drawer" id="drawer-account" hidden>
-      <div class="drawer-head"><button class="drawer-close" data-setclose="1" aria-label="Fermer">${icon("i-close")}</button><h2>Compte</h2></div>
+    <aside class="settings-panel" id="drawer-account" hidden>
+      <div class="drawer-head"><button class="drawer-back" type="button" data-setback aria-label="Retour">${icon("i-chevron")}</button><h2>Compte</h2></div>
       <div class="drawer-body">
-        <div class="setting-row setting-col">
-          <div class="meta" style="width:100%">
-            <div class="name">Changer le mot de passe</div>
-            <div class="sub">8 caractères minimum.</div>
-            <div class="labels-grid">
-              <label class="label-field label-full">Mot de passe actuel<input class="text-input" id="setCurPw" type="password" maxlength="64" autocomplete="current-password"></label>
-              <label class="label-field">Nouveau<input class="text-input" id="setNewPw" type="password" maxlength="64" autocomplete="new-password"></label>
-              <label class="label-field">Confirmer<input class="text-input" id="setNewPw2" type="password" maxlength="64" autocomplete="new-password"></label>
+        <div class="setting-card">
+          <div class="setting-card-head"><span class="meta-ic">${icon("i-lock")}</span><div class="meta"><div class="name">Changer le mot de passe</div><div class="sub">8 caractères minimum.</div></div></div>
+          <div class="field-row">
+            <div class="field"><span>Mot de passe actuel</span><span class="pw-wrap"><input class="text-input" id="setCurPw" type="password" maxlength="64" autocomplete="current-password"><button type="button" class="pw-toggle" data-pw="setCurPw" aria-label="Afficher">${icon("i-eye")}</button></span></div>
+            <div class="field"><span>Nouveau</span><span class="pw-wrap"><input class="text-input" id="setNewPw" type="password" maxlength="64" autocomplete="new-password"><button type="button" class="pw-toggle" data-pw="setNewPw" aria-label="Afficher">${icon("i-eye")}</button></span></div>
+            <div class="field"><span>Confirmer</span><span class="pw-wrap"><input class="text-input" id="setNewPw2" type="password" maxlength="64" autocomplete="new-password"><button type="button" class="pw-toggle" data-pw="setNewPw2" aria-label="Afficher">${icon("i-eye")}</button></span></div>
+          </div>
+          <div class="actions"><button class="btn btn-primary" id="setChangePw">Mettre à jour le mot de passe</button></div>
+        </div>
+        <div class="setting-card">
+          <div class="setting-card-head"><span class="meta-ic">${icon("i-user")}</span><div class="meta"><div class="name">Session</div><div class="sub">Connecté en tant que ${esc(Store.state.auth.username || "—")}</div></div></div>
+          <div class="actions"><button class="btn btn-ghost" id="setLogout">Se déconnecter</button></div>
+        </div>
+      </div>
+    </aside>
+
+    ${isAdvanced ? `<aside class="settings-panel" id="drawer-personalization" hidden>
+      <div class="drawer-head"><button class="drawer-back" type="button" data-setback aria-label="Retour">${icon("i-chevron")}</button><h2>Personnalisation</h2></div>
+      <div class="drawer-body">
+        <div class="setting-card">
+          <div class="setting-card-head"><span class="meta-ic">${icon("i-spark")}</span><div class="meta"><div class="name">Nom de l'application</div><div class="sub">Affiché dans la barre supérieure et le rail.</div></div></div>
+          <div class="field"><input class="text-input" id="setAppName" type="text" maxlength="40" value="${esc(s.settings?.app_name || "KORA Agent")}" placeholder="KORA Agent"></div>
+        </div>
+        <div class="setting-card">
+          <div class="setting-card-head"><span class="meta-ic">${icon("i-logo")}</span><div class="meta"><div class="name">Logo</div><div class="sub">Image carrée (SVG/PNG, ≤ 256 Ko). Laisse vide pour l'icône par défaut.</div></div></div>
+          <div class="logo-edit">
+            <div class="logo-preview" id="setLogoPreview">${s.settings?.has_logo ? `<img src="${esc(s.settings.logo_data)}" alt="">` : icon("i-spark")}</div>
+            <div class="logo-actions">
+              <label class="btn btn-ghost btn-sm"><input type="file" id="setLogoFile" accept="image/*" hidden>Choisir un fichier</label>
+              <button class="btn btn-ghost btn-sm" id="setLogoClear" ${s.settings?.has_logo ? "" : "disabled"}>Retirer</button>
             </div>
-            <button class="btn btn-outline" id="setChangePw" style="margin-top:10px">Mettre à jour le mot de passe</button>
           </div>
         </div>
-        <div class="setting-row">
-          <span class="meta-ic">${icon("i-user")}</span>
-          <div class="meta"><div class="name">Session</div><div class="sub">Connecté en tant que ${esc(Store.state.auth.username || "—")}</div></div>
-          <button class="btn btn-ghost" id="setLogout">Se déconnecter</button>
+        <div class="setting-card">
+          <div class="setting-card-head"><span class="meta-ic">${icon("i-palette")}</span><div class="meta"><div class="name">Couleurs d'accent</div><div class="sub">Coral (principal) et Bordeaux (secondaire). Aperçu en direct.</div></div></div>
+          <div class="color-edit">
+            <label class="color-field">Coral <input type="color" id="setCoral" value="${esc(s.settings?.accent_coral || "#F2A98C")}"></label>
+            <label class="color-field">Bordeaux <input type="color" id="setBordeaux" value="${esc(s.settings?.accent_bordeaux || "#E08A84")}"></label>
+            <span class="color-swatch" id="setSwatch" style="background:linear-gradient(135deg, ${esc(s.settings?.accent_coral || "#F2A98C")}, ${esc(s.settings?.accent_bordeaux || "#E08A84")})"></span>
+          </div>
+        </div>
+        <div class="setting-card">
+          <div class="setting-card-head"><span class="meta-ic">${icon("i-edit")}</span><div class="meta"><div class="name">Libellés de l'interface</div><div class="sub">Personnalise le nom des onglets et le sous-titre (white-label).</div></div></div>
+          <div class="field-row">
+            <div class="field"><span>Tableau</span><input class="text-input" id="setLblCockpit" type="text" maxlength="30" value="${esc(s.settings?.label_cockpit || "Tableau")}"></div>
+            <div class="field"><span>Articles</span><input class="text-input" id="setLblFacts" type="text" maxlength="30" value="${esc(s.settings?.label_facts || "Articles")}"></div>
+            <div class="field"><span>Sources</span><input class="text-input" id="setLblSources" type="text" maxlength="30" value="${esc(s.settings?.label_sources || "Sources")}"></div>
+            <div class="field"><span>Brouillons</span><input class="text-input" id="setLblDrafts" type="text" maxlength="30" value="${esc(s.settings?.label_drafts || "Brouillons")}"></div>
+            <div class="field"><span>Historique</span><input class="text-input" id="setLblAudit" type="text" maxlength="30" value="${esc(s.settings?.label_audit || "Historique")}"></div>
+            <div class="field" style="grid-column:1/-1"><span>Sous-titre (À propos)</span><input class="text-input" id="setTagline" type="text" maxlength="30" value="${esc(s.settings?.app_tagline || "Poste de pilotage de l'agent éditorial")}"></div>
+          </div>
+        </div>
+        <div class="setting-card">
+          <div class="actions"><button class="btn btn-primary" id="setSave">Enregistrer les modifications</button></div>
         </div>
       </div>
     </aside>
 
-    ${isAdvanced ? `<aside class="drawer" id="drawer-personalization" hidden>
-      <div class="drawer-head"><button class="drawer-close" data-setclose="1" aria-label="Fermer">${icon("i-close")}</button><h2>Personnalisation</h2></div>
+    <aside class="settings-panel" id="drawer-accounts" hidden>
+      <div class="drawer-head"><button class="drawer-back" type="button" data-setback aria-label="Retour">${icon("i-chevron")}</button><h2>Comptes & habilitations</h2></div>
       <div class="drawer-body">
-        <div class="setting-row setting-col">
-          <div class="meta" style="width:100%">
-            <div class="name">Nom de l'application</div>
-            <div class="sub">Affiché dans la barre supérieure et le rail.</div>
-            <input class="text-input" id="setAppName" type="text" maxlength="40" value="${esc(s.settings?.app_name || "KORA Agent")}" placeholder="KORA Agent">
-          </div>
-        </div>
-        <div class="setting-row setting-col">
-          <div class="meta" style="width:100%">
-            <div class="name">Logo</div>
-            <div class="sub">Image carrée (SVG/PNG, ≤ 256 Ko). Laisse vide pour l'icône par défaut.</div>
-            <div class="logo-edit">
-              <div class="logo-preview" id="setLogoPreview">${s.settings?.has_logo ? `<img src="${esc(s.settings.logo_data)}" alt="">` : icon("i-spark")}</div>
-              <div class="logo-actions">
-                <label class="btn btn-ghost btn-sm"><input type="file" id="setLogoFile" accept="image/*" hidden>Choisir un fichier</label>
-                <button class="btn btn-ghost btn-sm" id="setLogoClear" ${s.settings?.has_logo ? "" : "disabled"}>Retirer</button>
+        <p class="muted" style="margin:0 0 14px">Gère qui fait quoi. Le rôle « Avancé » donne accès à tous les réglages, la gestion des comptes et les actions sensibles. Le rôle « Normal » est limité à la génération et à la validation.</p>
+        <div class="setting-card">
+          <div class="setting-card-head"><span class="meta-ic">${icon("i-users")}</span><div class="meta"><div class="name">Comptes existants</div><div class="sub">${(s.users || []).length} compte(s)</div></div></div>
+          <div class="user-list" id="userList">
+            ${(s.users || []).map(u => `<div class="user-row" data-id="${esc(u.id)}">
+              <div class="meta"><div class="name">${esc(u.username)}</div><div class="sub">${esc(u.email || "—")}</div></div>
+              <div class="role-edit">
+                <select class="text-input role-select" data-id="${esc(u.id)}">
+                  <option value="normal" ${(u.role || "normal") === "normal" ? "selected" : ""}>Normal</option>
+                  <option value="advanced" ${(u.role || "normal") === "advanced" ? "selected" : ""}>Avancé</option>
+                </select>
+                <button class="btn btn-ghost btn-sm user-del" data-id="${esc(u.id)}">Retirer</button>
               </div>
-            </div>
+            </div>`).join("")}
           </div>
         </div>
-        <div class="setting-row setting-col">
-          <div class="meta" style="width:100%">
-            <div class="name">Couleurs d'accent</div>
-            <div class="sub">Coral (principal) et Bordeaux (secondaire). Aperçu en direct.</div>
-            <div class="color-edit">
-              <label class="color-field">Coral <input type="color" id="setCoral" value="${esc(s.settings?.accent_coral || "#F2A98C")}"></label>
-              <label class="color-field">Bordeaux <input type="color" id="setBordeaux" value="${esc(s.settings?.accent_bordeaux || "#E08A84")}"></label>
-              <span class="color-swatch" id="setSwatch" style="background:linear-gradient(135deg, ${esc(s.settings?.accent_coral || "#F2A98C")}, ${esc(s.settings?.accent_bordeaux || "#E08A84")})"></span>
-            </div>
+        <div class="setting-card">
+          <div class="setting-card-head"><span class="meta-ic">${icon("i-user-plus")}</span><div class="meta"><div class="name">Ajouter un compte</div><div class="sub">Identifiant (3+), email, mot de passe (8+), rôle.</div></div></div>
+          <div class="field-row">
+            <div class="field"><span>Identifiant</span><input class="text-input" id="setNewUser" type="text" maxlength="40" placeholder="redacteur1"></div>
+            <div class="field"><span>Email</span><input class="text-input" id="setNewEmail" type="email" maxlength="80" placeholder="redacteur@kora.reach"></div>
+            <div class="field"><span>Mot de passe</span><input class="text-input" id="setNewUserPw" type="password" maxlength="64" placeholder="••••••••" autocomplete="new-password"></div>
+            <div class="field"><span>Rôle</span><select class="text-input" id="setNewUserRole"><option value="normal" selected>Normal</option><option value="advanced">Avancé</option></select></div>
           </div>
-        </div>
-        <div class="setting-row setting-col">
-          <div class="meta" style="width:100%">
-            <div class="name">Libellés de l'interface</div>
-            <div class="sub">Personnalise le nom des onglets et le sous-titre (white-label).</div>
-            <div class="labels-grid">
-              <label class="label-field">Tableau de bord<input class="text-input" id="setLblCockpit" type="text" maxlength="30" value="${esc(s.settings?.label_cockpit || "Tableau de bord")}"></label>
-              <label class="label-field">Articles<input class="text-input" id="setLblFacts" type="text" maxlength="30" value="${esc(s.settings?.label_facts || "Articles")}"></label>
-              <label class="label-field">Validation<input class="text-input" id="setLblHitl" type="text" maxlength="30" value="${esc(s.settings?.label_hitl || "Validation")}"></label>
-              <label class="label-field">Sources<input class="text-input" id="setLblSources" type="text" maxlength="30" value="${esc(s.settings?.label_sources || "Sources")}"></label>
-              <label class="label-field">Brouillons<input class="text-input" id="setLblDrafts" type="text" maxlength="30" value="${esc(s.settings?.label_drafts || "Brouillons")}"></label>
-              <label class="label-field">Historique<input class="text-input" id="setLblAudit" type="text" maxlength="30" value="${esc(s.settings?.label_audit || "Historique")}"></label>
-              <label class="label-field label-full">Sous-titre (À propos)<input class="text-input" id="setTagline" type="text" maxlength="30" value="${esc(s.settings?.app_tagline || "Poste de pilotage de l'agent éditorial")}"></label>
-            </div>
-          </div>
-        </div>
-        <button class="btn btn-primary" id="setSave" style="margin-top:12px">Enregistrer les modifications</button>
-      </div>
-    </aside>
-
-    <aside class="drawer" id="drawer-accounts" hidden>
-      <div class="drawer-head"><button class="drawer-close" data-setclose="1" aria-label="Fermer">${icon("i-close")}</button><h2>Comptes & habilitations</h2></div>
-      <div class="drawer-body">
-        <p class="muted" style="margin-bottom:12px">Gère qui fait quoi. Le rôle « Avancé » donne accès à tous les réglages, la gestion des comptes et les actions sensibles. Le rôle « Normal » est limité à la génération et à la validation.</p>
-        <div class="user-list" id="userList">
-          ${(s.users || []).map(u => `<div class="user-row" data-id="${esc(u.id)}">
-            <div class="meta"><div class="name">${esc(u.username)}</div><div class="sub">${esc(u.email || "—")}</div></div>
-            <div class="role-edit">
-              <select class="text-input role-select" data-id="${esc(u.id)}">
-                <option value="normal" ${(u.role || "normal") === "normal" ? "selected" : ""}>Normal</option>
-                <option value="advanced" ${(u.role || "normal") === "advanced" ? "selected" : ""}>Avancé</option>
-              </select>
-              <button class="btn btn-ghost btn-sm user-del" data-id="${esc(u.id)}">Retirer</button>
-            </div>
-          </div>`).join("")}
-        </div>
-        <div class="setting-row setting-col">
-          <div class="meta" style="width:100%">
-            <div class="name">Ajouter un compte</div>
-            <div class="sub">Identifiant (3+), email, mot de passe (8+), rôle.</div>
-            <div class="labels-grid">
-              <label class="label-field">Identifiant<input class="text-input" id="setNewUser" type="text" maxlength="40" placeholder="redacteur1"></label>
-              <label class="label-field">Email<input class="text-input" id="setNewEmail" type="email" maxlength="80" placeholder="redacteur@kora.reach"></label>
-              <label class="label-field">Mot de passe<input class="text-input" id="setNewUserPw" type="password" maxlength="64" placeholder="••••••••" autocomplete="new-password"></label>
-              <label class="label-field">Rôle<select class="text-input" id="setNewUserRole"><option value="normal" selected>Normal</option><option value="advanced">Avancé</option></select></label>
-            </div>
-            <button class="btn btn-outline" id="setAddUser" style="margin-top:10px">Créer le compte</button>
-          </div>
+          <div class="actions"><button class="btn btn-primary" id="setAddUser">Créer le compte</button></div>
         </div>
       </div>
     </aside>` : ""}
-  </div>`;
-}
+    ${isAdmin ? `<aside class="settings-panel" id="drawer-auditlog" hidden>
+      <div class="drawer-head"><button class="drawer-back" type="button" data-setback aria-label="Retour">${icon("i-chevron")}</button><h2>Journal d'audit</h2>
+        <button class="btn btn-ghost btn-sm" id="auditLogRefresh" style="margin-left:auto">Rafraîchir</button></div>
+      <div class="drawer-body">
+        <p class="muted" style="margin:0 0 14px">Trace les actions sensibles de l'administrateur : connexions, changements de mot de passe, modifications de paramètres. Réservé à l'administrateur.</p>
+        <div id="auditLogBody"><p class="muted">Cliquez sur « Journal d'audit » pour charger les événements.</p></div>
+      </div>
+    </aside>` : ""}
+    </div>`;
+    }
 function viewAudit(s) {
   const data = s.audit || {};
   const days = data.days || [];
   const total = data.total || 0;
   if (!days.length) return stateBox("i-audit", "Historique vide", "Aucune activité enregistrée pour l'instant. Lance un cycle pour peupler l'historique.", false);
-  const ACTION_FR = { GENERE: "Générés", TRANSMIS: "Transmis", APPROUVE: "Approuvés", REJETE: "Rejetés", MODIFIE: "Modifiés", SUPPRIME: "Supprimés", CYCLE: "Cycles", PURGE: "Purges" };
-  const ACTION_CLS = { GENERE: "primary", TRANSMIS: "tertiary", APPROUVE: "tertiary", REJETE: "error", MODIFIE: "warning", SUPPRIME: "error", CYCLE: "secondary", PURGE: "secondary" };
+  const ACTION_FR = { GENERE: "Générés", TRANSMIS: "Transmis", APPROUVE: "Approuvés", REJETE: "Rejetés", MODIFIE: "Modifiés", SUPPRIME: "Supprimés", CORBEILLE: "Corbeille", CYCLE: "Cycles", PURGE: "Purges", ADMIN: "Admin", AUTRE: "Autres" };
+  const ACTION_CLS = { GENERE: "primary", TRANSMIS: "tertiary", APPROUVE: "tertiary", REJETE: "error", MODIFIE: "warning", SUPPRIME: "error", CORBEILLE: "error", CYCLE: "secondary", PURGE: "secondary", ADMIN: "secondary", AUTRE: "secondary" };
   const transitionBadge = (ev) => {
     const t = ev.transition || (ev.detail && ev.detail.match(/(PENDING_REVIEW|APPROVED|EDITED|REJECTED|TRANSMITTED)\s*→\s*(APPROVED|EDITED|REJECTED|TRANSMITTED)/));
     if (ev.transition) return `<span class="badge badge-pending">${esc(ev.transition.replace(/_/g, " "))}</span>`;
@@ -443,10 +660,30 @@ function viewAudit(s) {
     if (st) parts.push("statut : " + (statusFr[st.toUpperCase()] || st));
     if (pairs.facts) parts.push(pairs.facts + " fait(s)");
     if (pairs.clusters) parts.push(pairs.clusters + " groupe(s)");
+    if (ev.editor) parts.push("par " + ev.editor);
     if (parts.length) return parts.join(" · ");
     const clean = d.replace(/\s+/g, " ").trim();
     return clean.length > 90 ? clean.slice(0, 87).replace(/\s+\S*$/, "") + "…" : clean;
   };
+  // Heure lisible (HH:MM) depuis le ts ISO
+  const auditTime = (ev) => {
+    const t = (ev.ts || "").replace("T", " ").slice(0, 16);
+    return t.slice(11) || t;
+  };
+  const filt = s.auditFilter || { type: "all", q: "" };
+  const matchEv = (ev) => {
+    if (filt.type && filt.type !== "all") {
+      const a = (ev.action || "").toUpperCase();
+      if (filt.type === "corbeille" && a !== "SUPPRIME" && a !== "CORBEILLE") return false;
+      if (filt.type !== "corbeille" && a !== filt.type.toUpperCase()) return false;
+    }
+    if (filt.q) {
+      const blob = ((ev.transition||"")+" "+(ev.detail||"")+" "+(ev.action||"")+" "+(ev.editor||"")+" "+(ev.event||"")).toLowerCase();
+      if (!blob.includes(filt.q.toLowerCase())) return false;
+    }
+    return true;
+  };
+  const visEvents = (day) => day.events.filter(matchEv);
   const evRow = (ev) => `
     <div class="list-row audit-row" data-ev="${esc(ev.id)}">
       <input type="checkbox" class="audit-check" data-id="${esc(ev.id)}" aria-label="Sélectionner">
@@ -455,7 +692,7 @@ function viewAudit(s) {
         <div class="name">${esc(auditLabel(ev))} ${transitionBadge(ev)}</div>
         <div class="sub">${esc(auditSub(ev))}</div>
       </div>
-      <div class="sub audit-time">${esc((ev.ts || "").slice(0, 19).replace("T", " "))}</div>
+      <div class="sub audit-time">${esc(auditTime(ev))}</div>
     </div>`;
   const counterChips = (counters) => Object.keys(ACTION_FR).filter(a => (counters[a]||0) > 0)
     .map(a => `<span class="chip chip-${ACTION_CLS[a]}">${ACTION_FR[a]} : ${counters[a]}</span>`).join("");
@@ -468,13 +705,26 @@ function viewAudit(s) {
         <button class="btn btn-ghost btn-sm audit-purge-day" data-day="${esc(day.date)}">Réinitialiser le jour</button>
       </div>
       <div class="audit-counters">${counterChips(day.counters)}</div>
-      <div class="audit-events">${day.events.map(evRow).join("")}</div>
+      <div class="audit-events">${visEvents(day).map(evRow).join("")}</div>
     </section>`;
   return `<div class="section-title">Historique <span class="muted">(${total} événement(s))</span></div>
+    <div class="audit-filters">
+      <div class="audit-filter-chips">
+        <button class="chip-filter ${filt.type==='all'?'active':''}" data-type="all">Tous</button>
+        <button class="chip-filter ${filt.type==='transmis'?'active':''}" data-type="transmis">Transmis</button>
+        <button class="chip-filter ${filt.type==='rejete'?'active':''}" data-type="rejete">Rejetés</button>
+        <button class="chip-filter ${filt.type==='modifie'?'active':''}" data-type="modifie">Modifiés</button>
+        <button class="chip-filter ${filt.type==='genere'?'active':''}" data-type="genere">Générés</button>
+        <button class="chip-filter ${filt.type==='cycle'?'active':''}" data-type="cycle">Cycles</button>
+        <button class="chip-filter ${filt.type==='corbeille'?'active':''}" data-type="corbeille">Corbeille</button>
+      </div>
+      <input class="text-input audit-search" id="auditSearch" type="search" placeholder="Rechercher (libellé, détail, éditeur)…" value="${esc(filt.q||'')}">
+    </div>
     <div class="audit-toolbar">
       <button class="btn btn-ghost btn-sm" id="auditSelAll">Tout sélectionner</button>
       <button class="btn btn-ghost btn-sm" id="auditSelNone">Désélectionner</button>
       <button class="btn btn-danger btn-sm" id="auditDelSel" disabled>Supprimer la sélection</button>
+      <button class="btn btn-outline btn-sm" id="auditExport">Exporter (CSV)</button>
       <div class="spacer"></div>
       <button class="btn btn-outline btn-sm" id="auditResetToday">Réinitialiser aujourd'hui</button>
       <button class="btn btn-danger btn-sm" id="auditPurgeAll">Vider tout l'historique</button>
@@ -494,10 +744,10 @@ function staleBox(s) {
   const n = r.stale_count || 0;
   return `<div class="state-box">
     <span class="state-ic"><svg class="ic"><use href="#i-info"/></svg></span>
-    <h3>Aucune publication dans la fenêtre 24h</h3>
+    <h3>Aucune information fraîche dans les 24 dernières heures</h3>
     <p>${esc(msg)}</p>
-    <p class="muted" style="margin-top:8px">Les sources whitelist n'ont pas d'actualité récente confirmée. Le bouton ci-dessous génère quand même un article de synthèse à partir des ${n} dernier(s) item(s) collecté(s).</p>
-    <button class="btn btn-primary" id="stateAction" data-force="1">Générer quand même</button>
+    <p class="muted" style="margin-top:8px">Règle de fraîcheur stricte : KORA ne génère un article que si une source whitelist a publié une information dans les 24h. ${n ? `(${n} item(s) collecté(s) datent de plus de 24h et ne sont pas utilisés.)` : ""} Revenez plus tard pour de l'information en temps réel.</p>
+    <button class="btn btn-primary" id="stateAction">Relancer un cycle</button>
   </div>`;
 }
 function stateBox(ic, title, msg, loading = false, actionLabel = null, actionFn = null, kind = "") {
@@ -519,7 +769,7 @@ function renderSheet(s) {
   const scrim = document.getElementById("sheetScrim");
   if (!sh || !body || !sheet || !scrim) { sheet.hidden = true; scrim.hidden = true; return; }
   const f = sh.fact; const c = f.champion || {};
-  const img = (f.image_meta && f.image_meta.image) || f.image || c.image || "";
+  const img = imgSrc(f);
   const ph = placeholderSvg(Store.getTheme());
   const text = (typeof f.article === "string" ? f.article
     : (f.article && (f.article.final_text || f.article.body)))
@@ -570,9 +820,15 @@ function renderSheet(s) {
       <button class="btn btn-primary" data-decide="APPROVED">${icon("i-send")} Approuver &amp; transmettre</button>
       <div class="sheet-actions-row">
         <button class="btn btn-tonal" data-edit="1">${icon("i-edit")} Modifier</button>
+        <button class="btn btn-tonal" data-regen="1">${icon("i-refresh")} Régénérer</button>
         <button class="btn btn-danger-ghost" data-decide="REJECTED">${icon("i-reject")} Rejeter</button>
       </div>
       ${(status === "APPROVED" || status === "EDITED" || status === "TRANSMITTED") ? `<button class="btn btn-tonal btn-block" data-retract="1">${icon("i-undo")} Annuler la décision</button>` : ""}
+      <div class="regen-panel" id="regenPanel" hidden>
+        <div class="regen-panel-title">Régénérer avec un angle (sans re-scraper la source)</div>
+        <div class="regen-chips" id="regenChips"></div>
+        <button class="btn btn-ghost btn-sm" data-regen-cancel="1">Annuler</button>
+      </div>
     </div>`;
   sheet.hidden = false; scrim.hidden = false;
 
@@ -611,6 +867,46 @@ function renderSheet(s) {
     const edCancel = document.getElementById("edCancel");
     if (edCancel) edCancel.onclick = () => renderSheet(s);
   };
+  // ---- Régénération (sans re-scrape) : bouton + panneau de suggestions ----
+  const regenBtn = body.querySelector("[data-regen]");
+  const regenPanel = body.querySelector("#regenPanel");
+  const regenChips = body.querySelector("#regenChips");
+  const regenCancel = body.querySelector("[data-regen-cancel]");
+  if (regenBtn && regenPanel) {
+    regenBtn.onclick = async () => {
+      regenPanel.hidden = false;
+      regenChips.innerHTML = "<span class='muted'>Chargement…</span>";
+      let sugs = [];
+      try { const r = await Store.api("/api/regen-suggestions"); sugs = (r && r.suggestions) || []; }
+      catch (e) { sugs = []; }
+      if (!sugs.length) sugs = [{ id: "neutre", label: "Réécriture neutre" }];
+      regenChips.innerHTML = sugs.map(s =>
+        `<button class="regen-chip" data-sug="${esc(s.id)}" title="${esc(s.hint || '')}">${esc(s.label)}</button>`
+      ).join("");
+      regenChips.querySelectorAll(".regen-chip").forEach(chip => {
+        chip.onclick = async () => {
+          chip.classList.add("loading");
+          try {
+            const r = await Store.regenerate(f.fact_id, chip.dataset.sug);
+            // Met à jour le fact localement (article + modèle) puis re-rend le sheet
+            if (r && r.article) {
+              f.article = r.article;
+              f.gen_model = r.model || f.gen_model;
+              f.gen_status = r.status || f.gen_status;
+              // reflète aussi dans state.facts si présent
+              const inList = (Store.state.facts || []).find(x => x.fact_id === f.fact_id);
+              if (inList) { inList.article = r.article; inList.gen_model = r.model; }
+              Store.setState({ facts: Store.state.facts });
+            }
+            renderSheet(s);
+          } catch (e) {
+            regenChips.innerHTML = `<span class="tag tag-warn">Erreur : ${esc(e.message)}</span>`;
+          }
+        };
+      });
+    };
+  }
+  if (regenCancel) regenCancel.onclick = () => { regenPanel.hidden = true; };
 }
 
 function bindAudit() {
@@ -629,6 +925,33 @@ function bindAudit() {
     if (fb) fb.classList.toggle("show", n > 0);
   };
   view.querySelectorAll(".audit-check").forEach(c => c.onchange = refresh);
+  // Filtres par type + recherche (côté client)
+  const applyFilt = (patch) => { Store.setState({ auditFilter: Object.assign({}, Store.state.auditFilter, patch) }); };
+  view.querySelectorAll(".chip-filter").forEach(ch => ch.onclick = () => applyFilt({ type: ch.dataset.type }));
+  const search = document.getElementById("auditSearch");
+  if (search) search.oninput = () => applyFilt({ q: search.value });
+  // Export CSV de la sélection (fetch brut : le serveur renvoie text/csv)
+  const exportBtn = document.getElementById("auditExport");
+  if (exportBtn) exportBtn.onclick = async () => {
+    const ids = checks();
+    if (!ids.length) { snack("Cochez au moins un événement à exporter"); return; }
+    try {
+      const BASE = location.pathname.startsWith("/kora-v2") ? "/kora-v2" : "";
+      const token = (() => { try { return localStorage.getItem("kora-token"); } catch (e) { return null; } })();
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers["X-API-Token"] = token;
+      const res = await fetch(BASE + "/api/audit/export", {
+        method: "POST", headers, credentials: "same-origin",
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) throw new Error("code " + res.status);
+      const csv = await res.text();
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+      a.download = "kora-audit-export.csv"; a.click(); URL.revokeObjectURL(a.href);
+      snack("Export CSV généré");
+    } catch (e) { snack("Erreur export : " + (e.message || e)); }
+  };
   const selAll = document.getElementById("auditSelAll");
   if (selAll) selAll.onclick = () => { view.querySelectorAll(".audit-check").forEach(c => c.checked = true); refresh(); };
   const selNone = document.getElementById("auditSelNone");
@@ -713,7 +1036,7 @@ function bindSettings() {
         try { localStorage.setItem("kora-token", tk); } catch (e) {}
       }
     }
-    const lblIds = { cockpit: "setLblCockpit", facts: "setLblFacts", hitl: "setLblHitl", sources: "setLblSources", drafts: "setLblDrafts", audit: "setLblAudit" };
+    const lblIds = { cockpit: "setLblCockpit", facts: "setLblFacts", sources: "setLblSources", drafts: "setLblDrafts", audit: "setLblAudit" };
     const payload = {
       app_name: (document.getElementById("setAppName")?.value || "").trim(),
       accent_coral: coral ? coral.value : undefined,
@@ -736,7 +1059,7 @@ function bindSettings() {
   };
   // Preview live des libellés d'onglets
   const liveLabels = () => {
-    const lblIds = { cockpit: "setLblCockpit", facts: "setLblFacts", hitl: "setLblHitl", sources: "setLblSources", drafts: "setLblDrafts", audit: "setLblAudit" };
+    const lblIds = { cockpit: "setLblCockpit", facts: "setLblFacts", sources: "setLblSources", drafts: "setLblDrafts", audit: "setLblAudit" };
     Object.keys(lblIds).forEach(route => {
       const el = document.getElementById(lblIds[route]);
       if (el) document.querySelectorAll(`.navitem[data-route="${route}"] span`).forEach(sp => { sp.textContent = el.value || sp.textContent; });
@@ -762,13 +1085,17 @@ function bindSettings() {
       snack("Mot de passe mis à jour. Reconnecte-toi.");
       await Store.logout();
       document.getElementById("authUser") && (document.getElementById("authUser").value = "");
-      App.renderAuth("login");
-    } catch (e) { snack(e.message || "Erreur"); }
+      App.renderAuth("login", null, true);
+    } catch (e) {
+      // Message clair si le mot de passe actuel est erroné (ou autre erreur)
+      const msg = e && e.message === "wrong_current" ? "Mot de passe actuel incorrect" : (e && e.message || "Erreur");
+      snack(msg);
+    }
   };
   const logoutBtn = document.getElementById("setLogout");
   if (logoutBtn) logoutBtn.onclick = async () => {
     await Store.logout();
-    App.renderAuth("login");
+    App.renderAuth("login", null, true);
   };
   // Comptes : liste + ajout + suppression + changement de rôle (advanced only)
   const addUser = document.getElementById("setAddUser");
@@ -811,38 +1138,76 @@ function bindSettings() {
     account: "drawer-account",
     personalization: "drawer-personalization",
     accounts: "drawer-accounts",
+    auditlog: "drawer-auditlog",
   };
+  const loadAuditLog = async () => {
+    const body = document.getElementById("auditLogBody");
+    if (!body) return;
+    try {
+      const data = await Store.api("/api/audit/admin");
+      const days = (data && data.days) || [];
+      if (!days.length) { body.innerHTML = '<p class="muted">Aucune action admin enregistrée.</p>'; return; }
+      const row = (ev) => `<div class="list-row audit-row"><span class="meta-ic">${icon("i-shield")}</span><div class="meta"><div class="name">${esc(ev.event || ev.action || "Action")}</div><div class="sub">${esc(ev.detail || "")}${ev.editor ? " · par " + esc(ev.editor) : ""}</div></div><div class="sub audit-time">${esc((ev.ts||"").replace("T"," ").slice(0,16).slice(11))}</div></div>`;
+      const dayBlock = (d) => `<section class="fact-group audit-day"><div class="group-head"><span class="group-ic">${icon("i-date")}</span><h3 class="group-title">${esc(d.label)}</h3><span class="group-count">${d.count}</span></div><div class="audit-events">${d.events.map(row).join("")}</div></section>`;
+      body.innerHTML = days.map(dayBlock).join("");
+    } catch (e) { body.innerHTML = '<p class="muted">Erreur de chargement du journal (admin requis).</p>'; }
+  };
+  const auditNav = view.querySelector('.settings-nav-item[data-setnav="auditlog"]');
+  if (auditNav) auditNav.onclick = () => { openDrawer("auditlog"); loadAuditLog(); };
+  const refreshBtn = document.getElementById("auditLogRefresh");
+  if (refreshBtn) refreshBtn.onclick = loadAuditLog;
   const scrim = document.getElementById("setDrawerScrim");
   const openDrawer = (id) => {
     Object.values(drawers).forEach(did => { const d = document.getElementById(did); if (d) d.hidden = true; });
     const d = document.getElementById(drawers[id]);
     if (!d) return;
     d.hidden = false;
-    if (scrim) scrim.hidden = false;
+    // Sur desktop/tablette le panneau détail reste inline (pas de scrim) ; sur mobile le scrim apparaît.
+    if (scrim && window.matchMedia("(max-width: 819px)").matches) scrim.hidden = false;
+    // Mobile : masquer la FAB pour éviter qu'elle ne déborde sur le contenu du panneau.
+    if (window.matchMedia("(max-width: 819px)").matches) { const fab = document.getElementById("fab"); if (fab) fab.hidden = true; }
     view.querySelectorAll(".settings-nav-item").forEach(n => n.classList.toggle("active", n.dataset.setnav === id));
   };
+  // Desktop/tablette : la 1re catégorie (Apparence) s'affiche par défaut en panneau détail.
+  // Mobile : tout reste fermé pour laisser la bottomnav visible (aucun piège plein écran).
+  if (window.matchMedia("(min-width: 820px)").matches) openDrawer("appearance");
   const closeDrawer = () => {
+    // Sur desktop/tablette le panneau détail reste toujours visible : on ne ferme rien.
+    if (window.matchMedia("(min-width: 820px)").matches) return;
     Object.values(drawers).forEach(did => { const d = document.getElementById(did); if (d) d.hidden = true; });
     if (scrim) scrim.hidden = true;
+    // Mobile : réafficher la FAB (plus de panneau ouvert).
+    const fab = document.getElementById("fab"); if (fab) fab.hidden = false;
     view.querySelectorAll(".settings-nav-item").forEach(n => n.classList.remove("active"));
   };
   view.querySelectorAll(".settings-nav-item").forEach(n => n.onclick = () => openDrawer(n.dataset.setnav));
   if (scrim) scrim.onclick = closeDrawer;
-  view.querySelectorAll("[data-setclose]").forEach(b => b.onclick = closeDrawer);
+  view.querySelectorAll("[data-setback]").forEach(b => b.onclick = closeDrawer);
   // Escape ferme le tiroir settings (sans fermer la feuille HITL)
   const onKey = (e) => { if (e.key === "Escape") { const anyOpen = Object.values(drawers).some(did => { const d = document.getElementById(did); return d && !d.hidden; }); if (anyOpen) { closeDrawer(); e.stopPropagation(); } } };
   document.addEventListener("keydown", onKey);
 }
 
+let _authRendered = false;  // évite de reconstruire le formulaire à chaque setState
+
 function render() {
   const s = Store.state;
+  // Garde-fou session : si déconnecté (logout ou changement de mdp), on ramène
+  // immédiatement à l'écran d'authentification, sans laisser l'app visible.
+  // IMPORTANT: on ne reconstruit le formulaire qu'une SEULE fois (sinon chaque
+  // setState détruit les champs en cours de saisie et le focus).
+  if (!s.auth || !s.auth.loggedIn) {
+    if (!_authRendered) { renderAuth("login"); }
+    return;
+  }
+  _authRendered = false; // reconnecté : permttre un futur ré-affichage propre
   const agent = document.getElementById("agentStatus");
   if (agent) agent.innerHTML = s.ui.busy
     ? `<span class="dot dot-busy"></span><span>${s.ui.overlay || "Agent occupé…"}</span>`
     : `<span class="dot dot-ok"></span><span>prêt</span>`;
   const view = document.getElementById("view");
   if (!view) return;
-  const map = { cockpit: viewCockpit, facts: viewFacts, hitl: viewHITL, sources: viewSources, audit: viewAudit, drafts: viewDrafts, settings: viewSettings };
+  const map = { cockpit: viewCockpit, facts: viewFacts, sources: viewSources, audit: viewAudit, drafts: viewDrafts, settings: viewSettings, trash: viewTrash };
   view.innerHTML = (map[s.route] || viewCockpit)(s);
   $$(".navitem, .rail .navitem").forEach(n => n.classList.toggle("active", n.dataset.route === s.route));
   // Habilitations : l'onglet Paramètres (gestion avancée) est réservé au rôle "advanced"
@@ -853,7 +1218,12 @@ function render() {
   const curTheme = Store.getTheme();
   $$("[data-theme-btn]").forEach(n => n.classList.toggle("active", n.dataset.themeBtn === curTheme));
   const sa = document.getElementById("stateAction");
-  if (sa) sa.onclick = () => { if (sa.dataset.force) Store.startCycle(1, true); else if (sa.textContent.trim() === "Réessayer") location.reload(); else Store.seed(); };
+  if (sa) sa.onclick = () => {
+    if (sa.dataset.force) Store.startCycle(1, true);
+    else if (sa.textContent.trim() === "Réessayer") location.reload();
+    else if (sa.textContent.trim().includes("Relancer un cycle")) Store.startCycle();
+    else Store.seed();
+  };
   const cs = document.getElementById("cockpitSeed");
   if (cs) cs.onclick = () => Store.seed();
   // Verrou visuel : on ne peut PAS relancer un cycle tant que le précédent n'est pas fini.
@@ -862,21 +1232,98 @@ function render() {
   const fabCycle = document.querySelector('.fab-action[data-act="cycle"]');
   if (fabCycle) fabCycle.style.pointerEvents = s.ui.busy ? "none" : "";
   const gl = document.getElementById("globalLoader");
-  const quizBox = document.getElementById("quizBox");
   if (gl) {
-    if (s.ui.busy) {
-      gl.hidden = false;
-      const t = document.getElementById("globalLoaderText");
-      if (t) t.textContent = s.ui.overlay || "Agent en cours…";
-      if (quizBox) { Quiz.reset(); Quiz.render(quizBox); }
-    } else {
-      gl.hidden = true;
-      if (quizBox) quizBox.innerHTML = "";
-    }
+    const t = document.getElementById("globalLoaderText");
+    if (t) t.textContent = s.ui.overlay || "Agent en cours…";
   }
   try { renderSheet(s); } catch (e) { console.error("renderSheet", e); }
   try { if (s.route === "audit") bindAudit(); } catch (e) { console.error("bindAudit", e); }
   try { if (s.route === "settings") bindSettings(); } catch (e) { console.error("bindSettings", e); }
+  // Barre d'action de sélection multiple
+  try {
+    const sb = document.getElementById("selectBar");
+    if (sb) {
+      // N'apparaît QUE sur les pages de contenu (sélection pertinente) et
+      // uniquement si au moins un article est coché. Sinon elle reste cachée
+      // (pas de barre "perdue" sur Sources / Paramètres / Historique / Corbeille).
+      const SEL_ROUTES = ["cockpit", "facts", "drafts", "trash"];
+      const n = Store.selectedIds().length;
+      sb.hidden = !(s.selectMode && n > 0 && SEL_ROUTES.includes(s.route));
+      const cnt = document.getElementById("selectCount");
+      if (cnt) cnt.textContent = n;
+      // Éviter que la FAB ne chevauche la bulle de sélection (tous breakpoints)
+      const fab = document.getElementById("fab");
+      if (fab) fab.hidden = !sb.hidden;
+    }
+    // Bouton "Sélectionner" est re-rendu à chaque render -> on le câble ici (pas dans bind())
+    const enterSel = document.getElementById("enterSelect");
+    if (enterSel) enterSel.onclick = () => Store.setSelectMode(!Store.state.selectMode);
+  } catch (e) { console.error("selectBar", e); }
+  // Corbeille : boutons restaurer / supprimer définitivement
+  try {
+    document.querySelectorAll("[data-restore]").forEach(b => b.onclick = () => {
+      Store.restoreFact(b.dataset.restore).then(() => snack("Restauré")).catch(e => snack("Erreur : " + e.message));
+    });
+    document.querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
+      if (!window.confirm("Supprimer définitivement cet article ? Irréversible.")) return;
+      Store.deleteForever([b.dataset.del]).then(r => snack(`${r.deleted || 0} supprimé(s)`)).catch(e => snack("Erreur : " + e.message));
+    });
+    document.querySelectorAll("[data-finish]").forEach(b => b.onclick = () => {
+      Store.finishDraft(b.dataset.finish).then(() => snack("Remis en attente de validation")).catch(e => snack("Erreur : " + e.message));
+    });
+  } catch (e) { console.error("trashBtns", e); }
+  // Boutons afficher/masquer le mot de passe (login + settings)
+  try { bindPasswordToggles(); } catch (e) { console.error("pwToggles", e); }
+  // Re-bind dynamic events after every render (filter pills, fact cards, etc.)
+  try { bind(); } catch (e) { console.error("bind", e); }
+}
+function onBulkAction(action) {
+  const ids = Store.selectedIds();
+  if (!ids.length) { snack("Aucun article sélectionné"); return; }
+  if (action === "approve") { openWpChoice(); return; }
+  if (action === "pending") {
+    Store.bulkAction("pending").then(r => snack(`${r.done}/${r.total} remis en attente`)).catch(e => snack("Erreur : " + e.message));
+    return;
+  }
+  if (action === "trash") { openTrashChoice(); return; }
+  if (action === "draft") {
+    Store.bulkAction("draft").then(r => snack(`${r.done}/${r.total} en brouillon`)).catch(e => snack("Erreur : " + e.message));
+    return;
+  }
+}
+function openWpChoice() {
+  const wp = document.getElementById("wpChoice");
+  const sc = document.getElementById("wpScrim");
+  if (wp) { document.getElementById("wpCount").textContent = Store.selectedIds().length; wp.hidden = false; }
+  if (sc) sc.hidden = false;
+}
+function openTrashChoice() {
+  const tc = document.getElementById("trashChoice");
+  const sc = document.getElementById("wpScrim");
+  if (tc) {
+    document.getElementById("trashCount").textContent = Store.selectedIds().length;
+    const def = document.getElementById("trashDefinitive");
+    if (def) def.checked = false;
+    const del = document.getElementById("trashDelete");
+    if (del) del.hidden = true;
+    tc.hidden = false;
+  }
+  if (sc) sc.hidden = false;
+}
+function doBulkApprove(wp_status) {
+  Store.bulkAction("approve", { wp_status }).then(r => {
+    const fails = (r.results || []).filter(x => !x.ok).length;
+    snack(fails ? `${r.done}/${r.total} publié(s) · ${fails} échec(s)` : `${r.done}/${r.total} publié(s) sur WordPress`);
+  }).catch(e => snack("Erreur : " + e.message));
+}
+function doBulkTrash(definitive) {
+  const ids = Store.selectedIds();
+  if (!ids.length) return;
+  if (definitive) {
+    Store.deleteForever(ids).then(r => snack(`${r.deleted || 0} supprimé(s) définitivement`)).catch(e => snack("Erreur : " + e.message));
+  } else {
+    Store.bulkAction("trash").then(r => snack(`${r.done}/${r.total} mis à la corbeille (11 j)`)).catch(e => snack("Erreur : " + e.message));
+  }
 }
 function snack(msg) {
   const sn = document.getElementById("snackbar");
@@ -884,11 +1331,15 @@ function snack(msg) {
   sn.textContent = msg; sn.hidden = false;
   clearTimeout(sn._t); sn._t = setTimeout(() => sn.hidden = true, 2600);
 }
-function navigate(route) {
+function navigate(route, push = true) {
+  if (push && location.hash !== "#" + route) {
+    try { history.pushState({ route }, "", "#" + route); } catch (e) {}
+  }
   Store.setRoute(route);
   Store.setState({ ui: { ...Store.state.ui, busy: false, overlay: null } });
-  if (route === "hitl") Store.loadHITL();
-  else if (route === "facts") Store.loadHITL();
+  if (route === "facts") Store.loadHITL();
+  else if (route === "drafts") Store.loadHITL();
+  else if (route === "trash") Store.loadTrash();
   else if (route === "audit") Store.loadAudit();
   else if (route === "sources") Store.loadSources();
   else if (route === "cockpit") { Store.loadLast(); Store.loadHITL(); }
@@ -907,6 +1358,8 @@ function bind() {
   document.addEventListener("click", (e) => {
     const card = e.target.closest(".fact-card");
     if (!card) return;
+    // En mode sélection, le clic sur la carte (ou sa case) ne doit PAS ouvrir le tiroir.
+    if (Store.state.selectMode) { e.stopPropagation(); return; }
     e.stopPropagation();
     const facts = Store.state.facts || [];
     let f = facts.find(x => x.fact_id === card.dataset.fact);
@@ -918,25 +1371,210 @@ function bind() {
     if (f) { Store.openSheet({ type: "fact", fact: f }); renderSheet(Store.state); }
   });
   $$("[data-fact-filter]").forEach(n => n.onclick = () => { Store.setFactFilter(n.dataset.factFilter); const sc = document.getElementById("railScrim"); if (sc) sc.hidden = true; });
+  // ---- Sélection multiple + actions en masse ----
+  const enterSel = document.getElementById("enterSelect");
+  if (enterSel) enterSel.onclick = () => Store.setSelectMode(!Store.state.selectMode);
+  const selectBar = document.getElementById("selectBar");
+  if (selectBar) {
+    selectBar.querySelectorAll("[data-bulk]").forEach(b => b.onclick = () => onBulkAction(b.dataset.bulk));
+  }
+  // Fenêtre choix WP (publish vs draft)
+  const wpChoice = document.getElementById("wpChoice");
+  const wpScrim = document.getElementById("wpScrim");
+  const openWp = () => { document.getElementById("wpCount").textContent = Store.selectedIds().length; wpChoice.hidden = false; if (wpScrim) wpScrim.hidden = false; };
+  const closeWp = () => { wpChoice.hidden = true; if (wpScrim) wpScrim.hidden = true; };
+  const wpPublish = document.getElementById("wpPublish");
+  if (wpPublish) wpPublish.onclick = () => { closeWp(); doBulkApprove("publish"); };
+  const wpDraft = document.getElementById("wpDraft");
+  if (wpDraft) wpDraft.onclick = () => { closeWp(); doBulkApprove("draft"); };
+  const wpCancel = document.getElementById("wpCancel");
+  if (wpCancel) wpCancel.onclick = closeWp;
+  if (wpScrim) wpScrim.onclick = closeWp;
+  // Fenêtre corbeille / suppression définitive
+  const trashChoice = document.getElementById("trashChoice");
+  const openTrash = () => {
+    document.getElementById("trashCount").textContent = Store.selectedIds().length;
+    const def = document.getElementById("trashDefinitive");
+    def.checked = false;
+    document.getElementById("trashDelete").hidden = true;
+    trashChoice.hidden = false; if (wpScrim) wpScrim.hidden = false;
+  };
+  const closeTrash = () => { trashChoice.hidden = true; if (wpScrim) wpScrim.hidden = true; };
+  const trashPut = document.getElementById("trashPut");
+  if (trashPut) trashPut.onclick = () => { closeTrash(); doBulkTrash(false); };
+  const trashDelete = document.getElementById("trashDelete");
+  if (trashDelete) trashDelete.onclick = () => { closeTrash(); doBulkTrash(true); };
+  const trashCancel = document.getElementById("trashCancel");
+  if (trashCancel) trashCancel.onclick = closeTrash;
+  const trashDef = document.getElementById("trashDefinitive");
+  if (trashDef) trashDef.onchange = () => { document.getElementById("trashDelete").hidden = !trashDef.checked; };
+
+  // =========================================================
+  // LEFT DRAWER — Mobile (≤819px) : hamburger → 248px slide-in
+  // =========================================================
+  const leftDrawer = document.getElementById("leftDrawer");
+  const leftDrawerScrim = document.getElementById("leftDrawerScrim");
+  const leftDrawerClose = document.getElementById("leftDrawerClose");
+  let leftDrawerTouchStartX = 0;
+  let leftDrawerTouchStartTime = 0;
+
+  const openLeftDrawer = () => {
+    if (leftDrawer) { leftDrawer.hidden = false; leftDrawer.classList.add("open"); }
+    if (leftDrawerScrim) { leftDrawerScrim.hidden = false; leftDrawerScrim.classList.add("visible"); }
+    document.body.style.overflow = "hidden";
+  };
+  const closeLeftDrawer = () => {
+    if (leftDrawer) leftDrawer.classList.remove("open");
+    if (leftDrawerScrim) leftDrawerScrim.classList.remove("visible");
+    setTimeout(() => { if (leftDrawer) leftDrawer.hidden = true; if (leftDrawerScrim) leftDrawerScrim.hidden = true; document.body.style.overflow = ""; }, 300);
+  };
+  if (leftDrawerClose) leftDrawerClose.onclick = closeLeftDrawer;
+  if (leftDrawerScrim) leftDrawerScrim.onclick = closeLeftDrawer;
+
+  // Swipe dismiss for left drawer (right-to-left swipe)
+  if (leftDrawer) {
+    leftDrawer.addEventListener("touchstart", (e) => {
+      leftDrawerTouchStartX = e.touches[0].clientX;
+      leftDrawerTouchStartTime = Date.now();
+    }, { passive: true });
+    leftDrawer.addEventListener("touchend", (e) => {
+      const dx = e.changedTouches[0].clientX - leftDrawerTouchStartX;
+      const dt = Date.now() - leftDrawerTouchStartTime;
+      if (dx < -60 && dt < 300) closeLeftDrawer();
+    }, { passive: true });
+  }
+
+  // Delegate nav clicks inside left drawer
+  if (leftDrawer) {
+    leftDrawer.querySelectorAll("[data-route]").forEach(n => {
+      n.onclick = () => {
+        if (Store.state.ui.busy) { snack("Génération en cours…"); return; }
+        closeLeftDrawer();
+        navigate(n.dataset.route);
+      };
+    });
+  }
+
+  // =========================================================
+  // RAIL — Desktop/Tablet persistent (collapse/expand + drawer)
+  // =========================================================
   const railEl = document.getElementById("rail");
   $$("[data-route]").forEach(n => n.onclick = () => {
+    // Pendant une génération (busy), la génération est prioritaire : on reste
+    // sur l'écran de génération et on ignore la navigation vers un autre écran.
+    if (Store.state.ui.busy) { snack("Génération en cours…"); return; }
     if (railEl) railEl.classList.remove("open");
     const sc = document.getElementById("railScrim");
     if (sc) sc.hidden = true;
     navigate(n.dataset.route);
   });
   const tc = document.getElementById("topbarCycle");
-  if (tc) tc.onclick = () => Store.startCycle();
+  if (tc) tc.onclick = () => { navigate("cockpit"); Store.startCycle(); };
   // Rail drawer : toggle collapse (desktop) + menu (mobile drawer)
-  const rt = document.getElementById("railToggle");
-  if (rt) rt.onclick = () => Store.setRail(Store.getRail() === "expanded" ? "collapsed" : "expanded");
-  const tm = document.getElementById("topbarMenu");
-  if (tm) tm.onclick = () => {
+  const closeRailDrawer = () => {
     const rail = document.getElementById("rail");
-    if (rail) rail.classList.toggle("open");
+    if (rail) rail.classList.remove("open");
     const sc = document.getElementById("railScrim");
-    if (sc) sc.hidden = !rail.classList.contains("open");
+    if (sc) sc.hidden = true;
   };
+  const rt = document.getElementById("railToggle");
+  if (rt) rt.onclick = () => {
+    // Sur mobile, la flèche ferme le drawer ; sur desktop elle réduit/agrandit le rail.
+    if (window.matchMedia("(max-width: 819px)").matches) { closeRailDrawer(); return; }
+    Store.setRail(Store.getRail() === "expanded" ? "collapsed" : "expanded");
+  };
+  // Clic sur le scrim = ferme le drawer mobile (corrige l'impossibilité de refermer)
+  const rsc = document.getElementById("railScrim");
+  if (rsc) rsc.onclick = closeRailDrawer;
+
+  // =========================================================
+  // RIGHT DRAWER OVERLAY — Desktop/Tablet (≥820px) : "Plus" menu
+  // =========================================================
+  const rightDrawer = document.getElementById("rightDrawer");
+  const rightDrawerScrim = document.getElementById("rightDrawerScrim");
+  const rightDrawerClose = document.getElementById("rightDrawerClose");
+  let rightDrawerFocusTrap = null;
+
+  const openRightDrawer = () => {
+    if (rightDrawer) { rightDrawer.hidden = false; rightDrawer.classList.add("open"); }
+    if (rightDrawerScrim) { rightDrawerScrim.hidden = false; rightDrawerScrim.classList.add("visible"); }
+    document.body.style.overflow = "hidden";
+    // Focus trap
+    setTimeout(() => {
+      const focusable = rightDrawer?.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      if (focusable?.length) {
+        rightDrawerFocusTrap = focusable[0];
+        focusable[focusable.length - 1].addEventListener("keydown", trapFocus);
+        rightDrawerFocusTrap.focus();
+      }
+    }, 0);
+  };
+  const closeRightDrawer = () => {
+    if (rightDrawer) rightDrawer.classList.remove("open");
+    if (rightDrawerScrim) rightDrawerScrim.classList.remove("visible");
+    setTimeout(() => { if (rightDrawer) rightDrawer.hidden = true; if (rightDrawerScrim) rightDrawerScrim.hidden = true; document.body.style.overflow = ""; }, 300);
+    // Remove focus trap
+    if (rightDrawerFocusTrap) {
+      const focusable = rightDrawer?.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      if (focusable?.length) focusable[focusable.length - 1].removeEventListener("keydown", trapFocus);
+      rightDrawerFocusTrap = null;
+    }
+  };
+  const trapFocus = (e) => {
+    if (e.key === "Tab") {
+      const focusable = rightDrawer?.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      if (!focusable?.length) return;
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    } else if (e.key === "Escape") {
+      closeRightDrawer();
+    }
+  };
+
+  // Open right drawer from any "Plus" trigger (rail or bottom nav)
+  document.querySelectorAll("[data-plus]").forEach((el) => {
+    el.onclick = (e) => { e.preventDefault(); openRightDrawer(); };
+  });
+
+  if (rightDrawerClose) rightDrawerClose.onclick = closeRightDrawer;
+  if (rightDrawerScrim) rightDrawerScrim.onclick = closeRightDrawer;
+
+  // Delegate nav clicks inside right drawer
+  if (rightDrawer) {
+    rightDrawer.querySelectorAll("[data-route]").forEach(n => {
+      n.onclick = () => {
+        if (Store.state.ui.busy) { snack("Génération en cours…"); return; }
+        closeRightDrawer();
+        navigate(n.dataset.route);
+      };
+    });
+  }
+
+  // =========================================================
+  // OVERFLOW MENU mobile (bottom nav surchargé → items secondaires en drawer bas)
+  // =========================================================
+  const overflowMenu = document.getElementById("overflowMenu");
+  const navScrim = document.getElementById("navScrim");
+  let overflowTouchStartY = 0;
+  let overflowTouchStartTime = 0;
+
+  const closeOverflow = () => { if (overflowMenu) overflowMenu.classList.remove("open"); if (navScrim) navScrim.hidden = true; };
+  if (overflowMenu) overflowMenu.querySelectorAll(".overflow-item").forEach(it => it.onclick = () => { navigate(it.dataset.route); closeOverflow(); });
+
+  // Swipe dismiss for overflow menu (downward swipe)
+  if (overflowMenu) {
+    overflowMenu.addEventListener("touchstart", (e) => {
+      overflowTouchStartY = e.touches[0].clientY;
+      overflowTouchStartTime = Date.now();
+    }, { passive: true });
+    overflowMenu.addEventListener("touchend", (e) => {
+      const dy = e.changedTouches[0].clientY - overflowTouchStartY;
+      const dt = Date.now() - overflowTouchStartTime;
+      if (dy > 60 && dt < 300) closeOverflow();
+    }, { passive: true });
+  }
+
   // Sélecteur de thème — délégation (rail, bottomnav, et vue Paramètres rendue dynamiquement)
   document.addEventListener("click", (e) => {
     const tb = e.target.closest("[data-theme-btn]");
@@ -952,8 +1590,10 @@ function bind() {
   if (fab) fab.onclick = () => { fab.classList.toggle("open"); menu.classList.toggle("open"); };
   $$(".fab-action", menu).forEach(a => a.onclick = () => {
     fab.classList.remove("open"); menu.classList.remove("open");
-    if (a.dataset.act === "cycle") Store.startCycle();
-    else if (a.dataset.act === "seed") Store.seed();
+    // La génération est prioritaire : on bascule toujours sur le Tableau de bord
+    // (vue de génération) et on y reste, peu importe l'écran d'origine.
+    if (a.dataset.act === "cycle") { navigate("cockpit"); Store.startCycle(); }
+    else if (a.dataset.act === "seed") { navigate("cockpit"); Store.seed(); }
   });
   const sc = $("#sheetScrim"); if (sc) sc.onclick = () => Store.closeSheet();
   // Clic-dehors (point 2) : clic dans N'IMPORTE QUEL périmètre HORS du conteneur interne ferme.
@@ -965,7 +1605,70 @@ function bind() {
   }, true);
   // Fermeture au clavier (Escape) en complément du clic-dehors
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && Store.state.sheet) Store.closeSheet(); });
-  window.addEventListener("popstate", (e) => { if (e.state && e.state.route) navigate(e.state.route); });
+  window.addEventListener("popstate", (e) => { if (e.state && e.state.route) Store.setRoute(e.state.route); });
+  // Amorce l'historique : la route courante devient l'état de base pour que le
+  // bouton "retour" du navigateur (mobile) puisse revenir en arrière.
+  if (!location.hash) { try { history.replaceState({ route: Store.state.route }, "", "#" + Store.state.route); } catch (e) {} }
+
+  // =========================================================
+  // COCKPIT — Delegated event binding (dynamic components)
+  // =========================================================
+  function bindCockpitEvents() {
+    // StatCard clicks -> navigation / filter
+    document.addEventListener("click", (e) => {
+      const card = e.target.closest("[data-action^='nav-']");
+      if (!card) return;
+      const action = card.dataset.action;
+      if (action === "nav-facts-all") { Store.setFactFilter("all"); navigate("facts"); }
+      else if (action === "nav-facts-approved") { Store.setFactFilter("TRANSMITTED"); navigate("facts"); }
+      else if (action === "nav-hitl") { Store.setFactFilter("PENDING_REVIEW"); navigate("facts"); }
+      else if (action === "nav-drafts") { Store.setFactFilter("EDITED"); navigate("drafts"); }
+    });
+
+    // SourceChip clicks -> open settings -> sources tab
+    document.addEventListener("click", (e) => {
+      const chip = e.target.closest(".source-chip[data-source-id]");
+      if (!chip) return;
+      navigate("settings");
+    });
+
+    // Refresh button
+    document.addEventListener("click", (e) => {
+      if (e.target.closest("[data-action='refresh']")) {
+        Store.loadAll();
+      }
+    });
+
+    // Cycle Normal
+    document.addEventListener("click", (e) => {
+      if (e.target.closest("[data-action='cycle-normal']")) {
+        if (Store.state.lastCycle?.running) return;
+        Store.startCycle({ force: false });
+      }
+    });
+
+    // Cycle Force (with confirm)
+    document.addEventListener("click", (e) => {
+      if (e.target.closest("[data-action='cycle-force']")) {
+        if (Store.state.lastCycle?.running) return;
+        if (confirm("Lancer un cycle FORCÉ (ignorant la fenêtre 24h) ?")) {
+          Store.startCycle({ force: true });
+        }
+      }
+    });
+
+    // Audit all link
+    document.addEventListener("click", (e) => {
+      if (e.target.closest("[data-action='audit-all']")) {
+        navigate("audit");
+      }
+    });
+  }
+
+  // Call cockpit binding
+  bindCockpitEvents();
+
+  // =========================================================
   // --- Auth au démarrage : reset (?reset=), sinon check session ---
   // Charge les settings (nom/logo) AVANT de rendre l'écran de connexion
   const resetToken = new URLSearchParams(location.search).get("reset");
@@ -979,27 +1682,36 @@ function bind() {
     }
   });
   const r = location.pathname.split("/")[1] || "cockpit";
-  navigate(["cockpit", "facts", "hitl", "sources", "audit", "drafts", "settings"].includes(r) ? r : "cockpit");
+  navigate(["cockpit", "facts", "sources", "audit", "drafts", "settings", "trash"].includes(r) ? r : "cockpit");
   Store.loadHealth();
   Store.loadSettings();
+  Store.loadTrash().catch(() => {});  // corbeille
   Store.loadUsers().catch(() => {});  // peupler la liste des comptes (si session)
+  Store.startAutoRefresh(30000);  // auto-refresh cockpit every 30s
+  bind();
 }
 
 // ---- Écrans d'authentification (overlay plein écran) ----
-function renderAuth(mode, token) {
+function renderAuth(mode, token, force = false) {
   const overlay = document.getElementById("authOverlay");
   if (!overlay) return;
-  if (mode === "login") overlay.innerHTML = viewLogin();
-  else if (mode === "forgot") overlay.innerHTML = viewForgot();
-  else if (mode === "reset") overlay.innerHTML = viewReset(token);
-  overlay.hidden = false;
-  document.getElementById("app").style.display = "none";
-  bindAuth(mode, token);
-  if (mode === "login") {
-    if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(() => alignWordmark()).catch(() => {});
+  // For explicit navigation (forgot, reset, logout), allow rebuild.
+  // For auto-render via render(), only build once.
+  if (!_authRendered || force) {
+    if (mode === "login") overlay.innerHTML = viewLogin();
+    else if (mode === "forgot") overlay.innerHTML = viewForgot();
+    else if (mode === "reset") overlay.innerHTML = viewReset(token);
+    overlay.hidden = false;
+    document.getElementById("app").style.display = "none";
+    bindAuth(mode, token);
+    bindPasswordToggles(overlay);
+    _authRendered = true;
+    if (mode === "login") {
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(() => alignWordmark()).catch(() => {});
+      }
+      alignWordmark();
     }
-    alignWordmark();
   }
 }
 
@@ -1037,7 +1749,10 @@ function viewLogin() {
           <input class="text-input" id="authUser" type="text" autocomplete="username" placeholder="admin">
         </label>
         <label class="auth-field">Mot de passe
-          <input class="text-input" id="authPass" type="password" autocomplete="current-password" placeholder="••••••••">
+          <span class="pw-wrap">
+            <input class="text-input" id="authPass" type="password" autocomplete="current-password" placeholder="••••••••">
+            <button type="button" class="pw-toggle" data-pw="authPass" aria-label="Afficher le mot de passe">${icon("i-eye")}</button>
+          </span>
         </label>
         <button class="btn btn-primary btn-block" id="authSubmit" type="submit">Se connecter</button>
       </form>
@@ -1073,16 +1788,37 @@ function viewReset(token) {
       <p class="auth-sub">Choisis un nouveau mot de passe (8 caractères minimum).</p>
       <form id="authForm" autocomplete="off">
         <label class="auth-field">Nouveau mot de passe
-          <input class="text-input" id="authNew" type="password" autocomplete="new-password" placeholder="••••••••">
+          <span class="pw-wrap">
+            <input class="text-input" id="authNew" type="password" autocomplete="new-password" placeholder="••••••••">
+            <button type="button" class="pw-toggle" data-pw="authNew" aria-label="Afficher le mot de passe">${icon("i-eye")}</button>
+          </span>
         </label>
         <label class="auth-field">Confirmer
-          <input class="text-input" id="authNew2" type="password" autocomplete="new-password" placeholder="••••••••">
+          <span class="pw-wrap">
+            <input class="text-input" id="authNew2" type="password" autocomplete="new-password" placeholder="••••••••">
+            <button type="button" class="pw-toggle" data-pw="authNew2" aria-label="Afficher le mot de passe">${icon("i-eye")}</button>
+          </span>
         </label>
         <button class="btn btn-primary btn-block" id="authSubmit" type="submit">Réinitialiser</button>
       </form>
       <div class="auth-err" id="authErr"></div>
     </div>
   </div>`;
+}
+
+function bindPasswordToggles(root) {
+  const scope = root || document;
+  scope.querySelectorAll(".pw-toggle").forEach(btn => {
+    btn.onclick = () => {
+      const el = document.getElementById(btn.dataset.pw);
+      if (!el) return;
+      const show = el.type === "password";
+      el.type = show ? "text" : "password";
+      btn.innerHTML = icon(show ? "i-eye-off" : "i-eye");
+      btn.setAttribute("aria-label", show ? "Masquer le mot de passe" : "Afficher le mot de passe");
+      el.focus();
+    };
+  });
 }
 
 function bindAuth(mode, token) {
@@ -1098,7 +1834,10 @@ function bindAuth(mode, token) {
       setErr("");
       const u = overlay.querySelector("#authUser").value.trim();
       const p = overlay.querySelector("#authPass").value;
+      const btn = overlay.querySelector("#authSubmit");
+      const orig = btn ? btn.textContent : "";
       try {
+        if (btn) { btn.disabled = true; btn.textContent = "Connexion…"; }
         await Store.login(u, p);
         overlay.hidden = true;
         document.getElementById("app").style.display = "";
@@ -1107,10 +1846,11 @@ function bindAuth(mode, token) {
         render();
         snack("Connecté");
       } catch (ex) { setErr(ex.message || "Erreur de connexion"); }
+      finally { if (btn) { btn.disabled = false; btn.textContent = orig; } }
     };
   } else if (mode === "forgot") {
     const back = overlay.querySelector("#authBack");
-    if (back) back.onclick = () => renderAuth("login");
+    if (back) back.onclick = () => renderAuth("login", null, true);
     if (form) form.onsubmit = async (e) => {
       e.preventDefault();
       setErr("");
@@ -1133,7 +1873,7 @@ function bindAuth(mode, token) {
         // Nettoie le token de l'URL
         history.replaceState(null, "", location.pathname);
         setErr("");
-        renderAuth("login");
+        renderAuth("login", null, true);
         snack("Mot de passe réinitialisé. Connecte-toi.");
       } catch (ex) { setErr(ex.message || "Erreur"); }
     };

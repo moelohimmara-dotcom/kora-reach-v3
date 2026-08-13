@@ -12,6 +12,7 @@ export default defineConfig({
     outDir: "dist",
     assetsInlineLimit: 4096,
     cssCodeSplit: false,
+    minify: false,
   },
   plugins: [
     {

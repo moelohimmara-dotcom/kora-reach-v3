@@ -25,8 +25,10 @@ from hitl_store import (
     fact_id_of, decide, get as hitl_get, list_all,
     mark_transmitted, mark_transmission_failed, retract,
     upsert_fact, list_facts, get_fact,
+    trash_facts, restore_fact, delete_facts, list_trashed, purge_trashed,
 )
 import transmit
+import writer
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.environ.get("KORA_STATIC", os.path.join(ROOT, "static"))
@@ -100,8 +102,12 @@ class Handler(BaseHTTPRequestHandler):
         path = p.path
         if path == "/api/health":
             return self._send(200, {"status": "ok", "whitelist_version": wl.WHITELIST_VERSION,
-                                     "mutex": reach_agent.agent.mutex, "editor": EDITOR_NAME,
-                                     "transmit_mode": transmit.mode()})
+                                     "mutex": reach_agent.agent.is_busy, "editor": EDITOR_NAME,
+                                     "transmit_mode": transmit.mode(),
+                                     "llm_circuit": writer.llm_circuit_status()})
+        if path == "/api/regen-suggestions":
+            # Suggestions d'angle proposées à l'utilisateur pour la régénération
+            return self._send(200, {"suggestions": writer.list_regen_suggestions()})
         if path == "/api/whitelist":
             # Sources = configuration sensible -> advanced uniquement
             if not self._require_role("advanced"):
@@ -119,7 +125,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/state":
             if not self._require_auth():
                 return
-            return self._send(200, {"mutex": reach_agent.agent.mutex,
+            return self._send(200, {"mutex": reach_agent.agent.is_busy,
                                     "whitelist_version": wl.WHITELIST_VERSION,
                                     "editor": EDITOR_NAME, "transmit_mode": transmit.mode()})
         if path == "/api/settings":
@@ -201,6 +207,12 @@ class Handler(BaseHTTPRequestHandler):
                 return
             out = list_facts()
             return self._send(200, out)
+        if path == "/api/hitl/trash":
+            # Corbeille (GET) — liste des éléments en attente de restauration (11j)
+            if not self._require_auth():
+                return
+            items = list_trashed()
+            return self._send(200, {"ok": True, "items": items, "retention_days": 11})
         # fichier statique
         if path == "/":
             path = "index.html"
@@ -221,21 +233,69 @@ class Handler(BaseHTTPRequestHandler):
             ts = str(int(_t.time()))
             txt = _re.sub(r'(src="([^"]+\.js))"', r'\1?v=' + ts + '"', txt)
             txt = _re.sub(r'(href="([^"]+\.css))"', r'\1?v=' + ts + '"', txt)
+            # KILL-SWITCH inline (anti-cache résiduel) : a chaque chargement de
+            # l'HTML (no-store), on enregistre un SW ephemer qui vide tous les
+            # caches et se desenregistre. Cela eclatse meme un SW M3 old actif
+            # qui servirait un bundle perime, sans aucune action utilisateur.
+            kill_sw = (
+                "<script>(function(){if(!('serviceWorker'in navigator))return;"
+                "var c=\"self.addEventListener('activate',function(e){e.waitUntil((function(){"
+                "var k;return caches.keys().then(function(x){k=x;return Promise.all(k.map(function(y){"
+                "return caches.delete(y)}))}).then(function(){return self.registration.unregister()})"
+                "})())});self.addEventListener('fetch',function(e){e.respondWith(fetch(e.request))});\";"
+                "var b=new Blob([c],{type:'text/javascript'});var u=URL.createObjectURL(b);"
+                "navigator.serviceWorker.register(u).then(function(r){return r.update()}).catch(function(){});"
+                "})();</script>"
+            )
+            if "</head>" in txt:
+                txt = txt.replace("</head>", kill_sw + "</head>", 1)
+            else:
+                txt = kill_sw + txt
             data = txt.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
+            self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(data)
             return
         return self._send(200, data, ctype)
 
+    def do_OPTIONS(self):
+        # Preflight CORS : le navigateur envoie une requête OPTIONS avant
+        # tout POST/PUT avec Content-Type JSON + credentials (même en
+        # same-origin). Sans réponse 200 + headers CORS, le navigateur
+        # annule le POST réel -> les appels API (login, logout, change-password)
+        # restent en "pending" et timeout côté front. C'est ce qui bloquait
+        # la déconnexion (le clic ne fermait jamais la session côté UI).
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
+        self.send_header("Access-Control-Allow-Credentials", "true")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header("Access-Control-Max-Age", "86400")
+        self.end_headers()
+        self.wfile.write(b'{"ok":true}')
+
     def do_POST(self):
         p = urllib.parse.urlparse(self.path)
-        length = int(self.headers.get("Content-Length", 0))
-        raw = self.rfile.read(length) if length else b"{}"
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        if length:
+            raw = self.rfile.read(length)
+        else:
+            # Aucun Content-Length (ex: Transfer-Encoding: chunked via proxy) :
+            # on lit tout ce qui arrive jusqu'à fermeture de la connexion.
+            raw = b""
+            try:
+                while True:
+                    chunk = self.rfile.read(4096)
+                    if not chunk:
+                        break
+                    raw += chunk
+            except Exception:
+                pass
         try:
             payload = json.loads(raw or b"{}")
         except Exception:
@@ -245,7 +305,7 @@ class Handler(BaseHTTPRequestHandler):
         if p.path not in PUBLIC_POST and not self._require_auth():
             return
         if p.path == "/api/cycle":
-            if reach_agent.agent.mutex:
+            if reach_agent.agent.is_busy:
                 return self._send(429, {"error": "cycle_en_cours"})
             scope = payload.get("scope")
             demand = payload.get("demand", 3)
@@ -270,19 +330,31 @@ class Handler(BaseHTTPRequestHandler):
                 LAST_CYCLE["result"] = None
             threading.Thread(target=_run, daemon=True).start()
             return self._send(200, {"started": True, "detail": "Cycle lancé en arrière-plan. Poll /api/last ou /api/hitl."})
+        if p.path == "/api/regenerate":
+            # Régénère UN article depuis les INFOS DÉJÀ ACQUISES (hitl_facts).
+            # AUCUN re-scraping : le champion/contexts source est relu depuis la base.
+            fid = payload.get("fact_id")
+            suggestion = payload.get("suggestion")  # id parmi les suggestions, ou None
+            if not fid:
+                return self._send(400, {"error": "fact_id_requis"})
+            res = writer.regenerate(fid, suggestion=suggestion)
+            if res.get("error"):
+                return self._send(404, res)
+            return self._send(200, res)
         if p.path == "/api/hitl/decide":
             fid = payload.get("fact_id")
             decision = payload.get("decision")  # EDITED | APPROVED | REJECTED
             edited = payload.get("edited_text", "")
             final = payload.get("final_text", edited)
+            wp_status = payload.get("wp_status", "publish")  # publish | draft
             res = decide(fid, decision, EDITOR_NAME, edited_text=edited, final_text=final)
             if res.get("ok"):
-                log(fid, "HITL_DECISION", f"decision={decision} by={EDITOR_NAME}", "hitl")
+                log(fid, "HITL_DECISION", f"decision={decision} by={EDITOR_NAME} wp={wp_status}", "hitl")
                 # A => Approuver déclenche la transmission (dry_run par défaut)
                 if decision == "APPROVED":
                     fact = _fact_by_id(fid)
                     if fact:
-                        tx = transmit.transmit(fact, final or fact.get("article", ""))
+                        tx = transmit.transmit(fact, final or fact.get("article", ""), wp_status=wp_status)
                         if tx["status"] in ("TRANSMITTED", "DRY_RUN_OK"):
                             mark_transmitted(fid, tx["provider"], tx["http_status"],
                                             final or fact.get("article", ""))
@@ -298,6 +370,56 @@ class Handler(BaseHTTPRequestHandler):
             if res.get("ok"):
                 log(fid, "HITL_RETRACT", f"by={EDITOR_NAME}", "hitl")
             return self._send(200, res)
+        # ---- Actions en masse (sélection multiple) ----
+        if p.path == "/api/hitl/bulk":
+            ids = payload.get("ids") or []
+            action = payload.get("action")  # approve | draft | reject | trash | delete
+            wp_status = payload.get("wp_status", "publish")
+            results = []
+            for fid in ids:
+                try:
+                    if action == "approve":
+                        r = decide(fid, "APPROVED", EDITOR_NAME)
+                        if r.get("ok"):
+                            fact = _fact_by_id(fid)
+                            if fact:
+                                tx = transmit.transmit(fact, fact.get("article", ""), wp_status=wp_status)
+                                if tx["status"] in ("TRANSMITTED", "DRY_RUN_OK"):
+                                    mark_transmitted(fid, tx["provider"], tx["http_status"], fact.get("article", ""))
+                                else:
+                                    mark_transmission_failed(fid, tx["provider"], tx["http_status"])
+                                r["transmission"] = tx
+                    elif action == "draft":
+                        r = decide(fid, "EDITED", EDITOR_NAME)
+                    elif action == "reject":
+                        r = decide(fid, "REJECTED", EDITOR_NAME)
+                    elif action == "pending":
+                        # Ramener à la normale (en attente de validation) sans publier.
+                        # No-op si déjà PENDING_REVIEW (transition autorisée).
+                        r = decide(fid, "PENDING_REVIEW", EDITOR_NAME)
+                    elif action == "trash":
+                        r = trash_facts([fid])
+                    elif action == "delete":
+                        r = delete_facts([fid])
+                    else:
+                        r = {"error": "action_inconnue"}
+                except Exception as e:
+                    r = {"error": str(e)}
+                r = dict(r); r["fact_id"] = fid
+                results.append(r)
+            ok = sum(1 for r in results if r.get("ok"))
+            return self._send(200, {"ok": True, "total": len(results), "done": ok, "results": results})
+        if p.path == "/api/hitl/trash/restore":
+            fid = payload.get("fact_id")
+            res = restore_fact(fid)
+            return self._send(200, res)
+        if p.path == "/api/hitl/delete":
+            ids = payload.get("ids") or []
+            res = delete_facts([str(i) for i in ids])
+            return self._send(200, res)
+        if p.path == "/api/hitl/trash":
+            items = list_trashed()
+            return self._send(200, {"ok": True, "items": items, "retention_days": 11})
         if p.path == "/api/audit/purge":
             if not self._require_role("advanced"):
                 return
@@ -340,9 +462,15 @@ class Handler(BaseHTTPRequestHandler):
             if me:
                 auth.log_auth_event("logout", me["username"] if isinstance(me, dict) else me[1], self.client_address[0])
             if sid: auth.delete_session(sid)
+            # IMPORTANT : le cookie doit être effacé avec les MÊMES attributs
+            # que lors du login (Path=/; HttpOnly; SameSite=Strict; Secure en
+            # prod). Sinon, sous HTTPS, le navigateur refuse d'écraser le cookie
+            # Secure existant par un Set-Cookie non-Secure -> la session reste
+            # vivante après "Se déconnecter" (anomalie de fermeture de session).
+            _sec = "; Secure" if os.environ.get("KORA_HTTPS", "1") == "1" else ""
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
-            self.send_header("Set-Cookie", "kora_sid=; Path=/; HttpOnly; Max-Age=0")
+            self.send_header("Set-Cookie", f"kora_sid=; Path=/; HttpOnly; SameSite=Strict{_sec}; Max-Age=0")
             self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
             self.send_header("Access-Control-Allow-Credentials", "true")
             self.send_header("Cache-Control", "no-store")
@@ -478,8 +606,15 @@ def _fact_by_id(fid):
 
 
 def main():
-    port = int(os.environ.get("PORT", "8765"))
+    port = int(os.environ.get("PORT", "8766"))
     auth.init()  # crée tables + admin depuis .env
+    # Purge auto de la corbeille (> 11 jours) au démarrage
+    try:
+        n = purge_trashed(11)
+        if n:
+            print(f"Corbeille : {n} élément(s) > 11j supprimé(s) définitivement.")
+    except Exception as e:
+        print("purge_trashed:", e)
     srv = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     print(f"KORA dashboard sur http://localhost:{port} | editor={EDITOR_NAME} | transmit={transmit.mode()}")
     srv.serve_forever()
