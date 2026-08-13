@@ -1696,10 +1696,11 @@ function bind() {
     }
   });
   const r = location.pathname.split("/")[1] || "cockpit";
-  // Router initial selon l'URL, mais SANS rappeler navigate() (qui fait
-  // render()->bind()->navigate() = boucle infinie). On ne fait que positionner
-  // la route ; le render initial est déjà déclenché par le subscriber.
-  Store.setRoute(r);
+  // Router initial selon l'URL, mais SANS déclencher de setState (qui ferait
+  // render()->bind()->setState = boucle infinie). On pose la route directement
+  // dans l'état (sans notifier les subscribers) ; le 1er render sera déclenché
+  // par checkAuth/loadSettings plus bas.
+  if (Store.state.route !== r) Store.state.route = r;
   Store.loadHealth();
   Store.loadSettings();
   Store.loadTrash().catch(() => {});  // corbeille
