@@ -191,6 +191,7 @@ def list_facts() -> list:
             "n_sources": d["n_sources"], "status": d["d_status"] or "PENDING_REVIEW",
             "decided_by": d["decided_by"], "decided_at": d["decided_at"],
             "final_text": d["final_text"], "provider": d["provider"],
+            "created_at": d["created_at"],
         })
     return out
 
