@@ -117,6 +117,7 @@ export const Store = (() => {
     }
     // NE PAS setState loggedIn ici — attendre checkAuth()
     const ok = await checkAuth();   // valide la session côté serveur
+    if (ok) await loadAll();        // charge facts/health/sources dès la connexion
     return ok;
   }
   async function logout() {

@@ -116,10 +116,10 @@ function viewCockpit(s) {
 
       <!-- ROW 1 : 4 StatCards cliquables -->
       <div class="cockpit-grid stats-row">
-        ${statCard({ icon: "article", value: total, label: "Articles", variant: "primary", onClick: "nav-facts-all" })}
-        ${statCard({ icon: "fact_check", value: approved, label: "Validés", variant: "success", onClick: "nav-facts-approved" })}
-        ${statCard({ icon: "schedule", value: pending, label: "En attente", variant: "warning", onClick: "nav-hitl" })}
-        ${statCard({ icon: "edit", value: draft, label: "Brouillons", variant: "info", onClick: "nav-drafts" })}
+        ${statCard({ icon: "article", value: total, label: "Articles", variant: "primary", onClick: "nav-facts-all", loading: s.ui?.loading && total === 0 })}
+        ${statCard({ icon: "fact_check", value: approved, label: "Validés", variant: "success", onClick: "nav-facts-approved", loading: s.ui?.loading && approved === 0 })}
+        ${statCard({ icon: "schedule", value: pending, label: "En attente", variant: "warning", onClick: "nav-hitl", loading: s.ui?.loading && pending === 0 })}
+        ${statCard({ icon: "edit", value: draft, label: "Brouillons", variant: "info", onClick: "nav-drafts", loading: s.ui?.loading && draft === 0 })}
       </div>
 
       <!-- ROW 2 : System Health + Sources + Cycle Control -->
@@ -1762,6 +1762,7 @@ function boot() {
     } else {
       Store.checkAuth().then((ok) => {
         if (!ok) renderAuth("login");
+        else Store.loadAll();   // charge facts/health/sources dès la session validée
       });
     }
   });
