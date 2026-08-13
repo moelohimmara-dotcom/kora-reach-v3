@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 
-// base relatif -> sert indifféremement à la racine (/) ou sous /kora-v2/
+// base relatif -> sert indifféremment à la racine (/) ou sous /kora-v2/
 // Cache-busting : on ajoute ?v=BUILD_ID aux assets dans index.html pour
 // forcer le navigateur à reprendre le fichier même si caché (corrige le
 // bug de clic qui ne marchait qu'en navigation privée).
@@ -13,6 +13,14 @@ export default defineConfig({
     assetsInlineLimit: 4096,
     cssCodeSplit: false,
     minify: false,
+    rollupOptions: {
+      output: {
+        // Nom de fichier unique par build -> contourne tout cache navigateur résiduel
+        entryFileNames: `assets/index-${BUILD_ID}.js`,
+        chunkFileNames: `assets/chunk-${BUILD_ID}.js`,
+        assetFileNames: `assets/[name]-${BUILD_ID}[extname]`,
+      },
+    },
   },
   plugins: [
     {

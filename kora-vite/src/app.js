@@ -377,7 +377,7 @@ function viewFacts(s) {
     rejected: facts.filter(f => (s.decisions[f.fact_id] || f.status) === "REJECTED").length,
     drafts: facts.filter(f => (s.decisions[f.fact_id] || f.status) === "EDITED").length,
   };
-  const f = Store.getFactFilter();
+  const f = (Store.getFactFilter() || "all").toLowerCase();
   if (!facts.length) return (s.lastCycle && s.lastCycle.result && s.lastCycle.result.status === "empty_or_stale") ? staleBox(s) : stateBox("i-check", "Aucun article à afficher", "Lance un cycle ou génère une démo pour générer des articles à valider.", false, "Générer démo", () => Store.seed());
   const filters = [
     ["all", "Tous", counts.all], ["pending", "En attente", counts.pending],
