@@ -736,6 +736,16 @@ button:disabled > .ic { color: var(--icon-color-disabled); opacity: .55; }
 }
 .bottomnav .navitem.active { color: var(--coral); }
 .bottomnav .navitem.active::before { content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 26px; height: 3px; border-radius: 3px; background: var(--coral); box-shadow: 0 0 10px var(--coral); }
+/* Badge de compteur sur la navigation */
+.nav-badge {
+  position: absolute; top: 2px; right: 8px; min-width: 16px; height: 16px; padding: 0 4px;
+  display: none; align-items: center; justify-content: center;
+  background: var(--coral); color: #20100B; font-size: 10px; font-weight: 700; line-height: 1;
+  border-radius: 999px; box-shadow: 0 1px 3px rgba(0,0,0,0.35); pointer-events: none;
+}
+.nav-badge.show { display: inline-flex; }
+.navitem { position: relative; }
+.right-drawer-body .nav-badge { position: static; margin-left: auto; }
 
 /* Très petit écran : icônes seules */
 @media (max-width: 380px) {
