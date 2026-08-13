@@ -24,9 +24,27 @@ export const Store = (() => {
   };
 
   const subs = new Set();
+  let _notifying = false;
+  let _pendingPatch = null;
   function setState(patch) {
     Object.assign(state, patch);
-    subs.forEach((fn) => fn(state));
+    if (_notifying) {
+      // Anti-récursion : un subscriber (render) a déclenché setState pendant
+      // la notification -> on fusionne dans _pendingPatch et on NOTIFIE APRES,
+      // jamais en réentrance. Sinon boucle infinie (Maximum call stack / freeze).
+      _pendingPatch = Object.assign(_pendingPatch || {}, patch);
+      return;
+    }
+    _notifying = true;
+    try {
+      subs.forEach((fn) => fn(state));
+    } finally {
+      _notifying = false;
+    }
+    if (_pendingPatch) {
+      const p = _pendingPatch; _pendingPatch = null;
+      setState(p); // relance une seule fois avec l'état accumulé
+    }
   }
   function subscribe(fn) { subs.add(fn); return () => subs.delete(fn); }
 
