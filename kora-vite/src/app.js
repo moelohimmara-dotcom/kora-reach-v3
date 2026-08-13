@@ -1239,23 +1239,25 @@ function render() {
   const cs = document.getElementById("cockpitSeed");
   if (cs) cs.onclick = () => Store.seed();
   // Verrou visuel : on ne peut PAS relancer un cycle tant que le précédent n'est pas fini.
+  const busy = !!s.ui.busy;
   const tc = document.getElementById("topbarCycle");
   if (tc) {
-    tc.disabled = !!s.ui.busy;
+    tc.disabled = busy;
     const lbl = tc.querySelector(".topbar-cta-label");
-    if (lbl) lbl.textContent = s.ui.busy ? "En cours…" : "Lancer un cycle";
+    if (lbl) lbl.textContent = busy ? "En cours…" : "Lancer un cycle";
   }
+  document.querySelectorAll('[data-action="cycle-force"]').forEach(el => { el.disabled = busy; });
   const fabCycle = document.querySelector('.fab-action[data-act="cycle"]');
-  if (fabCycle) fabCycle.style.pointerEvents = s.ui.busy ? "none" : "";
+  if (fabCycle) { fabCycle.style.pointerEvents = busy ? "none" : ""; fabCycle.classList.toggle("disabled", busy); }
   // État de vérité du système dans la barre de statut (prêt / en cours / erreur)
   const am = document.getElementById("agentMode");
   if (am) {
-    if (s.ui.busy) am.textContent = "en cours";
+    if (busy) am.textContent = "en cours";
     else if (s.health && s.health.status === "error") am.textContent = "erreur";
     else am.textContent = "prêt";
   }
   const amDot = document.querySelector("#agentStatus .dot");
-  if (amDot) amDot.className = "dot " + (s.ui.busy ? "dot-busy" : (s.health && s.health.status === "error" ? "dot-err" : "dot-ok"));
+  if (amDot) amDot.className = "dot " + (busy ? "dot-busy" : (s.health && s.health.status === "error" ? "dot-err" : "dot-ok"));
   const gl = document.getElementById("globalLoader");
   if (gl) {
     const t = document.getElementById("globalLoaderText");
