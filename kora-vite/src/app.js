@@ -1702,7 +1702,6 @@ function bind() {
   Store.loadTrash().catch(() => {});  // corbeille
   Store.loadUsers().catch(() => {});  // peupler la liste des comptes (si session)
   Store.startAutoRefresh(30000);  // auto-refresh cockpit every 30s
-  bind();
 }
 
 // ---- Écrans d'authentification (overlay plein écran) ----
