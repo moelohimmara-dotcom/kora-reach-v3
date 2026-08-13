@@ -1290,6 +1290,22 @@ function render() {
   $$('.navitem[data-route="settings"]').forEach(n => { n.hidden = !isAdvanced; });
   const bnav = document.querySelector('.bottomnav [data-route="settings"]');
   if (bnav) bnav.hidden = !isAdvanced;
+  // Badges de compteur sur la navigation (Articles / Sources / Brouillons / Corbeille)
+  try {
+    const facts = s.facts || [];
+    const badges = {
+      facts: facts.length,
+      sources: (s.sources || []).length,
+      drafts: facts.filter(f => (f.status || "") === "EDITED").length,
+      trash: (s.trash || []).length || facts.filter(f => (f.status || "") === "DELETED").length,
+    };
+    document.querySelectorAll("[data-badge]").forEach(el => {
+      const key = el.getAttribute("data-badge");
+      const v = badges[key] || 0;
+      el.textContent = v > 0 ? String(v) : "";
+      el.classList.toggle("show", v > 0);
+    });
+  } catch (e) { console.error("badges", e); }
   const curTheme = Store.getTheme();
   $$("[data-theme-btn]").forEach(n => n.classList.toggle("active", n.dataset.themeBtn === curTheme));
   const sa = document.getElementById("stateAction");
