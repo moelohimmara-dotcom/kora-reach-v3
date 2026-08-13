@@ -62,6 +62,8 @@ export const SHELL = `
       <button class="right-drawer-close" id="rightDrawerClose" aria-label="Fermer">${ic("i-chevron")}</button>
     </div>
     <div class="right-drawer-body">
+      <button class="navitem" data-route="audit"><svg class="ic"><use href="#i-check"/></svg><span>Historique</span></button>
+      <button class="navitem" data-route="drafts"><svg class="ic"><use href="#i-edit"/></svg><span>Brouillons</span></button>
       <button class="navitem" data-route="trash"><svg class="ic"><use href="#i-trash"/></svg><span>Corbeille</span></button>
       <button class="navitem" data-route="settings"><svg class="ic"><use href="#i-settings"/></svg><span>Paramètres</span></button>
     </div>
@@ -75,11 +77,7 @@ export const SHELL = `
   <nav class="bottomnav" id="bottomnav">
     <button class="navitem" data-route="cockpit"><svg class="ic"><use href="#i-dashboard"/></svg><span>Tableau</span></button>
     <button class="navitem" data-route="facts"><svg class="ic"><use href="#i-facts"/></svg><span>Articles</span></button>
-    <button class="navitem" data-route="audit"><svg class="ic"><use href="#i-check"/></svg><span>Historique</span></button>
-    <button class="navitem" data-route="drafts"><svg class="ic"><use href="#i-edit"/></svg><span>Brouillons</span></button>
     <button class="navitem" data-route="sources"><svg class="ic"><use href="#i-sources"/></svg><span>Sources</span></button>
-    <button class="navitem navitem-secondary" data-route="trash"><svg class="ic"><use href="#i-trash"/></svg><span>Corbeille</span></button>
-    <button class="navitem navitem-secondary" data-route="settings"><svg class="ic"><use href="#i-settings"/></svg><span>Paramètres</span></button>
     <button class="navitem navitem-center" data-plus><svg class="ic"><use href="#i-more"/></svg><span>Plus</span></button>
   </nav>
 
