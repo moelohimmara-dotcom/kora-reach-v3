@@ -1698,7 +1698,7 @@ function boot() {
       });
     }
   });
-  const r = location.pathname.split("/")[1] || "cockpit";
+  const r = (location.pathname.replace(/^\/kora-v2/, "") || "/").split("/")[1] || "cockpit";
   if (Store.state.route !== r) Store.state.route = r;
   Store.loadHealth();
   Store.loadSettings();

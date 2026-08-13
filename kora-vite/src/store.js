@@ -103,6 +103,8 @@ export const Store = (() => {
     } catch (e) {
       console.warn("[auth] /api/auth/me a échoué, session conservée :", e.message);
       return false;
+    } finally {
+      _checking = false;
     }
     setState({ auth: { loggedIn: false, username: null, email: null, role: null } });
     return false;
