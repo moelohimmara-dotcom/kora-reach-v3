@@ -101,7 +101,7 @@
   --sheet-action-bg: var(--neu-base);
 
   /* ---- BACKGROUND / NEU (pas de gradient glass — fond plat commun) ---- */
-  --bg-grad: var(--neu-base);
+  --bg-grad: #12151A;
   --bg-blob1: transparent;
   --bg-blob2: transparent;
   --bg-blob3: transparent;
@@ -441,7 +441,7 @@
 .sheet[hidden], .sheet-scrim[hidden] { display: none !important; pointer-events: none !important; }
 html, body { height: 100%; }
 body {
-  font-family: var(--font); background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface);
+  font-family: var(--font); background: #12151A; color: var(--md-sys-color-on-surface);
   font-size: var(--t-body); line-height: 1.55; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
   overflow-x: hidden;
 }
@@ -1733,7 +1733,7 @@ html.icons-ready .material-icons { visibility: visible; }
 .decision-l { font-size: 11.5px; color: var(--on-soft); margin-top: 2px; }
 
 /* COLLAPSED : rail replié en icônes seules (transition fluide de largeur) */
-.rail { transition: width var(--dur-med, 250ms) cubic-bezier(.2,0,0,1); }
+.rail { transition: width var(--dur-med, 250ms) cubic-bezier(.2,0,0,1); background: #12151A; }
 :root[data-rail="collapsed"] .rail { width: 76px; }
 :root[data-rail="collapsed"] .rail-head { justify-content: center; padding: 4px 0 14px; }
 :root[data-rail="collapsed"] .rail-mark { margin: 0; }
