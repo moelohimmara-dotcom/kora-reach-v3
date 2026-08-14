@@ -1,5 +1,4 @@
 import "./style.css";
-import { mountSprite } from "./icons.js";
 import { SHELL } from "./shell.js";
 import { Store } from "./store.js";
 import { App } from "./app.js";
@@ -13,9 +12,6 @@ import "@fontsource/material-icons/400.css";
 if (document.adoptedStyleSheets) {
   document.adoptedStyleSheets.push(typescaleStyles.styleSheet);
 }
-
-mountSprite();
-
 window.addEventListener("error", (e) => {
   const v = document.getElementById("view");
   if (v) v.innerHTML = '<pre style="color:#F2A199;padding:20px;white-space:pre-wrap">ERREUR: ' + (e.message || e.error) + "\n" + (e.error && e.error.stack ? e.error.stack : "") + "</pre>";

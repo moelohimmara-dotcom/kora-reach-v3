@@ -17,6 +17,21 @@
       document.documentElement.setAttribute("data-theme", t);
     } catch (e) { document.documentElement.setAttribute("data-theme", "dark"); }
   })();
+  // Anti-FOUC icônes : on masque .material-icons (CSS) jusqu'à ce que la police
+  // Material Icons soit prête, pour éviter le flash de texte (ex: "visibility"
+  // sur l'œil du mot de passe). Révélé dès fonts.ready ou après 1500ms de sécu.
+  (function () {
+    var done = false;
+    function reveal() { if (!done) { done = true; document.documentElement.classList.add("icons-ready"); } }
+    if (document.fonts && document.fonts.load) {
+      Promise.race([
+        document.fonts.load('1em "Material Icons"').catch(function(){}),
+        new Promise(function(r){ setTimeout(r, 1500); })
+      ]).then(reveal);
+    } else { reveal(); }
+    // Sécurité absolue : si fonts.ready ne se déclenche pas, on révèle après 2s.
+    setTimeout(reveal, 2000);
+  })();
 </script>
 </head>
 <body>

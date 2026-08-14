@@ -499,6 +499,13 @@ button:disabled > .ic { color: var(--icon-color-disabled); opacity: .55; }
   -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
   font-size: 22px; width: auto; height: auto; vertical-align: middle;
 }
+/* Anti-FOUC icônes : on masque les <span class="material-icons"> tant que la
+   police Material Icons n'est pas chargée. Sinon, au 1er paint, le navigateur
+   affiche le TEXTE de l'icône (ex: "visibility" sur le œil du mot de passe)
+   puis la police se charge -> flash. On révèle via la classe .icons-ready
+   posée sur <html> dès que la police est prête (ou après 1500ms de sécurité). */
+.material-icons { visibility: hidden; }
+html.icons-ready .material-icons { visibility: visible; }
 .material-icons.ic-s { font-size: 15px; }
 .material-icons.ic-l { font-size: 24px; }
 .rail .navitem .material-icons { font-size: 22px; }
