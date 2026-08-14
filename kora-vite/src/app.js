@@ -77,6 +77,81 @@ function statusBadge(st) {
   return `<span class="badge ${k}">${t}</span>`;
 }
 
+// ============================================================================
+// GRAPHIQUE D'ÉVOLUTION (SVG inline, zéro dépendance)
+// Source : s.audit.days (get_daily) -> volume d'activité + décisions par jour.
+// Interactif : hover sur un point = tooltip ; légende cliquable = toggle série.
+// ============================================================================
+function evolutionChart(s) {
+  const days = (s.audit && s.audit.days) ? s.audit.days.slice() : [];
+  if (!days.length) return `<div class="ev-chart empty">Aucune activité enregistrée</div>`;
+  // Ordre chronologique (ancien -> récent) sur l'axe X
+  const ordered = days.slice().reverse();
+  const n = ordered.length;
+  const W = 640, H = 240, padX = 38, padY = 28;
+  const innerW = W - padX * 2, innerH = H - padY * 2;
+
+  // Séries : total (aire) + décisions clés
+  const seriesDef = [
+    { key: "TOTAL", color: "var(--coral)", fill: true, get: d => d.count },
+    { key: "APPROUVE", color: "var(--news)", get: d => d.counters.APPROUVE || 0 },
+    { key: "REJETE", color: "var(--alert)", get: d => d.counters.REJETE || 0 },
+    { key: "MODIFIE", color: "var(--signal)", get: d => d.counters.MODIFIE || 0 },
+  ];
+  const maxY = Math.max(1, ...seriesDef.flatMap(se => ordered.map(se.get)));
+
+  const x = i => padX + (n === 1 ? innerW / 2 : (i * innerW) / (n - 1));
+  const y = v => padY + innerH - (v / maxY) * innerH;
+
+  // Grille horizontale (4 niveaux)
+  let grid = "";
+  for (let g = 0; g <= 4; g++) {
+    const gy = padY + (innerH * g) / 4;
+    const val = Math.round((maxY * (4 - g)) / 4);
+    grid += `<line x1="${padX}" y1="${gy}" x2="${W - padX}" y2="${gy}" class="ev-grid"/>`;
+    grid += `<text x="${padX - 6}" y="${gy + 4}" class="ev-axis-y">${val}</text>`;
+  }
+
+  // Axe X : labels de jours
+  let xlabels = "";
+  ordered.forEach((d, i) => {
+    const lbl = d.label && d.label.length > 10 ? d.label.slice(0, 6) : (d.label || "");
+    xlabels += `<text x="${x(i)}" y="${H - padY + 16}" class="ev-axis-x">${esc(lbl)}</text>`;
+  });
+
+  // Paths par série
+  let paths = "", dots = "";
+  seriesDef.forEach(se => {
+    const pts = ordered.map((d, i) => [x(i), y(se.get(d))]);
+    const line = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+    const area = se.fill ? `<path d="${line} L ${x(n - 1).toFixed(1)} ${padY + innerH} L ${x(0).toFixed(1)} ${padY + innerH} Z" class="ev-area" style="fill:${se.color}"/>` : "";
+    paths += `${area}<path d="${line}" class="ev-line ev-series ev-${se.key}" style="stroke:${se.color}" data-series="${se.key}"/>`;
+    pts.forEach((p, i) => {
+      const d = ordered[i];
+      const vals = seriesDef.map(s2 => `${s2.key}:${s2.get(d)}`).join(" · ");
+      dots += `<circle class="ev-dot ev-series ev-${se.key}" data-series="${se.key}" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.5" data-date="${esc(d.label)}" data-vals="${esc(vals)}"/>`;
+    });
+  });
+
+  const legend = seriesDef.map(se =>
+    `<button class="ev-legend-item" data-toggle="${se.key}"><span class="ev-swatch" style="background:${se.color}"></span>${se.key === "TOTAL" ? "Total" : (se.key === "APPROUVE" ? "Approuvé" : se.key === "REJETE" ? "Rejeté" : "Modifié")}</button>`
+  ).join("");
+
+  return `
+    <section class="ev-chart kora-wire" aria-label="Graphique d'évolution de l'activité">
+      <div class="ev-head">
+        <h2 class="section-title">Évolution de l'activité</h2>
+        <div class="ev-legend">${legend}</div>
+      </div>
+      <div class="ev-plot">
+        <svg viewBox="0 0 ${W} ${H}" class="ev-svg" preserveAspectRatio="none" role="img">
+          ${grid}${xlabels}${paths}${dots}
+        </svg>
+        <div class="ev-tooltip" id="evTooltip" hidden></div>
+      </div>
+    </section>`;
+}
+
 function viewCockpit(s) {
   const facts = s.facts || [];
   const totalRaw = facts.length;
@@ -115,6 +190,9 @@ function viewCockpit(s) {
         ${statCard({ icon: "i-trash", value: trash, label: "Corbeille", variant: "tertiary", onClick: "nav-trash", loading: s.ui?.loading && trash === 0 })}
         ${statCard({ icon: "i-close", value: deleted, label: "Supprimés", variant: "muted", onClick: "nav-deleted", loading: s.ui?.loading && deleted === 0 })}
       </div>
+
+      <!-- GRAPHIQUE D'ÉVOLUTION : activité + décisions par jour -->
+      ${evolutionChart(s)}
 
       <!-- ROW 2 : System Health + Sources + Cycle Control -->
       <div class="cockpit-grid system-row">
@@ -1779,6 +1857,40 @@ function bind() {
       else if (action === "nav-drafts") { Store.setFactFilter("EDITED"); navigate("facts"); }
       else if (action === "nav-trash") { navigate("trash"); }
       else if (action === "nav-deleted") { navigate("audit"); }
+    });
+
+    // Graphique d'évolution : toggle de série via la légende
+    document.addEventListener("click", (e) => {
+      const leg = e.target.closest("[data-toggle]");
+      if (!leg) return;
+      const key = leg.dataset.toggle;
+      const svg = leg.closest(".ev-chart")?.querySelector(".ev-svg");
+      if (!svg) return;
+      const hidden = svg.classList.toggle("ev-hide-" + key);
+      leg.classList.toggle("off", hidden);
+    });
+
+    // Graphique d'évolution : tooltip au survol d'un point
+    document.addEventListener("mouseover", (e) => {
+      const dot = e.target.closest(".ev-dot");
+      if (!dot) return;
+      const tip = document.getElementById("evTooltip");
+      if (!tip) return;
+      tip.innerHTML = `<strong>${dot.dataset.date}</strong><br>${dot.dataset.vals}`;
+      tip.hidden = false;
+      const plot = dot.closest(".ev-plot");
+      if (plot) {
+        const r = plot.getBoundingClientRect();
+        const dr = dot.getBoundingClientRect();
+        tip.style.left = (dr.left - r.left + 12) + "px";
+        tip.style.top = (dr.top - r.top - 8) + "px";
+      }
+    });
+    document.addEventListener("mouseout", (e) => {
+      if (e.target.closest(".ev-dot")) {
+        const tip = document.getElementById("evTooltip");
+        if (tip) tip.hidden = true;
+      }
     });
 
     // SourceChip clicks -> open the Sources page (demande : bulle directement reliée à la page Sources)
