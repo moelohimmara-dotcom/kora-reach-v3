@@ -1387,7 +1387,10 @@ function render() {
     if (!_authRendered) { renderAuth("login"); }
     return;
   }
-  _authRendered = false; // reconnecté : permttre un futur ré-affichage propre
+  // Session confirmee (login ou reload avec cookie valide) : on masque l'overlay
+  // d'auth et on reaffiche l'app. Sans ca, l'overlay login reste au-dessus de
+  // l'app apres un refresh (bug : redirige vers login a chaque reload).
+  showApp();
   const agent = document.getElementById("agentStatus");
   if (agent) agent.innerHTML = s.ui.busy
     ? `<span class="dot dot-busy"></span><span>${s.ui.overlay || "Agent occupé…"}</span>`
