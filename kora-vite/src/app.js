@@ -1496,10 +1496,12 @@ function render() {
   } catch (e) { console.error("selectBar", e); }
   // Corbeille : boutons restaurer / supprimer définitivement
   try {
-    document.querySelectorAll("[data-restore]").forEach(b => b.onclick = () => {
+    document.querySelectorAll("[data-restore]").forEach(b => b.onclick = (e) => {
+      e.preventDefault(); e.stopPropagation();
       Store.restoreFact(b.dataset.restore).then(() => snack("Restauré")).catch(e => snack("Erreur : " + e.message));
     });
-    document.querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
+    document.querySelectorAll("[data-del]").forEach(b => b.onclick = (e) => {
+      e.preventDefault(); e.stopPropagation();
       if (!window.confirm("Supprimer définitivement cet article ? Irréversible.")) return;
       Store.deleteForever([b.dataset.del]).then(r => snack(`${r.deleted || 0} supprimé(s)`)).catch(e => snack("Erreur : " + e.message));
     });
@@ -1591,8 +1593,14 @@ function openFact(id) {
 }
 function bind() {
   document.addEventListener("click", (e) => {
+    // Ne pas ouvrir le tiroir detail si le clic vient d'un bouton d'action
+    // (Restaurer / Supprimer / Selection) ou d'une carte de la corbeille :
+    // dans la corbeille, les seules actions valides sont Restaurer/Supprimer,
+    // jamais "ouvrir l'article en entier" (evite le bug ou un Supprimer ouvrait la fiche).
+    if (e.target.closest("button, a, input, [data-restore], [data-del]")) return;
     const card = e.target.closest(".fact-card");
     if (!card) return;
+    if (card.classList.contains("trash-card")) return; // corbeille : pas d'ouverture de fiche
     // En mode sélection, le clic sur la carte (ou sa case) ne doit PAS ouvrir le tiroir.
     if (Store.state.selectMode) { e.stopPropagation(); return; }
     e.stopPropagation();
