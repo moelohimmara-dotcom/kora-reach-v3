@@ -79,11 +79,14 @@ function statusBadge(st) {
 
 function viewCockpit(s) {
   const facts = s.facts || [];
-  const total = facts.length;
+  const totalRaw = facts.length;
   // B+C : catégorisation EXCLUSIVE (même source de vérité que la page Articles)
   const cat = { pending: 0, transmitted: 0, rejected: 0, drafts: 0, trash: 0 };
   for (const ft of facts) cat[factCategory(s, ft)]++;
-  const approved = cat.transmitted;   // APPROVED/TRANSMITTED = validés
+  // Option C (2026-08-14) : 'Articles' = faits réellement en circulation
+  // (hors corbeille et hors rejetés). Le total brut reste disponible en base.
+  const total = cat.pending + cat.transmitted + cat.drafts;
+  const approved = (typeof s.publishedCount === "number") ? s.publishedCount : cat.transmitted;
   const pending = cat.pending;        // en attente PURE (hors brouillons/déjà traités)
   const draft = cat.drafts;
   const health = s.health;

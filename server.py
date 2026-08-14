@@ -26,6 +26,7 @@ from hitl_store import (
     mark_transmitted, mark_transmission_failed, retract,
     upsert_fact, list_facts, get_fact,
     trash_facts, restore_fact, delete_facts, list_trashed, purge_trashed,
+    count_published, cleanup_orphan_decisions,
 )
 import transmit
 import writer
@@ -205,8 +206,13 @@ class Handler(BaseHTTPRequestHandler):
             # Auth requis : un normal peut lire pour valider, un anonyme non.
             if not self._require_auth():
                 return
+            try:
+                cleanup_orphan_decisions()
+            except Exception:
+                pass
             out = list_facts()
-            return self._send(200, out)
+            published = count_published()
+            return self._send(200, {"facts": out, "published_count": published})
         if path == "/api/hitl/trash":
             # Corbeille (GET) — liste des éléments en attente de restauration (11j)
             if not self._require_auth():

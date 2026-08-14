@@ -499,3 +499,39 @@ def purge_trashed(days: int = TRASH_RETENTION_DAYS) -> int:
         audit.log(None, "PURGE_TRASH", f"{len(ids)} element(s) corbeille > {days}j supprime(s)",
                   action="PURGE", editor="system")
     return len(ids)
+
+
+def count_published() -> int:
+    """Compte les articles RÉELLEMENT publiés (table `articles`, status='published').
+    Sert à réconcilier le compteur 'Publiés' du dashboard avec la réalité."""
+    _init()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute("SELECT count(*) FROM articles WHERE status = 'published'")
+        row = cur.fetchone()
+        if row is None:
+            return 0
+        # sqlite -> tuple ; psycopg (RealDictCursor) -> dict
+        val = row[0] if isinstance(row, (tuple, list)) else list(row.values())[0]
+        return int(val or 0)
+    finally:
+        con.close()
+
+
+def cleanup_orphan_decisions() -> int:
+    """Supprime les décisions HITL orphelines (fact_id absent de hitl_facts).
+    Évite les stats fantômes dans le journal de décision."""
+    _init()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(
+            "DELETE FROM hitl_decisions "
+            "WHERE fact_id NOT IN (SELECT fact_id FROM hitl_facts)")
+        n = cur.rowcount
+        con.commit()
+        return int(n or 0)
+    finally:
+        con.close()
+
