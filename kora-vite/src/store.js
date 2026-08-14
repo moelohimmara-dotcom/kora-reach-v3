@@ -20,7 +20,7 @@ export const Store = (() => {
     trash: [],
     selection: {},        // { fact_id: true } — sélection multiple
     selectMode: false,    // mode sélection activé
-    auth: { loggedIn: false, username: null, email: null },
+    auth: { loggedIn: false, username: null, email: null, pending: true },
   };
 
   const subs = new Set();
@@ -89,10 +89,14 @@ export const Store = (() => {
   async function checkAuth() {
     if (_checking) return false; // idempotent : évite la boucle render->checkAuth->render
     _checking = true;
+    // pending=true : la verification est en cours -> l'UI ne doit PAS afficher
+    // le formulaire de login (evite le flash login au reload). On le masque
+    // tant que l'issue n'est pas connue.
+    setState({ auth: Object.assign({}, state.auth, { pending: true }) });
     try {
       const r = await api("/api/auth/me");
       if (r.ok) {
-        const next = { loggedIn: true, username: r.username, email: r.email, role: r.role || "normal" };
+        const next = { loggedIn: true, username: r.username, email: r.email, role: r.role || "normal", pending: false };
         // Ne pas notifier si identique (évite render->checkAuth->render)
         const a = state.auth || {};
         if (!a.loggedIn || a.username !== next.username || a.role !== next.role) {
@@ -107,7 +111,7 @@ export const Store = (() => {
     } finally {
       _checking = false;
     }
-    setState({ auth: { loggedIn: false, username: null, email: null, role: null } });
+    setState({ auth: { loggedIn: false, username: null, email: null, role: null, pending: false } });
     return false;
   }
   async function login(username, password) {
