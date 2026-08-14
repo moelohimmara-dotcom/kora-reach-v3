@@ -92,25 +92,17 @@ function viewCockpit(s) {
   const lastCycle = s.lastCycle;
 
   return `
-    <div class="cockpit">
-      <div class="cockpit-header">
-        <div>
-          <h1 class="cockpit-title">Tableau de bord</h1>
-          <p class="cockpit-sub">Supervision de l'agent Kora</p>
-        </div>
-        <div class="cockpit-header-actions">
-          <button class="btn btn-tonal btn-sm" id="btnRefresh" aria-label="Rafraîchir" data-action="refresh">
-            <span class="material-icons" style="font-size:18px;vertical-align:middle">refresh</span>
-          </button>
-          <span class="last-refresh" id="lastRefresh">${s.ui?.lastRefresh ? new Date(s.ui.lastRefresh).toLocaleTimeString("fr-FR") : "—"}</span>
-        </div>
-      </div>
+    <div class="cockpit kora-wire">
+      <div class="decision-band" aria-hidden="true"></div>
 
-      <!-- ROW 1 : 4 StatCards cliquables -->
-      <div class="cockpit-grid stats-row">
+      <!-- HERO : le fact en attente de décision (cœur du produit) -->
+      ${heroFact(s, pending)}
+
+      <!-- STATS discrètes (bandeau, pas le hero template) -->
+      <div class="cockpit-grid stats-row kora-stats">
         ${statCard({ icon: "article", value: total, label: "Articles", variant: "primary", onClick: "nav-facts-all", loading: s.ui?.loading && total === 0 })}
-        ${statCard({ icon: "fact_check", value: approved, label: "Validés", variant: "success", onClick: "nav-facts-approved", loading: s.ui?.loading && approved === 0 })}
-        ${statCard({ icon: "schedule", value: pending, label: "En attente", variant: "warning", onClick: "nav-hitl", loading: s.ui?.loading && pending === 0 })}
+        ${statCard({ icon: "schedule", value: pending, label: "À décider", variant: "warning", onClick: "nav-hitl", loading: s.ui?.loading && pending === 0 })}
+        ${statCard({ icon: "fact_check", value: approved, label: "Publiés", variant: "success", onClick: "nav-facts-approved", loading: s.ui?.loading && approved === 0 })}
         ${statCard({ icon: "edit", value: draft, label: "Brouillons", variant: "info", onClick: "nav-drafts", loading: s.ui?.loading && draft === 0 })}
       </div>
 
@@ -125,8 +117,8 @@ function viewCockpit(s) {
           <div class="source-chips">
             ${sources.length ? (() => {
               // Guinee7 isolée en fin de liste (demande : séparée des autres sources)
-              const others = sources.filter(s => !/guin[ée]e?\s*7/i.test(s.name || s.id || ""));
-              const guinee7 = sources.filter(s => /guin[ée]e?\s*7/i.test(s.name || s.id || ""));
+              const others = sources.filter(s => !/guin[ée]e?\\s*7/i.test(s.name || s.id || ""));
+              const guinee7 = sources.filter(s => /guin[ée]e?\\s*7/i.test(s.name || s.id || ""));
               return [...others, ...guinee7].map(src => sourceStatusChip(src)).join("");
             })() : '<span class="source-chip empty">Aucune source</span>'}
           </div>
@@ -147,6 +139,63 @@ function viewCockpit(s) {
       </section>
     </div>
   `;
+}
+
+// HERO wire-desk : la carte fact en attente de décision la plus récente.
+// Fonction additive (n'écrase rien). Si aucun fact en attente, fallback sur le 1er fact.
+function heroFact(s, pendingCount) {
+  const facts = s.facts || [];
+  const waiting = facts.filter(f => factCategory(s, f) === "pending");
+  const f = waiting[0] || facts[0];
+  if (!f) return `
+    <div class="hero hero-empty kora-reveal">
+      <div class="hero-main">
+        <div class="eyebrow"><span class="dot" aria-hidden="true"></span>Poste de rédaction</div>
+        <h2 class="hero-title">Aucun article en attente</h2>
+        <p class="hero-sum">Le flux est à jour. Lance un cycle pour collecter de nouveaux faits.</p>
+      </div>
+    </div>`;
+  // Mapping des champs backend réels (champion.title / article / created_at / n_sources)
+  const champ = f.champion && typeof f.champion === "object" ? f.champion : {};
+  const title = (champ.title || (typeof f.article === "string" ? f.article.replace(/^#\s*/, "") : "") || "Sans titre").toString();
+  const summary = (typeof f.article === "string" ? f.article : (champ.body || "")).toString();
+  const fid = (f.fact_id || f.id || "?").toString();
+  const collected = f.created_at ? new Date(f.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—";
+  const nSrc = f.n_sources != null ? f.n_sources : 0;
+  const srcUrl = (champ.url || "").toString();
+  const srcDomain = srcUrl ? (() => { try { return new URL(srcUrl).hostname.replace(/^www\./, ""); } catch { return srcUrl; } })() : "";
+  const srcName = srcDomain || (nSrc > 0 ? `${nSrc} source${nSrc > 1 ? "s" : ""}` : "Source inconnue");
+  const cluster = f.cluster_id ? `cluster ${esc(f.cluster_id)}` : (nSrc > 0 ? `${nSrc} source${nSrc > 1 ? "s" : ""}` : "—");
+  const level = (f.source_level === "GN_NAT" || /guin[ée]e/i.test(srcName || srcUrl)) ? "Niveau 1 · Source guinéenne" : "Niveau 2 · International filtrée";
+  return `
+    <div class="hero kora-reveal" aria-label="Article en cours de décision">
+      <div class="hero-main">
+        <div class="hero-top">
+          <div class="eyebrow"><span class="dot" aria-hidden="true"></span>${pendingCount > 0 ? `${pendingCount} à décider` : "En attente de ta décision"}</div>
+          <button class="btn btn-tonal btn-sm hero-refresh" aria-label="Rafraîchir" data-action="refresh">
+            <span class="material-icons" style="font-size:18px;vertical-align:middle">refresh</span>
+          </button>
+        </div>
+        <h2 class="hero-title">${esc(title)}</h2>
+        <p class="hero-sum">${esc(summary.length > 220 ? summary.slice(0, 217) + "…" : summary)}</p>
+        <div class="hero-meta">
+          <span>fact <b>#${esc(fid)}</b></span>
+          <span>collecté <b>${esc(collected)}</b></span>
+          <span>${esc(cluster)}</span>
+        </div>
+        <div class="hero-actions">
+          <button class="btn btn-primary" data-decide="approve" data-fact="${esc(fid)}">Approuver</button>
+          <button class="btn" data-action="open-fact" data-fact="${esc(fid)}">Éditer</button>
+          <button class="btn btn-danger" data-decide="reject" data-fact="${esc(fid)}">Rejeter</button>
+          <button class="btn" data-decide="transmit" data-fact="${esc(fid)}">Transmettre</button>
+        </div>
+      </div>
+      <aside class="hero-side">
+        <span class="chip wait">● À décider</span>
+        <span class="chip src">⚑ ${esc(srcName)}</span>
+        <div class="src-meta"><b>${esc(level)}</b>${esc(srcName)} détectée sur le flux principal.</div>
+      </aside>
+    </div>`;
 }
 
 // ============================================================

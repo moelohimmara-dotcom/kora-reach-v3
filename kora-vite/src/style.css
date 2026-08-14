@@ -1612,3 +1612,74 @@ html.icons-ready .material-icons { visibility: visible; }
 .wm-kora { display: block; font-weight: 800; font-size: 2.7rem; letter-spacing: .5px; color: #111; }
 .wm-agent { display: block; font-weight: 300; font-size: 1.15rem; letter-spacing: .3px; color: #111; margin-left: 2px; }
 .wm-a { font-weight: 400; }
+
+/* ============================================================
+   KORA — RÉFONTE COCKPIT (wire desk) — ajout non destructif
+   Respecte : focus-visible global, prefers-reduced-motion,
+   tabular-nums sur chiffres, transition explicite (pas 'all')
+   ============================================================ */
+.kora-wire { position: relative; }
+/* Bandeau de décision (SIGNATURE) — fine barre corail à gauche du contenu */
+.decision-band {
+  position: absolute; left: -16px; top: 96px; width: 6px; height: 220px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, var(--coral), var(--bordeaux));
+  box-shadow: 0 0 16px rgba(255,107,74,.40);
+}
+/* HERO : carte fact en attente de décision */
+.hero {
+  display: grid; grid-template-columns: 1fr 220px; gap: 18px; align-items: stretch;
+  background: var(--md-sys-color-surface-container, var(--neu-base));
+  border: 1px solid var(--glass-border, transparent);
+  border-radius: 18px; padding: 22px; box-shadow: var(--neu-raised);
+  position: relative; overflow: hidden;
+}
+.hero-main { min-width: 0; }
+.hero-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.hero-refresh { flex: 0 0 auto; }
+.eyebrow {
+  font-family: var(--font-display, var(--font)); font-size: 11px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ambre, var(--coral)); display: flex; align-items: center; gap: 8px;
+}
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ambre, var(--coral));
+  animation: koraPulse 2.4s ease-in-out infinite; }
+@keyframes koraPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(230,192,121,.5); } 50% { box-shadow: 0 0 0 7px rgba(230,192,121,0); } }
+.hero-title {
+  font-family: var(--font-display, var(--font)); font-weight: 600; font-size: clamp(22px, 3vw, 30px);
+  line-height: 1.12; margin: 12px 0 10px; text-wrap: balance; color: var(--md-sys-color-on-surface);
+}
+.hero-sum { color: var(--on-surface-soft, var(--md-sys-color-on-surface-variant)); margin: 0 0 14px; max-width: 62ch; line-height: 1.55; }
+.hero-meta { font-family: var(--font); font-size: 12px; color: var(--md-sys-color-on-surface-variant);
+  display: flex; gap: 14px; flex-wrap: wrap; }
+.hero-meta b { color: var(--on-surface-soft, var(--md-sys-color-on-surface)); font-weight: 600; }
+.hero-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+.hero-side { border-left: 1px solid var(--glass-border, transparent); padding-left: 18px;
+  display: flex; flex-direction: column; gap: 14px; }
+.chip { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 600;
+  padding: 5px 10px; border-radius: var(--radius-pill); width: fit-content; }
+.chip.wait { background: rgba(230,192,121,.14); color: var(--ambre, var(--coral)); }
+.chip.src { background: rgba(155,196,184,.12); color: var(--sauge, var(--md-sys-color-tertiary)); }
+.src-meta { font-size: 12px; color: var(--md-sys-color-on-surface-variant); line-height: 1.5; }
+.src-meta b { color: var(--on-surface-soft, var(--md-sys-color-on-surface)); font-weight: 600; display: block; font-size: 13px; margin-bottom: 2px; }
+.hero-empty .hero-title { color: var(--md-sys-color-on-surface-variant); }
+
+/* Stats discrètes : on force tabular-nums (Vercel) */
+.kora-stats .stat-value { font-variant-numeric: tabular-nums; }
+
+/* Reveal orchestré (page load) — respecte prefers-reduced-motion */
+.kora-reveal { opacity: 0; transform: translateY(10px); animation: koraRise .5s ease forwards; }
+@keyframes koraRise { to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .kora-reveal { opacity: 1; transform: none; animation: none; }
+  .dot { animation: none; }
+  .decision-band { box-shadow: none; }
+}
+
+/* Responsive : hero empilé en colonne ≤680px ; bandeau = barre haute en mobile */
+@media (max-width: 680px) {
+  .hero { grid-template-columns: 1fr; }
+  .hero-side { border-left: none; padding-left: 0; border-top: 1px solid var(--glass-border, transparent); padding-top: 14px; }
+}
+@media (max-width: 819px) {
+  .decision-band { left: 0; top: 6px; width: 100%; height: 5px; }
+}
