@@ -1,0 +1,11 @@
+# kora-healthcheck.timer — sonde la santé toutes les 2 minutes
+[Unit]
+Description=KORA Reach — surveillance de santé (toutes les 2 min)
+
+[Timer]
+OnBootSec=60
+OnUnitActiveSec=120
+Persistent=true
+
+[Install]
+WantedBy=timers.target

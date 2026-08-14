@@ -1,0 +1,15 @@
+import { chromium } from 'playwright';
+const b = await chromium.launch({ executablePath: '/usr/bin/chromium', args: ['--no-sandbox'] });
+const p = await (await b.newContext()).newPage();
+await p.setViewportSize({ width: 1440, height: 900 });
+await p.goto('https://213-156-135-139.sslip.io/kora-v2/#cockpit', { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(()=>{});
+await p.waitForTimeout(2500);
+await p.fill('#authUser', 'admin').catch(()=>{});
+await p.fill('#authPass', process.env.KORA_TEST_PASS || 'CHANGE_ME').catch(()=>{});
+await p.click('#authSubmit').catch(()=>{});
+await p.waitForTimeout(4000);
+await p.screenshot({ path: process.env.HOME + '/kora_dashboard.png', fullPage: false });
+const len = await p.evaluate(() => document.getElementById('view')?.innerHTML.length || 0).catch(()=>0);
+console.log('VIEW_LEN', len);
+await b.close().catch(()=>{});
+process.exit(0);

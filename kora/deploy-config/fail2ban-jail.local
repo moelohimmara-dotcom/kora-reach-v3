@@ -1,0 +1,22 @@
+# fail2ban-jail.local — anti-bruteforce SSH + nginx
+# Install : cp vers /etc/fail2ban/jail.d/kora.local, systemctl restart fail2ban
+[DEFAULT]
+bantime = 1h
+findtime = 10m
+maxretry = 5
+banaction = ufw
+
+[sshd]
+enabled = true
+port = 22
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 3
+
+[nginx-limit-req]
+enabled = true
+filter = nginx-limit-req
+logpath = /var/log/nginx/error.log
+maxretry = 10
+findtime = 5m
+bantime = 30m
