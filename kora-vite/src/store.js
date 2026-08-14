@@ -322,10 +322,11 @@ export const Store = (() => {
         body: JSON.stringify({ fact_id: factId, decision, edited_text: editedText, decided_by: "chef_de_secteur" })
       });
       if (r.error) throw new Error(r.error);
-      // Rafraîchit facts + corbeille pour refléter la décision immédiatement
-      // (sinon l'article semble "ne rien faire" à l'écran).
+      // Rafraîchit facts + corbeille + stats (SSOT) pour refléter la décision immédiatement
+      // (sinon l'article semble "ne rien faire" à l'écran et les cartes restent figées).
       await loadHITL();
       try { await loadTrash(); } catch (_) {}
+      try { await loadStats(); } catch (_) {}
       setState({ ui: { ...state.ui, busy: false, overlay: null } });
     } catch (e) { setState({ ui: { ...state.ui, busy: false, overlay: null, error: e.message } }); }
   }
@@ -337,6 +338,7 @@ export const Store = (() => {
       const r = await api("/api/hitl/retract", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fact_id: factId }) });
       if (r.error) throw new Error(r.error);
       await loadHITL();
+      try { await loadStats(); } catch (_) {}
       setState({ ui: { ...state.ui, busy: false, overlay: null } });
     } catch (e) { setState({ ui: { ...state.ui, busy: false, overlay: null, error: e.message } }); }
   }
@@ -428,6 +430,7 @@ export const Store = (() => {
       });
       if (r.error) throw new Error(r.error);
       await loadHITL();
+      try { await loadStats(); } catch (_) {}
       setState({ selection: {}, selectMode: false, ui: { ...state.ui, busy: false, overlay: null } });
       return r;
     } catch (e) {
@@ -446,6 +449,7 @@ export const Store = (() => {
       if (r.error) throw new Error(r.error);
       await loadTrash();
       await loadHITL();
+      try { await loadStats(); } catch (_) {}
       setState({ ui: { ...state.ui, busy: false, overlay: null } });
       return r;
     } catch (e) {
@@ -464,6 +468,7 @@ export const Store = (() => {
       if (r.error) throw new Error(r.error);
       await loadTrash();
       await loadHITL();
+      try { await loadStats(); } catch (_) {}
       setState({ ui: { ...state.ui, busy: false, overlay: null } });
       return r;
     } catch (e) {
@@ -482,6 +487,7 @@ export const Store = (() => {
       });
       if (r.error) throw new Error(r.error);
       await loadHITL();
+      try { await loadStats(); } catch (_) {}
       setState({ ui: { ...state.ui, busy: false, overlay: null } });
       return r;
     } catch (e) {
@@ -494,6 +500,13 @@ export const Store = (() => {
     const r = await api("/api/hitl/trash");
     if (!r.error && r.items) setState({ trash: r.items });
     return r;
+  }
+
+  async function loadStats() {
+    // SSOT : rafraîchit les compteurs certifiés après toute mutation
+    // (sinon les cartes du dashboard restent figées jusqu'au prochain reload).
+    try { const st = await api("/api/stats"); if (st && !st.error) setState({ stats: st }); }
+    catch (_) {}
   }
 
   // ============================================================
