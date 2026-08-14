@@ -273,7 +273,15 @@ def decide(fact_id: str, decision: str, decided_by: str,
         # Miroir du statut dans hitl_facts : list_facts() priorise hitl_facts.status,
         # donc sans ça un fact EDITED/APPROVED/REJECTED/TRANSMITTED reste vu comme
         # PENDING_REVIEW (rebound via hitl_decisions) -> compteurs instables.
-        if decision in ("EDITED", "APPROVED", "REJECTED", "TRANSMITTED"):
+        if decision == "REJECTED":
+            # Rejeter = envoyer DIRECTEMENT en corbeille (demande utilisateur 2026-08-14).
+            # hitl_facts passe en TRASHED + trashed_at ; la décision HITL reste REJECTED
+            # (traçabilité : on distingue un rejet d'une suppression manuelle).
+            cur.execute(
+                f"UPDATE hitl_facts SET status='TRASHED', trashed_at={p} "
+                f"WHERE fact_id={p} AND status <> 'TRASHED'",
+                (now, fact_id))
+        elif decision in ("EDITED", "APPROVED", "TRANSMITTED"):
             cur.execute(f"UPDATE hitl_facts SET status={p} WHERE fact_id={p} AND status <> 'TRASHED'",
                         (decision, fact_id))
         con.commit()

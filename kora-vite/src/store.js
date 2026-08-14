@@ -320,7 +320,11 @@ export const Store = (() => {
         body: JSON.stringify({ fact_id: factId, decision, edited_text: editedText, decided_by: "chef_de_secteur" })
       });
       if (r.error) throw new Error(r.error);
-      setState({ decisions: { ...state.decisions, [factId]: decision }, ui: { ...state.ui, busy: false, overlay: null } });
+      // Rafraîchit facts + corbeille pour refléter la décision immédiatement
+      // (sinon l'article semble "ne rien faire" à l'écran).
+      await loadHITL();
+      try { await loadTrash(); } catch (_) {}
+      setState({ ui: { ...state.ui, busy: false, overlay: null } });
     } catch (e) { setState({ ui: { ...state.ui, busy: false, overlay: null, error: e.message } }); }
   }
 
@@ -505,7 +509,10 @@ export const Store = (() => {
       ]);
       const h = health.status === "fulfilled" ? health.value : null;
       const a = audit.status === "fulfilled" ? audit.value : { days: [], total: 0 };
-      const f = hitl.status === "fulfilled" ? hitl.value : [];
+      // /api/hitl renvoie {facts, published_count} (depuis 2026-08-14).
+      // Extractible pour rester compatible si un jour l'API renvoie un tableau.
+      const _hitl = hitl.status === "fulfilled" ? hitl.value : [];
+      const f = Array.isArray(_hitl) ? _hitl : (_hitl.facts || []);
       const s = sources.status === "fulfilled" ? sources.value : [];
       
       // decisions map pour filtres (source unique de vérité)
