@@ -1383,7 +1383,10 @@ function render() {
   // immédiatement à l'écran d'authentification, sans laisser l'app visible.
   // IMPORTANT: on ne reconstruit le formulaire qu'une SEULE fois (sinon chaque
   // setState détruit les champs en cours de saisie et le focus).
+  // Si la verification est EN COURS (pending), on n'affiche RIEN (pas de flash
+  // login au reload) : on attend l'issue de checkAuth() avant de trancher.
   if (!s.auth || !s.auth.loggedIn) {
+    if (s.auth && s.auth.pending) { return; } // verification en cours -> pas de login
     if (!_authRendered) { renderAuth("login"); }
     return;
   }
