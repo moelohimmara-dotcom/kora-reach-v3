@@ -527,6 +527,44 @@ def count_published() -> int:
         con.close()
 
 
+def count_rejected() -> int:
+    """Compte les articles REJETÉS (en corbeille via décision HITL REJECTED).
+    Utilisé par le dashboard pour distinguer 'rejeté' de 'corbeille manuelle'."""
+    _init()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(
+            "SELECT count(*) FROM hitl_facts f "
+            "JOIN hitl_decisions d ON d.fact_id = f.fact_id "
+            "WHERE f.status = 'TRASHED' AND d.status = 'REJECTED'")
+        row = cur.fetchone()
+        if row is None:
+            return 0
+        val = row[0] if isinstance(row, (tuple, list)) else list(row.values())[0]
+        return int(val or 0)
+    finally:
+        con.close()
+
+
+def count_deleted() -> int:
+    """Compte les articles DÉFINITIVEMENT SUPPRIMÉS (poubelle vidée / purge).
+    Source : journal d'audit (action SUPPRIME ou PURGE)."""
+    _init()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(
+            "SELECT count(*) FROM audit_events WHERE action IN ('SUPPRIME', 'PURGE')")
+        row = cur.fetchone()
+        if row is None:
+            return 0
+        val = row[0] if isinstance(row, (tuple, list)) else list(row.values())[0]
+        return int(val or 0)
+    finally:
+        con.close()
+
+
 def cleanup_orphan_decisions() -> int:
     """Supprime les décisions HITL orphelines (fact_id absent de hitl_facts).
     Évite les stats fantômes dans le journal de décision."""

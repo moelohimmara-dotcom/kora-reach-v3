@@ -1249,6 +1249,12 @@ html.icons-ready .material-icons { visibility: visible; }
 .stat-card.stat-success .stat-icon { color: var(--md-sys-color-tertiary); }
 .stat-card.stat-warning .stat-icon { color: var(--md-sys-color-secondary); }
 .stat-card.stat-info .stat-icon { color: var(--md-sys-color-primary); }
+.stat-card.stat-danger .stat-icon { color: var(--alert); }
+.stat-card.stat-tertiary .stat-icon { color: var(--news); }
+.stat-card.stat-muted .stat-icon { color: var(--muted-2, #8a93a3); }
+.stat-card.stat-danger { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--alert) 22%, transparent); }
+.stat-card.stat-tertiary { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--news) 22%, transparent); }
+.stat-card.stat-muted { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--muted-2, #8a93a3) 20%, transparent); }
 
 /* System Health Pill */
 .system-section { background: var(--neu-base); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-border-strong); border-radius: var(--radius-lg); padding: var(--space-4); box-shadow: var(--glass-shadow); }
