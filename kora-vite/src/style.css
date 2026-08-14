@@ -622,6 +622,7 @@ html.icons-ready .material-icons { visibility: visible; }
 .filter-pill:hover { background: var(--glass-bg-hover); color: var(--md-sys-color-on-surface); }
 .filter-pill.active { background: linear-gradient(135deg, var(--coral), var(--bordeaux)); color: #20100B; border-color: transparent; box-shadow: var(--glass-glow); }
 .filter-pill .pill-n { font-size: .8rem; opacity: .8; font-weight: 800; }
+.filter-note { margin: -8px 0 18px; font-size: var(--t-label-xs); color: var(--md-sys-color-on-surface-variant); opacity: .72; line-height: 1.4; }
 .fact-group { margin-bottom: var(--space-6); }
 .group-head { display: flex; align-items: center; gap: 11px; margin: 0 0 14px; }
 .group-ic { width: 34px; height: 34px; border-radius: var(--radius-sm); display: grid; place-items: center; background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }

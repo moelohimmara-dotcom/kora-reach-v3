@@ -80,9 +80,12 @@ function statusBadge(st) {
 function viewCockpit(s) {
   const facts = s.facts || [];
   const total = facts.length;
-  const approved = facts.filter(f => (s.decisions[f.fact_id] || f.status) === "APPROVED").length;
-  const pending = facts.filter(f => (s.decisions[f.fact_id] || f.status || "PENDING_REVIEW") === "PENDING_REVIEW").length;
-  const draft = facts.filter(f => (s.decisions[f.fact_id] || f.status || "PENDING_REVIEW") === "EDITED").length;
+  // B+C : catégorisation EXCLUSIVE (même source de vérité que la page Articles)
+  const cat = { pending: 0, transmitted: 0, rejected: 0, draft: 0, trash: 0 };
+  for (const ft of facts) cat[factCategory(s, ft)]++;
+  const approved = cat.transmitted;   // APPROVED/TRANSMITTED = validés
+  const pending = cat.pending;        // en attente PURE (hors brouillons/déjà traités)
+  const draft = cat.draft;
   const health = s.health;
   const audit = s.audit;
   const sources = s.sources || [];
@@ -407,39 +410,46 @@ function viewDrafts(s) {
     ${toolbar}
     <div class="fact-grid">${cells}</div>`;
 }
+// B+C : catégorie EXCLUSIVE d'un fact (1 seule catégorie, priorité stricte).
+// Garantit que les filtres du Tableau de bord / Articles sont mutuellement
+// exclusifs et que leur somme égale exactement le total (plus de chevauchement
+// "en attente" vs "brouillon").
+function factCategory(s, f) {
+  // Corbeille : priorité ABSOLUE, basée sur le statut réel de la base
+  // (status TRASHED ou trashed_at), indépendamment de la décision HITL
+  // (un fact remis en attente mais toujours à la corbeille reste "Corbeille").
+  if ((f.trashed_at && f.trashed_at !== "") || f.status === "TRASHED") return "trash";
+  const st = s.decisions[f.fact_id] || f.status || "PENDING_REVIEW";
+  if (st === "TRANSMITTED" || st === "APPROVED") return "transmitted";
+  if (st === "REJECTED") return "rejected";
+  if (st === "EDITED") return "draft";
+  return "pending";
+}
 function viewFacts(s) {
   const facts = s.facts || [];
-  const counts = {
-    all: facts.length,
-    pending: facts.filter(f => { const d = s.decisions[f.fact_id]; return (d || f.status || "PENDING_REVIEW") === "PENDING_REVIEW"; }).length,
-    transmitted: facts.filter(f => (s.decisions[f.fact_id] || f.status) === "TRANSMITTED").length,
-    rejected: facts.filter(f => (s.decisions[f.fact_id] || f.status) === "REJECTED").length,
-    drafts: facts.filter(f => (s.decisions[f.fact_id] || f.status) === "EDITED").length,
-  };
+  // B+C : catégorisation EXCLUSIVE (chaque fact -> 1 seule catégorie)
+  const counts = { all: 0, pending: 0, transmitted: 0, rejected: 0, drafts: 0, trash: 0 };
+  for (const ft of facts) counts[factCategory(s, ft)]++;
+  counts.all = counts.pending + counts.transmitted + counts.rejected + counts.drafts + counts.trash;
   const f = (Store.getFactFilter() || "all").toLowerCase();
   if (!facts.length) return (s.lastCycle && s.lastCycle.result && s.lastCycle.result.status === "empty_or_stale") ? staleBox(s) : stateBox("i-check", "Aucun article à afficher", "Lance un cycle ou génère une démo pour générer des articles à valider.", false, "Générer démo", () => Store.seed());
   const filters = [
     ["all", "Tous", counts.all], ["pending", "En attente", counts.pending],
     ["transmitted", "Transmis", counts.transmitted], ["rejected", "Rejetés", counts.rejected],
-    ["drafts", "Brouillons", counts.drafts],
+    ["drafts", "Brouillons", counts.drafts], ["trash", "Corbeille", counts.trash],
   ];
   const filterBar = `<div class="filter-bar">${filters.map(([k, lab, n]) =>
     `<button class="filter-pill ${f === k ? "active" : ""}" data-fact-filter="${k}">${lab} <span class="pill-n">${n}</span></button>`).join("")}</div>
+    <p class="filter-note">Chaque article compte dans une seule catégorie — la somme des filtres égale le total (${counts.all}).</p>
     <div class="toolbar-row">
       <button class="btn btn-tonal" id="enterSelect">${s.selectMode ? "Annuler la sélection" : "Sélectionner"}</button>
     </div>`;
   let body;
-  const statusOf = (fact) => { const d = s.decisions[fact.fact_id]; return (d || fact.status || "PENDING_REVIEW"); };
+  // B+C : filtrage par catégorie EXCLUSIVE (même source de vérité que les compteurs)
   if (f === "all") {
     body = factGroupsByDay(facts, s);
-  } else if (f === "pending") {
-    body = factGroupsByDay(facts.filter(x => statusOf(x) === "PENDING_REVIEW"), s);
-  } else if (f === "transmitted") {
-    body = factGroupsByDay(facts.filter(x => statusOf(x) === "TRANSMITTED"), s);
-  } else if (f === "rejected") {
-    body = factGroupsByDay(facts.filter(x => statusOf(x) === "REJECTED"), s);
-  } else if (f === "drafts") {
-    body = factGroupsByDay(facts.filter(x => statusOf(x) === "EDITED"), s);
+  } else if (["pending", "transmitted", "rejected", "draft", "trash"].includes(f)) {
+    body = factGroupsByDay(facts.filter(x => factCategory(s, x) === f), s);
   } else {
     body = factGroupsByDay(facts, s);
   }
