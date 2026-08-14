@@ -173,7 +173,7 @@ function heroFact(s, pendingCount) {
         <div class="hero-top">
           <div class="eyebrow"><span class="dot" aria-hidden="true"></span>${pendingCount > 0 ? `${pendingCount} à décider` : "En attente de ta décision"}</div>
           <button class="btn btn-tonal btn-sm hero-refresh" aria-label="Rafraîchir" data-action="refresh">
-            <span class="material-icons" style="font-size:18px;vertical-align:middle">refresh</span>
+            ${icon("i-refresh")}
           </button>
         </div>
         <h2 class="hero-title">${esc(title)}</h2>
@@ -191,8 +191,8 @@ function heroFact(s, pendingCount) {
         </div>
       </div>
       <aside class="hero-side">
-        <span class="chip wait">● À décider</span>
-        <span class="chip src">⚑ ${esc(srcName)}</span>
+        ${chip("À décider", "wait", "i-status")}
+        ${chip(srcName, "src", "i-sources")}
         <div class="src-meta"><b>${esc(level)}</b>${esc(srcName)} détectée sur le flux principal.</div>
       </aside>
     </div>`;
@@ -206,12 +206,15 @@ function statCard({ icon, value, label, variant = "primary", onClick, trend, loa
   const cls = `stat-card stat-${variant}${loading ? " loading" : ""}${error ? " error" : ""}`;
   const trendHtml = trend ? `<span class="stat-trend ${trend > 0 ? "up" : trend < 0 ? "down" : ""}">${trend > 0 ? "↑" : trend < 0 ? "↓" : "→"}${Math.abs(trend)}</span>` : "";
   const clickAttr = onClick ? `data-action="${onClick}"` : "";
+  const icMap = { article: "i-facts", schedule: "i-status", fact_check: "i-check", edit: "i-edit", error: "i-close" };
+  const icId = icMap[icon] || icon;
+  const icSvg = `<svg class="ic" aria-hidden="true"><use href="#${icId}"></use></svg>`;
   return `
     <div class="${cls}" ${clickAttr} tabindex="0" role="button" aria-label="${label}: ${value}${trend ? ` (${trend > 0 ? "+" : ""}${trend})` : ""}">
-      <span class="material-icons stat-icon">${icon}</span>
+      <span class="stat-icon">${icSvg}</span>
       <div class="stat-value">${loading ? '<span class="skeleton"></span>' : value}</div>
       <div class="stat-label">${label}${trendHtml}</div>
-      ${error ? '<span class="material-icons stat-error">error</span>' : ""}
+      ${error ? `<svg class="ic stat-error" aria-hidden="true"><use href="#i-close"></use></svg>` : ""}
     </div>`;
 }
 
@@ -321,10 +324,10 @@ function cycleControl(lastCycle) {
       </div>
       <div class="cycle-actions">
         <button class="btn btn-primary" id="btnCycleNormal" ${running ? "disabled" : ""} data-action="cycle-normal">
-          <span class="material-icons" style="font-size:18px;vertical-align:middle;margin-right:6px">play_arrow</span>Lancer cycle
+          ${icon("i-refresh")}<span style="margin-left:6px">Lancer cycle</span>
         </button>
         <button class="btn btn-tonal" id="btnCycleForce" ${running ? "disabled" : ""} data-action="cycle-force">
-          <span class="material-icons" style="font-size:18px;vertical-align:middle;margin-right:6px">flash_on</span>Forcer (hors 24h)
+          ${icon("i-spark")}<span style="margin-left:6px">Forcer (hors 24h)</span>
         </button>
       </div>
     </div>`;
