@@ -28,7 +28,7 @@ export const SHELL = `
     </div>
     <div class="left-drawer-body">
       <button class="navitem" data-route="cockpit"><svg class="ic"><use href="#i-dashboard"/></svg><span>Tableau de bord</span></button>
-      <button class="navitem" data-route="facts"><svg class="ic"><use href="#i-facts"/></svg><span>Articles</span><span class="nav-badge" data-badge="facts"></span></button>
+      <button class="navitem" data-route="facts"><svg class="ic"><use href="#i-facts"/></svg><span>Total</span><span class="nav-badge" data-badge="facts"></span></button>
       <button class="navitem" data-route="audit"><svg class="ic"><use href="#i-check"/></svg><span>Historique</span></button>
       <button class="navitem" data-route="drafts"><svg class="ic"><use href="#i-edit"/></svg><span>Brouillons</span></button>
       <button class="navitem" data-route="sources"><svg class="ic"><use href="#i-sources"/></svg><span>Sources</span><span class="nav-badge" data-badge="sources"></span></button>
@@ -54,7 +54,7 @@ export const SHELL = `
     <button class="item" data-route="audit"><span class="ico">${ic("i-check")}</span><span class="lbl">Historique</span></button>
 
     <div class="rail-group">Contenu</div>
-    <button class="item" data-route="facts"><span class="ico">${ic("i-facts")}</span><span class="lbl">Articles</span><span class="ct" data-badge="facts"></span></button>
+    <button class="item" data-route="facts"><span class="ico">${ic("i-facts")}</span><span class="lbl">Total</span><span class="ct" data-badge="facts"></span></button>
     <button class="item" data-route="drafts"><span class="ico">${ic("i-edit")}</span><span class="lbl">Brouillons</span><span class="ct" data-badge="drafts"></span></button>
     <button class="item" data-route="trash"><span class="ico">${ic("i-trash")}</span><span class="lbl">Corbeille</span><span class="ct" data-badge="trash"></span></button>
 
@@ -90,7 +90,7 @@ export const SHELL = `
 
   <nav class="bottomnav" id="bottomnav">
     <button class="navitem" data-route="cockpit"><svg class="ic"><use href="#i-dashboard"/></svg><span>Cockpit</span></button>
-    <button class="navitem" data-route="facts"><svg class="ic"><use href="#i-facts"/></svg><span>Articles</span><span class="nav-badge" data-badge="facts"></span></button>
+    <button class="navitem" data-route="facts"><svg class="ic"><use href="#i-facts"/></svg><span>Total</span><span class="nav-badge" data-badge="facts"></span></button>
     <button class="navitem" data-route="drafts"><svg class="ic"><use href="#i-edit"/></svg><span>Brouil</span><span class="nav-badge" data-badge="drafts"></span></button>
     <button class="navitem" data-route="trash"><svg class="ic"><use href="#i-trash"/></svg><span>Corbeille</span><span class="nav-badge" data-badge="trash"></span></button>
     <button class="navitem navitem-center" data-plus><svg class="ic"><use href="#i-more"/></svg><span>Plus</span></button>

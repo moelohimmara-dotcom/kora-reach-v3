@@ -565,6 +565,65 @@ def count_deleted() -> int:
         con.close()
 
 
+def get_dashboard_stats() -> dict:
+    """SOURCE UNIQUE DE VÉRITÉ (SSOT) pour tous les compteurs du dashboard.
+    Calcule EN UNE SEULE requête SQL agrégée tous les états du cycle de vie,
+    pour garantir que le tableau de bord, la sidebar et la base sont cohérents.
+    Remplace les recalculs divergents cotes front (cat.pending, s.trash, etc.)."""
+    _init()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        # 1) Compteurs par statut de hitl_facts (source de vérité des articles)
+        cur.execute(
+            "SELECT status, count(*) FROM hitl_facts GROUP BY status")
+        by_status = {}
+        for row in cur.fetchall():
+            if isinstance(row, dict):
+                key = row.get("status")
+                cnt = int(row.get("count") or 0)
+            else:
+                key = row[0]
+                cnt = int(row[1] or 0)
+            by_status[key] = cnt
+        pending = by_status.get("PENDING_REVIEW", 0)
+        transmitted = by_status.get("TRANSMITTED", 0)
+        edited = by_status.get("EDITED", 0)
+        trashed = by_status.get("TRASHED", 0)
+        rejected_status = by_status.get("REJECTED", 0)
+        total_facts = sum(by_status.values())
+        # 2) Articles reellement en circulation (hors corbeille/rejetes) - Option C
+        in_circulation = pending + transmitted + edited
+        # 3) Publies (table articles)
+        cur.execute("SELECT count(*) FROM articles WHERE status = 'published'")
+        row = cur.fetchone()
+        published = int((row[0] if isinstance(row, (tuple, list)) else list(row.values())[0]) or 0)
+        # 4) Rejetes (corbeille + decision HITL REJECTED)
+        cur.execute(
+            "SELECT count(*) FROM hitl_facts f "
+            "JOIN hitl_decisions d ON d.fact_id = f.fact_id "
+            "WHERE f.status = 'TRASHED' AND d.status = 'REJECTED'")
+        row = cur.fetchone()
+        rejected = int((row[0] if isinstance(row, (tuple, list)) else list(row.values())[0]) or 0)
+        # 5) Supprimes (audit)
+        cur.execute("SELECT count(*) FROM audit_events WHERE action IN ('SUPPRIME', 'PURGE')")
+        row = cur.fetchone()
+        deleted = int((row[0] if isinstance(row, (tuple, list)) else list(row.values())[0]) or 0)
+        return {
+            "total_facts": total_facts,        # tous les faits (sidebar)
+            "articles": in_circulation,        # dashboard "Articles" (en circulation)
+            "pending": pending,               # a decider
+            "transmitted": transmitted,       # publies/transmis
+            "drafts": edited,                 # brouillons
+            "trash": trashed,                 # corbeille (TRASHED)
+            "rejected_status": rejected_status,  # facts au statut REJECTED (rare)
+            "rejected": rejected,             # rejetes (corbeille+decision)
+            "published": published,           # articles publies
+            "deleted": deleted,               # definitivement supprimes
+        }
+    finally:
+        con.close()
+
 def cleanup_orphan_decisions() -> int:
     """Supprime les décisions HITL orphelines (fact_id absent de hitl_facts).
     Évite les stats fantômes dans le journal de décision."""

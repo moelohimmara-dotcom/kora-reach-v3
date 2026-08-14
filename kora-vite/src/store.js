@@ -503,11 +503,12 @@ export const Store = (() => {
     // Charge tout en parallèle pour le cockpit
     try {
       setState({ ui: { ...state.ui, loading: true, error: null } });
-      const [health, audit, hitl, sources] = await Promise.allSettled([
+      const [health, audit, hitl, sources, stats] = await Promise.allSettled([
         api("/api/health"),
         api("/api/audit"),
         api("/api/hitl"),
         api("/api/whitelist"),
+        api("/api/stats"),
       ]);
       const h = health.status === "fulfilled" ? health.value : null;
       const a = audit.status === "fulfilled" ? audit.value : { days: [], total: 0 };
@@ -516,6 +517,7 @@ export const Store = (() => {
       const _hitl = hitl.status === "fulfilled" ? hitl.value : [];
       const f = Array.isArray(_hitl) ? _hitl : (_hitl.facts || []);
       const s = sources.status === "fulfilled" ? sources.value : [];
+      const st = stats.status === "fulfilled" ? stats.value : null;
       
       // decisions map pour filtres (source unique de vérité)
       const decisions = Object.fromEntries((f || []).map(fact => [fact.fact_id, fact.status || "PENDING_REVIEW"]));
@@ -526,8 +528,9 @@ export const Store = (() => {
         facts: f, 
         decisions, 
         sources: s,
-        ui: { ...state.ui, loading: false, lastRefresh: Date.now() } 
-      });
+        stats: st,
+        ui: { ...state.ui, loading: false, lastRefresh: Date.now() } }
+      );
     } catch (e) {
       setState({ ui: { ...state.ui, loading: false, error: e.message } });
     }
