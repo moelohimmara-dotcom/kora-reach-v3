@@ -1685,40 +1685,67 @@ html.icons-ready .material-icons { visibility: visible; }
 }
 
 /* ============================================================
-   KORA — RÉFONTE RAIL (wire desk, groupes + bandeau) — A2
+   KORA — RÉFONTE RAIL v2 (indicateur vertical corail, items calmes)
    CSS en fin de fichier pour primer sur .rail/.navitem existants
-   (évite le piège de spécificité / ordre de cascade)
    ============================================================ */
-.rail-brand { display: flex; align-items: center; gap: 11px; padding: 4px 8px 14px; }
-.rail-mark { width: 32px; height: 32px; border-radius: 10px; flex: 0 0 auto;
+.rail-head { display: flex; align-items: center; gap: 10px; padding: 4px 6px 14px; }
+.rail-mark { width: 30px; height: 30px; border-radius: 9px; flex: 0 0 auto;
   background: linear-gradient(135deg, var(--coral), var(--bordeaux)); display: grid; place-items: center;
-  font-family: var(--mono, var(--font)); font-weight: 600; color: #2A1206; font-size: 18px; }
+  font-family: var(--mono, var(--font)); font-weight: 600; color: #2A1206; font-size: 16px; }
 .rail-word { display: flex; flex-direction: column; line-height: 1.1; }
-.rail-word b { font-family: var(--mono, var(--font)); font-weight: 600; font-size: 18px; letter-spacing: .5px; }
-.rail-word-sub { font-size: 10px; color: var(--muted); letter-spacing: .14em; text-transform: uppercase; }
+.rail-word b { font-family: var(--mono, var(--font)); font-weight: 600; font-size: 15px; letter-spacing: .4px; }
+.rail-word-sub { font-size: 9.5px; color: var(--muted); letter-spacing: .14em; text-transform: uppercase; margin-top: 2px; }
+.rail-toggle { margin-left: auto; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center;
+  color: var(--muted); transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+.rail-toggle:hover { background: var(--surface-2, #23272F); color: var(--on); }
+.rail-toggle .ic { width: 18px; height: 18px; }
 
-.rail-group { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
-  color: var(--muted); padding: 14px 12px 6px; }
-.rail-group:first-of-type { padding-top: 2px; }
+.rail-group { font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase;
+  color: var(--muted); padding: 16px 10px 6px; }
+.rail-group:first-of-type { padding-top: 4px; }
 
-/* Item primaire (Cockpit = cœur du produit) */
-.navitem-primary { background: var(--coral-soft); color: var(--coral); border-color: rgba(255,107,74,.22); }
-.navitem-primary:hover { background: rgba(255,107,74,.20); color: var(--coral); }
+/* Item calme + indicateur vertical corail sur actif (pas de bloc plein) */
+.item { position: relative; display: flex; align-items: center; gap: 13px; padding: 10px 11px; border-radius: 10px;
+  color: var(--on-soft); min-height: 44px; width: 100%; text-align: left; background: transparent;
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+.item:hover { background: var(--surface-2, #23272F); color: var(--on); }
+.item .ico { width: 22px; height: 22px; flex: 0 0 auto; display: grid; place-items: center; color: inherit; }
+.item .ico .ic { width: 21px; height: 21px; }
+.item .lbl { flex: 1; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item .ct { font-family: var(--mono, monospace); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums;
+  background: var(--surface-3, #262B34); padding: 1px 7px; border-radius: 999px; min-width: 22px; text-align: center; }
+.item.active { background: var(--coral-soft); color: var(--coral); }
+.item.active .ico { color: var(--coral); }
+.item.active .ct { background: rgba(255,107,74,.2); color: var(--coral); }
+.item.active::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px;
+  background: var(--coral); box-shadow: 0 0 8px rgba(255,107,74,.55); }
 
 .rail-spacer { flex: 1; min-height: 8px; }
 
-/* Bandeau de décision (SIGNATURE ramenée dans la nav) */
-.decision-foot { margin-top: 10px; padding: 13px 14px; border-radius: 12px; display: flex; align-items: center; gap: 11px;
-  background: linear-gradient(135deg, rgba(255,107,74,.16), rgba(194,84,47,.10));
-  border: 1px solid rgba(255,107,74,.22); }
-.decision-pulse { width: 10px; height: 10px; border-radius: 50%; background: var(--signal, var(--coral));
+/* Bandeau de décision (SIGNATURE corail — seul élément plein) */
+.decision-foot { margin-top: 10px; padding: 12px 14px; border-radius: 12px; display: flex; align-items: center; gap: 11px;
+  background: linear-gradient(135deg, rgba(255,107,74,.18), rgba(194,84,47,.10)); border: 1px solid rgba(255,107,74,.25); }
+.decision-pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--signal, var(--coral));
   box-shadow: 0 0 0 0 rgba(230,192,121,.5); animation: koraPulseRail 2.4s ease-in-out infinite; flex: 0 0 auto; }
 @keyframes koraPulseRail { 0%,100% { box-shadow: 0 0 0 0 rgba(230,192,121,.5); } 50% { box-shadow: 0 0 0 7px rgba(230,192,121,0); } }
 .decision-meta { display: flex; flex-direction: column; line-height: 1.15; }
-.decision-n { font-family: var(--mono, monospace); font-size: 20px; font-weight: 500; color: var(--signal, var(--coral)); font-variant-numeric: tabular-nums; }
-.decision-l { font-size: 12px; color: var(--on-soft); }
+.decision-n { font-family: var(--mono, monospace); font-size: 19px; font-weight: 500; color: var(--signal, var(--coral)); font-variant-numeric: tabular-nums; }
+.decision-l { font-size: 11.5px; color: var(--on-soft); margin-top: 2px; }
 
-@media (prefers-reduced-motion: reduce) { .decision-pulse { animation: none; } }
+/* COLLAPSED : rail replié en icônes seules (transition fluide de largeur) */
+.rail { transition: width var(--dur-med, 250ms) cubic-bezier(.2,0,0,1); }
+:root[data-rail="collapsed"] .rail { width: 76px; }
+:root[data-rail="collapsed"] .rail-head { justify-content: center; padding: 4px 0 14px; }
+:root[data-rail="collapsed"] .rail-mark { margin: 0; }
+:root[data-rail="collapsed"] .rail-toggle { margin: 0; }
+:root[data-rail="collapsed"] .rail-word, :root[data-rail="collapsed"] .rail-word-sub,
+:root[data-rail="collapsed"] .rail-group, :root[data-rail="collapsed"] .lbl, :root[data-rail="collapsed"] .ct,
+:root[data-rail="collapsed"] .decision-l { display: none; }
+:root[data-rail="collapsed"] .item { justify-content: center; padding: 10px 0; }
+:root[data-rail="collapsed"] .decision-foot { justify-content: center; padding: 12px 0; }
+:root[data-rail="collapsed"] .item.active::before { top: 6px; bottom: 6px; }
+
+@media (prefers-reduced-motion: reduce) { .decision-pulse { animation: none; } .rail { transition: none; } }
 
 /* Bottom-nav : Brouillons/Corbeille visibles + active coral (cohérence rail) */
 .bottomnav .navitem { position: relative; }
