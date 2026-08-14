@@ -207,7 +207,9 @@ export const Store = (() => {
       // Brouillons / Transmis / Rejetés). Sans ça, viewDrafts filtre sur {} -> rien ne s'affiche.
       const decisions = Object.fromEntries(faits.map(f => [f.fact_id, f.status || "PENDING_REVIEW"]));
       const publishedCount = (r && !Array.isArray(r) && typeof r.published_count === "number") ? r.published_count : undefined;
-      setState({ facts: faits, decisions, publishedCount, ui: { ...state.ui, loading: false } });
+      const rejectedCount = (r && !Array.isArray(r) && typeof r.rejected_count === "number") ? r.rejected_count : undefined;
+      const deletedCount = (r && !Array.isArray(r) && typeof r.deleted_count === "number") ? r.deleted_count : undefined;
+      setState({ facts: faits, decisions, publishedCount, rejectedCount, deletedCount, ui: { ...state.ui, loading: false } });
       // B+C : forcer un 2e rendu après chargement complet. Le DOM doit refléter le
       // store stabilisé (80 facts, dont 3 EDITED -> Brouillons), pas un batch partiel
       // peint trop tôt (où les EDITED sont encore vus comme PENDING_REVIEW).

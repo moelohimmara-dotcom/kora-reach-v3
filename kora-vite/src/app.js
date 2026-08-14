@@ -89,6 +89,10 @@ function viewCockpit(s) {
   const approved = (typeof s.publishedCount === "number") ? s.publishedCount : cat.transmitted;
   const pending = cat.pending;        // en attente PURE (hors brouillons/déjà traités)
   const draft = cat.drafts;
+  const trash = cat.trash;
+  // Compteurs dérivés du backend (croisés) pour couvrir tout le cycle de vie.
+  const rejected = (typeof s.rejectedCount === "number") ? s.rejectedCount : cat.rejected;
+  const deleted = (typeof s.deletedCount === "number") ? s.deletedCount : 0;
   const health = s.health;
   const audit = s.audit;
   const sources = s.sources || [];
@@ -107,6 +111,9 @@ function viewCockpit(s) {
         ${statCard({ icon: "schedule", value: pending, label: "À décider", variant: "warning", onClick: "nav-hitl", loading: s.ui?.loading && pending === 0 })}
         ${statCard({ icon: "fact_check", value: approved, label: "Publiés", variant: "success", onClick: "nav-facts-approved", loading: s.ui?.loading && approved === 0 })}
         ${statCard({ icon: "edit", value: draft, label: "Brouillons", variant: "info", onClick: "nav-drafts", loading: s.ui?.loading && draft === 0 })}
+        ${statCard({ icon: "i-reject", value: rejected, label: "Rejetés", variant: "danger", onClick: "nav-facts-rejected", loading: s.ui?.loading && rejected === 0 })}
+        ${statCard({ icon: "i-trash", value: trash, label: "Corbeille", variant: "tertiary", onClick: "nav-trash", loading: s.ui?.loading && trash === 0 })}
+        ${statCard({ icon: "i-close", value: deleted, label: "Supprimés", variant: "muted", onClick: "nav-deleted", loading: s.ui?.loading && deleted === 0 })}
       </div>
 
       <!-- ROW 2 : System Health + Sources + Cycle Control -->
@@ -1767,8 +1774,11 @@ function bind() {
       const action = card.dataset.action;
       if (action === "nav-facts-all") { Store.setFactFilter("all"); navigate("facts"); }
       else if (action === "nav-facts-approved") { Store.setFactFilter("TRANSMITTED"); navigate("facts"); }
+      else if (action === "nav-facts-rejected") { Store.setFactFilter("REJECTED"); navigate("facts"); }
       else if (action === "nav-hitl") { Store.setFactFilter("PENDING_REVIEW"); navigate("facts"); }
-      else if (action === "nav-drafts") { Store.setFactFilter("EDITED"); navigate("drafts"); }
+      else if (action === "nav-drafts") { Store.setFactFilter("EDITED"); navigate("facts"); }
+      else if (action === "nav-trash") { navigate("trash"); }
+      else if (action === "nav-deleted") { navigate("audit"); }
     });
 
     // SourceChip clicks -> open the Sources page (demande : bulle directement reliée à la page Sources)
