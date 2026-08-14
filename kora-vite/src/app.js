@@ -508,7 +508,11 @@ function viewDrafts(s) {
 // prime pour la corbeille, sinon la décision HITL) — PAS sur s.decisions qui
 // écraserait f.status et fausserait le comptage (ex: EDITED compté en attente).
 function factCategory(s, f) {
-  if ((f.trashed_at && f.trashed_at !== "") || f.status === "TRASHED") return "trash";
+  if ((f.trashed_at && f.trashed_at !== "") || f.status === "TRASHED") {
+    // Article rejete a la corbeille -> compte dans "Rejetes" (coherent s.stats.rejected)
+    if (f.rejected || f.decision === "REJECTED" || f.d_status === "REJECTED") return "rejected";
+    return "trash";
+  }
   if (f.status === "TRANSMITTED" || f.status === "APPROVED") return "transmitted";
   if (f.status === "REJECTED") return "rejected";
   if (f.status === "EDITED") return "drafts";
@@ -516,19 +520,17 @@ function factCategory(s, f) {
 }
 function viewFacts(s) {
   const facts = s.facts || [];
-  // B+C : catégorisation EXCLUSIVE (chaque fact -> 1 seule catégorie).
-  // Comptage INLINE sur ft.status (source de vérité du backend list_facts),
-  // sans passer par s.decisions (qui écraserait EDITED en PENDING_REVIEW).
-  const counts = { all: 0, pending: 0, transmitted: 0, rejected: 0, drafts: 0, trash: 0 };
-  for (const ft of facts) {
-    let cat = "pending";
-    if (ft.status === "TRASHED" || (ft.trashed_at && ft.trashed_at !== "")) cat = "trash";
-    else if (ft.status === "TRANSMITTED" || ft.status === "APPROVED") cat = "transmitted";
-    else if (ft.status === "REJECTED") cat = "rejected";
-    else if (ft.status === "EDITED") cat = "drafts";
-    counts[cat]++;
-  }
-  counts.all = counts.pending + counts.transmitted + counts.rejected + counts.drafts + counts.trash;
+  // SSOT : les compteurs de filtres lisent s.stats (certifie par le backend),
+  // pas un recalcul client divergeant (evite "Rejetes 2" vs cockpit "Rejetes 5").
+  const st = s.stats || {};
+  const counts = {
+    all: (typeof st.total_facts === "number") ? st.total_facts : facts.length,
+    pending: (typeof st.pending === "number") ? st.pending : 0,
+    transmitted: (typeof st.transmitted === "number") ? st.transmitted : 0,
+    rejected: (typeof st.rejected === "number") ? st.rejected : 0,
+    drafts: (typeof st.drafts === "number") ? st.drafts : 0,
+    trash: (typeof st.trash === "number") ? st.trash : 0,
+  };
   const f = (Store.getFactFilter() || "all").toLowerCase();
   if (!facts.length) return (s.lastCycle && s.lastCycle.result && s.lastCycle.result.status === "empty_or_stale") ? staleBox(s) : stateBox("i-check", "Aucun article à afficher", "Lance un cycle ou génère une démo pour générer des articles à valider.", false, "Générer démo", () => Store.seed());
   const filters = [
@@ -545,7 +547,12 @@ function viewFacts(s) {
   let body;
   // B+C : filtrage par catégorie EXCLUSIVE (même logique inline que les compteurs)
   const catOf = (ft) => {
-    if (ft.status === "TRASHED" || (ft.trashed_at && ft.trashed_at !== "")) return "trash";
+    if (ft.status === "TRASHED" || (ft.trashed_at && ft.trashed_at !== "")) {
+      // Un article a la corbeille peut etre rejete (decision HITL REJECTED) :
+      // il compte alors dans "Rejetes" (coherent avec s.stats.rejected).
+      if (ft.rejected || ft.decision === "REJECTED" || ft.d_status === "REJECTED") return "rejected";
+      return "trash";
+    }
     if (ft.status === "TRANSMITTED" || ft.status === "APPROVED") return "transmitted";
     if (ft.status === "REJECTED") return "rejected";
     if (ft.status === "EDITED") return "drafts";

@@ -207,6 +207,10 @@ def list_facts() -> list:
             "decided_by": d["decided_by"], "decided_at": d["decided_at"],
             "final_text": d["final_text"], "provider": d["provider"],
             "created_at": d["created_at"],
+            # d_status + rejected : pour que le frontend classe correctement
+            # les articles rejetes (corbeille + decision HITL REJECTED) dans "Rejetes".
+            "d_status": d.get("d_status"),
+            "rejected": (_raw_status == "TRASHED" and (d.get("d_status") == "REJECTED" or d.get("decision") == "REJECTED")),
         })
     return out
 
@@ -406,7 +410,40 @@ def _fact_rows(where: str, params: tuple) -> list:
 
 
 def list_trashed() -> list:
-    return _fact_rows("status='TRASHED' ORDER BY trashed_at DESC NULLS LAST", ())
+    # Corbeille : on joint hitl_decisions pour marquer les articles REJETES
+    # (statut TRASHED + decision HITL REJECTED) -> le frontend peut filtrer "Rejetés"
+    # de facon coherente avec le dashboard (s.stats.rejected, certifie par le backend).
+    p = _ph()
+    con, mode = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(
+            f"SELECT f.fact_id, f.champion, f.contexts, f.article, f.image, f.image_meta, "
+            f"f.gen_model, f.n_sources, f.status, f.created_at, f.trashed_at, "
+            f"d.status AS d_status, d.decision "
+            f"FROM hitl_facts f LEFT JOIN hitl_decisions d ON d.fact_id = f.fact_id "
+            f"WHERE f.status='TRASHED' ORDER BY f.trashed_at DESC NULLS LAST", ())
+        if mode == "sqlite":
+            rows = cur.fetchall()
+            out = [dict(r) for r in rows]
+        else:
+            out = [dict(r) for r in cur.fetchall()]
+        for d in out:
+            try: d["champion"] = json.loads(d["champion"]) if d["champion"] else {}
+            except Exception: d["champion"] = {}
+            try: d["contexts"] = json.loads(d["contexts"]) if d["contexts"] else []
+            except Exception: d["contexts"] = []
+            try:
+                a = d["article"]
+                d["article"] = json.loads(a) if (a and a.startswith("{")) else a
+            except Exception: pass
+            try: d["image_meta"] = json.loads(d["image_meta"]) if d["image_meta"] else {}
+            except Exception: d["image_meta"] = {}
+            # Champ derive : article rejete (corbeille + decision REJECTED)
+            d["rejected"] = (d.get("d_status") == "REJECTED" or d.get("decision") == "REJECTED")
+        return out
+    finally:
+        con.close()
 
 
 def trash_facts(ids: list) -> dict:
@@ -528,16 +565,18 @@ def count_published() -> int:
 
 
 def count_rejected() -> int:
-    """Compte les articles REJETÉS (en corbeille via décision HITL REJECTED).
-    Utilisé par le dashboard pour distinguer 'rejeté' de 'corbeille manuelle'."""
+    """Compte les articles REJETÉS (source unique de vérité du dashboard).
+    Un article rejeté = soit status REJECTED (rejet direct), soit en corbeille
+    (TRASHED) avec une decision HITL REJECTED. Les deux comptent comme 'rejetes'."""
     _init()
     con, _ = db.conn()
     try:
         cur = con.cursor()
         cur.execute(
             "SELECT count(*) FROM hitl_facts f "
-            "JOIN hitl_decisions d ON d.fact_id = f.fact_id "
-            "WHERE f.status = 'TRASHED' AND d.status = 'REJECTED'")
+            "LEFT JOIN hitl_decisions d ON d.fact_id = f.fact_id "
+            "WHERE f.status = 'REJECTED' "
+            "   OR (f.status = 'TRASHED' AND d.status = 'REJECTED')")
         row = cur.fetchone()
         if row is None:
             return 0
@@ -598,13 +637,8 @@ def get_dashboard_stats() -> dict:
         cur.execute("SELECT count(*) FROM articles WHERE status = 'published'")
         row = cur.fetchone()
         published = int((row[0] if isinstance(row, (tuple, list)) else list(row.values())[0]) or 0)
-        # 4) Rejetes (corbeille + decision HITL REJECTED)
-        cur.execute(
-            "SELECT count(*) FROM hitl_facts f "
-            "JOIN hitl_decisions d ON d.fact_id = f.fact_id "
-            "WHERE f.status = 'TRASHED' AND d.status = 'REJECTED'")
-        row = cur.fetchone()
-        rejected = int((row[0] if isinstance(row, (tuple, list)) else list(row.values())[0]) or 0)
+        # 4) Rejetes — on delegate a count_rejected() (definition unique / SSOT)
+        rejected = count_rejected()
         # 5) Supprimes (audit)
         cur.execute("SELECT count(*) FROM audit_events WHERE action IN ('SUPPRIME', 'PURGE')")
         row = cur.fetchone()
