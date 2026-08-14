@@ -1619,7 +1619,16 @@ function bind() {
     if (!f && card.dataset.index) f = facts[parseInt(card.dataset.index, 10)];
     if (f) { Store.openSheet({ type: "fact", fact: f }); renderSheet(Store.state); }
   });
-  $$("[data-fact-filter]").forEach(n => n.onclick = () => { Store.setFactFilter(n.dataset.factFilter); const sc = document.getElementById("railScrim"); if (sc) sc.hidden = true; });
+  // Filtres de la vue Articles : chaque pill filtre la liste SAUF "Corbeille"
+  // qui pointe vers LA page corbeille unique (meme route/representation que la
+  // sidebar) -> un seul endroit pour la corbeille, proprietes identiques.
+  $$("[data-fact-filter]").forEach(n => n.onclick = () => {
+    const f = n.dataset.factFilter;
+    if (f === "trash") { navigate("trash"); return; }
+    Store.setFactFilter(f);
+    const sc = document.getElementById("railScrim");
+    if (sc) sc.hidden = true;
+  });
   // ---- Sélection multiple + actions en masse ----
   const enterSel = document.getElementById("enterSelect");
   if (enterSel) enterSel.onclick = () => Store.setSelectMode(!Store.state.selectMode);
@@ -1973,7 +1982,13 @@ function boot() {
       });
     }
   });
-  const r = (location.pathname.replace(/^\/kora-v2/, "") || "/").split("/")[1] || "cockpit";
+  // Routing : on lit la route depuis le HASH (#facts, #trash, #cockpit...) en
+  // priorite, sinon depuis le pathname. Ainsi un refresh ramene SUR LA MEME PAGE
+  // que celle ou l'utilisateur se trouvait (persistance de la vue au reload).
+  const hashRoute = (location.hash || "").replace(/^#/, "").trim();
+  const r = hashRoute
+    || (location.pathname.replace(/^\/kora-v2/, "") || "/").split("/")[1]
+    || "cockpit";
   if (Store.state.route !== r) Store.state.route = r;
   Store.loadHealth();
   Store.loadSettings();
