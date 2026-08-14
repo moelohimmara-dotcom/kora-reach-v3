@@ -956,18 +956,22 @@ html.icons-ready .material-icons { visibility: visible; }
     justify-content: center; align-items: stretch; overflow: visible;
   }
   .select-bar-actions .btn {
-    flex: 1 1 0; min-width: 0; min-height: 48px;
-    padding: 8px 6px; font-size: var(--t-label-xs); line-height: 1.2;
+    flex: 1 1 0; min-width: 60px; min-height: 46px;
+    padding: 10px 12px; font-size: var(--t-label-xs); line-height: 1.25;
     width: auto; white-space: nowrap;
-    display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   }
   /* Sur mobile : ON GARDE les libellés sous l'icône (indications claires pour
      l'utilisateur) -> pas d'icônes seules compactes et ambiguës.
-     Action principale (Publier) en accent, bien distincte. */
+     Boutons légèrement aplatis + marges de sécurité généreuses pour que le
+     texte respire, centré parfaitement (text-align + width 100%). */
   .select-bar-actions .btn:not(.btn-primary) span { display: inline; }
   .select-bar-actions .btn .ic { width: 20px; height: 20px; flex: 0 0 auto; }
-  .select-bar-actions .btn span { font-size: 10px; font-weight: 600; letter-spacing: .2px; }
-  .select-bar-actions .btn-primary { min-height: 48px; }
+  .select-bar-actions .btn span {
+    font-size: 11px; font-weight: 600; letter-spacing: .2px;
+    text-align: center; width: 100%; display: block;
+  }
+  .select-bar-actions .btn-primary { min-height: 46px; }
 }
 /* ---- TABLETTE (820-1023px) : barre centrée contrainte, taille confort ---- */
 @media (min-width: 820px) and (max-width: 1023px) {
