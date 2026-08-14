@@ -1348,7 +1348,11 @@ function render() {
   if (!view) return;
   const map = { cockpit: viewCockpit, facts: viewFacts, sources: viewSources, audit: viewAudit, drafts: viewDrafts, settings: viewSettings, trash: viewTrash };
   view.innerHTML = (map[s.route] || viewCockpit)(s);
-  $$(".navitem, .rail .navitem").forEach(n => n.classList.toggle("active", n.dataset.route === s.route));
+  $$(".navitem, .rail .navitem").forEach(n => {
+    const on = n.dataset.route === s.route;
+    n.classList.toggle("active", on);
+    if (on) n.setAttribute("aria-current", "page"); else n.removeAttribute("aria-current");
+  });
   // Habilitations : l'onglet Paramètres (gestion avancée) est réservé au rôle "advanced"
   const isAdvanced = (s.auth && s.auth.role === "advanced");
   $$('.navitem[data-route="settings"]').forEach(n => { n.hidden = !isAdvanced; });
@@ -1357,6 +1361,7 @@ function render() {
   // Badges de compteur sur la navigation (Articles / Sources / Brouillons / Corbeille)
   try {
     const facts = s.facts || [];
+    let pending = 0; for (const ft of facts) if (factCategory(s, ft) === "pending") pending++;
     const badges = {
       facts: facts.length,
       sources: (s.sources || []).length,
@@ -1368,6 +1373,11 @@ function render() {
       const v = badges[key] || 0;
       el.textContent = v > 0 ? String(v) : "";
       el.classList.toggle("show", v > 0);
+    });
+    // Bandeau de décision (rail desktop) — nombre à décider
+    document.querySelectorAll("[data-decision]").forEach(el => {
+      const key = el.getAttribute("data-decision");
+      el.textContent = String((key === "pending" ? pending : (badges[key] || 0)));
     });
   } catch (e) { console.error("badges", e); }
   const curTheme = Store.getTheme();

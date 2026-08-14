@@ -1683,3 +1683,51 @@ html.icons-ready .material-icons { visibility: visible; }
 @media (max-width: 819px) {
   .decision-band { left: 0; top: 6px; width: 100%; height: 5px; }
 }
+
+/* ============================================================
+   KORA — RÉFONTE RAIL (wire desk, groupes + bandeau) — A2
+   CSS en fin de fichier pour primer sur .rail/.navitem existants
+   (évite le piège de spécificité / ordre de cascade)
+   ============================================================ */
+.rail-brand { display: flex; align-items: center; gap: 11px; padding: 4px 8px 14px; }
+.rail-mark { width: 32px; height: 32px; border-radius: 10px; flex: 0 0 auto;
+  background: linear-gradient(135deg, var(--coral), var(--bordeaux)); display: grid; place-items: center;
+  font-family: var(--mono, var(--font)); font-weight: 600; color: #2A1206; font-size: 18px; }
+.rail-word { display: flex; flex-direction: column; line-height: 1.1; }
+.rail-word b { font-family: var(--mono, var(--font)); font-weight: 600; font-size: 18px; letter-spacing: .5px; }
+.rail-word-sub { font-size: 10px; color: var(--muted); letter-spacing: .14em; text-transform: uppercase; }
+
+.rail-group { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--muted); padding: 14px 12px 6px; }
+.rail-group:first-of-type { padding-top: 2px; }
+
+/* Item primaire (Cockpit = cœur du produit) */
+.navitem-primary { background: var(--coral-soft); color: var(--coral); border-color: rgba(255,107,74,.22); }
+.navitem-primary:hover { background: rgba(255,107,74,.20); color: var(--coral); }
+
+.rail-spacer { flex: 1; min-height: 8px; }
+
+/* Bandeau de décision (SIGNATURE ramenée dans la nav) */
+.decision-foot { margin-top: 10px; padding: 13px 14px; border-radius: 12px; display: flex; align-items: center; gap: 11px;
+  background: linear-gradient(135deg, rgba(255,107,74,.16), rgba(194,84,47,.10));
+  border: 1px solid rgba(255,107,74,.22); }
+.decision-pulse { width: 10px; height: 10px; border-radius: 50%; background: var(--signal, var(--coral));
+  box-shadow: 0 0 0 0 rgba(230,192,121,.5); animation: koraPulseRail 2.4s ease-in-out infinite; flex: 0 0 auto; }
+@keyframes koraPulseRail { 0%,100% { box-shadow: 0 0 0 0 rgba(230,192,121,.5); } 50% { box-shadow: 0 0 0 7px rgba(230,192,121,0); } }
+.decision-meta { display: flex; flex-direction: column; line-height: 1.15; }
+.decision-n { font-family: var(--mono, monospace); font-size: 20px; font-weight: 500; color: var(--signal, var(--coral)); font-variant-numeric: tabular-nums; }
+.decision-l { font-size: 12px; color: var(--on-soft); }
+
+@media (prefers-reduced-motion: reduce) { .decision-pulse { animation: none; } }
+
+/* Bottom-nav : Brouillons/Corbeille visibles + active coral (cohérence rail) */
+.bottomnav .navitem { position: relative; }
+.bottomnav .nav-badge { position: absolute; top: 2px; right: 50%; margin-right: -22px; min-width: 16px; height: 16px;
+  padding: 0 4px; border-radius: 999px; background: var(--signal, var(--coral)); color: #2A1206;
+  font-family: var(--mono, monospace); font-size: 10px; font-weight: 600; display: none; align-items: center; justify-content: center; }
+.bottomnav .nav-badge.show { display: flex; }
+
+/* En mobile, le rail desktop est masqué (bottom-nav le remplace) — placé EN FIN pour primer */
+@media (max-width: 819px) {
+  .rail { display: none; }
+}
