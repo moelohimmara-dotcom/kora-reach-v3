@@ -42,17 +42,31 @@ export const SHELL = `
   <div class="left-drawer-scrim" id="leftDrawerScrim" hidden></div>
 
   <!-- RAIL — Desktop/Tablet persistent -->
-  <nav class="rail" id="rail">
+  <nav class="rail" id="rail" aria-label="Navigation principale">
     <button class="rail-toggle" id="railToggle" title="Réduire/Agrandir le rail" aria-label="Réduire/Agrandir le rail">${ic("i-chevron")}</button>
-    <button class="navitem" data-route="cockpit"><svg class="ic"><use href="#i-dashboard"/></svg><span>Tableau de bord</span></button>
-    <button class="navitem" data-route="facts"><svg class="ic"><use href="#i-facts"/></svg><span>Articles</span><span class="nav-badge" data-badge="facts"></span></button>
+    <div class="rail-brand">
+      <span class="rail-mark">K</span>
+      <div class="rail-word"><b>KORA</b><span class="rail-word-sub">Veille Guinée</span></div>
+    </div>
+
+    <div class="rail-group">Pilotage</div>
+    <button class="navitem navitem-primary" data-route="cockpit" aria-current="page"><svg class="ic"><use href="#i-dashboard"/></svg><span>Cockpit</span></button>
     <button class="navitem" data-route="audit"><svg class="ic"><use href="#i-check"/></svg><span>Historique</span></button>
-    <button class="navitem" data-route="drafts"><svg class="ic"><use href="#i-edit"/></svg><span>Brouillons</span></button>
+
+    <div class="rail-group">Contenu</div>
+    <button class="navitem" data-route="facts"><svg class="ic"><use href="#i-facts"/></svg><span>Articles</span><span class="nav-badge" data-badge="facts"></span></button>
+    <button class="navitem" data-route="drafts"><svg class="ic"><use href="#i-edit"/></svg><span>Brouillons</span><span class="nav-badge" data-badge="drafts"></span></button>
+    <button class="navitem" data-route="trash"><svg class="ic"><use href="#i-trash"/></svg><span>Corbeille</span><span class="nav-badge" data-badge="trash"></span></button>
+
+    <div class="rail-group">Système</div>
     <button class="navitem" data-route="sources"><svg class="ic"><use href="#i-sources"/></svg><span>Sources</span><span class="nav-badge" data-badge="sources"></span></button>
-    <div class="rail-sep"></div>
-    <button class="navitem" data-route="trash"><svg class="ic"><use href="#i-trash"/></svg><span>Corbeille</span></button>
     <button class="navitem" data-route="settings"><svg class="ic"><use href="#i-settings"/></svg><span>Paramètres</span></button>
-    <button class="navitem navitem-center" data-plus title="Plus d'options" aria-label="Plus d'options"><svg class="ic"><use href="#i-more"/></svg><span>Plus</span></button>
+
+    <div class="rail-spacer"></div>
+    <div class="decision-foot" aria-live="polite">
+      <span class="decision-pulse" aria-hidden="true"></span>
+      <div class="decision-meta"><span class="decision-n" data-decision="pending">0</span><span class="decision-l">à décider</span></div>
+    </div>
   </nav>
 
   <!-- RIGHT DRAWER OVERLAY — Desktop/Tablet (≥820px) : "Plus" menu -->
@@ -75,9 +89,10 @@ export const SHELL = `
   <main class="view" id="view"></main>
 
   <nav class="bottomnav" id="bottomnav">
-    <button class="navitem" data-route="cockpit"><svg class="ic"><use href="#i-dashboard"/></svg><span>Tableau</span></button>
+    <button class="navitem" data-route="cockpit"><svg class="ic"><use href="#i-dashboard"/></svg><span>Cockpit</span></button>
     <button class="navitem" data-route="facts"><svg class="ic"><use href="#i-facts"/></svg><span>Articles</span><span class="nav-badge" data-badge="facts"></span></button>
-    <button class="navitem" data-route="sources"><svg class="ic"><use href="#i-sources"/></svg><span>Sources</span><span class="nav-badge" data-badge="sources"></span></button>
+    <button class="navitem" data-route="drafts"><svg class="ic"><use href="#i-edit"/></svg><span>Brouil</span><span class="nav-badge" data-badge="drafts"></span></button>
+    <button class="navitem" data-route="trash"><svg class="ic"><use href="#i-trash"/></svg><span>Corbeille</span><span class="nav-badge" data-badge="trash"></span></button>
     <button class="navitem navitem-center" data-plus><svg class="ic"><use href="#i-more"/></svg><span>Plus</span></button>
   </nav>
 
