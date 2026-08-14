@@ -1348,7 +1348,7 @@ function render() {
   if (!view) return;
   const map = { cockpit: viewCockpit, facts: viewFacts, sources: viewSources, audit: viewAudit, drafts: viewDrafts, settings: viewSettings, trash: viewTrash };
   view.innerHTML = (map[s.route] || viewCockpit)(s);
-  $$(".navitem, .rail .navitem").forEach(n => {
+  $$(".navitem, .rail .navitem, .item, .rail .item").forEach(n => {
     const on = n.dataset.route === s.route;
     n.classList.toggle("active", on);
     if (on) n.setAttribute("aria-current", "page"); else n.removeAttribute("aria-current");
