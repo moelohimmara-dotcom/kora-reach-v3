@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KORA — Rendu réel icônes hybrides</title>
+<link rel="stylesheet" href="./assets/style-B2-Bz6JX.css">
+<style>
+  body{margin:0;background:var(--neu-base);min-height:100vh;color:var(--on-surface);font-family:var(--font);}
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 24px;display:grid;grid-template-columns:230px 1fr;gap:28px;align-items:start;}
+  /* --- RAIL --- */
+  .rail{display:flex;flex-direction:column;gap:8px;}
+  .rail .navitem{display:flex;align-items:center;gap:14px;padding:12px 14px;border-radius:var(--radius-lg);background:var(--neu-base);box-shadow:var(--neu-raised);border:none;color:var(--on-surface);cursor:pointer;font-size:15px;font-weight:600;}
+  .rail .navitem .ic{width:24px;height:24px;color:var(--coral);}
+  .rail .navitem.active{box-shadow:var(--neu-pressed);color:var(--coral);}
+  .rail .navitem .rail-item-label{font-family:var(--font-display);text-transform:uppercase;letter-spacing:.5px;font-size:13px;}
+  /* --- CONTENT --- */
+  h1{font-family:var(--font-display);font-size:26px;color:var(--coral);margin:0 0 4px;}
+  .sub{color:var(--on-surface-soft);margin-bottom:24px;font-size:14px;}
+  .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-bottom:24px;}
+  .stat-card{padding:18px;border-radius:var(--radius-lg);background:var(--neu-base);box-shadow:var(--neu-raised);text-align:center;}
+  .stat-label{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--on-surface-soft);font-weight:700;}
+  .stat-card .n{font-family:var(--font-display);font-size:30px;font-weight:800;}
+  /* --- BOTTOM NAV --- */
+  .bottomnav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--neu-base);box-shadow:var(--neu-raised);padding:8px 4px calc(8px + env(safe-area-inset-bottom));}
+  .bottomnav .navitem{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;border:none;background:none;color:var(--on-surface);cursor:pointer;padding:6px 2px;}
+  .bottomnav .navitem .ic{width:24px;height:24px;}
+  .bottomnav .navitem.active{color:var(--coral);}
+  .bottomnav .navitem span{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+  /* --- ACTION ROW --- */
+  .actions{display:flex;gap:10px;margin-top:8px;}
+  .icon-btn{width:40px;height:40px;border-radius:var(--radius-pill);border:1px solid var(--glass-border-strong);background:var(--neu-base);box-shadow:var(--neu-raised);color:var(--on-surface);display:grid;place-items:center;cursor:pointer;}
+  .icon-btn .ic{width:20px;height:20px;color:var(--coral);}
+  .ctitle{font-family:var(--font-display);text-transform:uppercase;letter-spacing:1px;font-size:13px;color:var(--on-surface-soft);margin:22px 0 10px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- RAIL -->
+  <nav class="rail">
+    <button class="navitem active"><svg class="ic"><use href="#i-dashboard"/></svg><span class="rail-item-label">Tableau de bord</span></button>
+    <button class="navitem"><svg class="ic"><use href="#i-facts"/></svg><span class="rail-item-label">Articles</span></button>
+    <button class="navitem"><svg class="ic"><use href="#i-check"/></svg><span class="rail-item-label">Validation</span></button>
+    <button class="navitem"><svg class="ic"><use href="#i-sources"/></svg><span class="rail-item-label">Sources</span></button>
+    <button class="navitem"><svg class="ic"><use href="#i-edit"/></svg><span class="rail-item-label">Brouillons</span></button>
+    <button class="navitem"><svg class="ic"><use href="#i-trash"/></svg><span class="rail-item-label">Corbeille</span></button>
+    <button class="navitem"><svg class="ic"><use href="#i-settings"/></svg><span class="rail-item-label">Réglages</span></button>
+  </nav>
+  <!-- CONTENT -->
+  <div>
+    <h1>KORA Agent</h1>
+    <div class="sub">Rendu réel des icônes hybrides (conteneur gm + glyph sémantique) dans le thème neumorphisme sombre.</div>
+    <div class="cards">
+      <div class="stat-card"><div class="stat-label">Sources OK</div><div class="n">0</div></div>
+      <div class="stat-card"><div class="stat-label">Éléments cycle</div><div class="n">0</div></div>
+    </div>
+    <div class="ctitle">Icônes d'action</div>
+    <div class="actions">
+      <button class="icon-btn"><svg class="ic"><use href="#i-edit"/></svg></button>
+      <button class="icon-btn"><svg class="ic"><use href="#i-check"/></svg></button>
+      <button class="icon-btn"><svg class="ic"><use href="#i-reject"/></svg></button>
+      <button class="icon-btn"><svg class="ic"><use href="#i-refresh"/></svg></button>
+      <button class="icon-btn"><svg class="ic"><use href="#i-trash"/></svg></button>
+      <button class="icon-btn"><svg class="ic"><use href="#i-send"/></svg></button>
+      <button class="icon-btn"><svg class="ic"><use href="#i-undo"/></svg></button>
+      <button class="icon-btn"><svg class="ic"><use href="#i-lock"/></svg></button>
+      <button class="icon-btn"><svg class="ic"><use href="#i-user"/></svg></button>
+      <button class="icon-btn"><svg class="ic"><use href="#i-info"/></svg></button>
+    </div>
+  </div>
+</div>
+<!-- BOTTOM NAV -->
+<nav class="bottomnav">
+  <button class="navitem active"><svg class="ic"><use href="#i-dashboard"/></svg><span>Tableau</span></button>
+  <button class="navitem"><svg class="ic"><use href="#i-facts"/></svg><span>Articles</span></button>
+  <button class="navitem"><svg class="ic"><use href="#i-check"/></svg><span>Validation</span></button>
+  <button class="navitem"><svg class="ic"><use href="#i-sources"/></svg><span>Sources</span></button>
+  <button class="navitem"><svg class="ic"><use href="#i-edit"/></svg><span>Brouillons</span></button>
+  <button class="navitem"><svg class="ic"><use href="#i-trash"/></svg><span>Corbeille</span></button>
+  <button class="navitem"><svg class="ic"><use href="#i-settings"/></svg><span>Réglages</span></button>
+</nav>
+
+<!-- SPRITE HYBRIDE (inline) -->
+<div id="sprite" style="display:none"><svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <defs>
+    <symbol id="i-dashboard" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><rect x="7.6" y="7.6" width="3.1" height="3.1" rx="1"/><rect x="13.3" y="7.6" width="3.1" height="3.1" rx="1"/><rect x="7.6" y="13.3" width="3.1" height="3.1" rx="1"/><rect x="13.3" y="13.3" width="3.1" height="3.1" rx="1"/></g></symbol>
+    <symbol id="i-facts" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><line x1="8" y1="9.6" x2="16" y2="9.6"/><line x1="8" y1="12.4" x2="16" y2="12.4"/><line x1="8" y1="15.2" x2="13" y2="15.2"/></g></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M8.4 12.2 11 14.7 15.6 9.4"/></g></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M12 7.4 8.7 8.8V11c0 2.3 1.5 4.1 3.3 4.8 1.8-.7 3.3-2.5 3.3-4.8V8.8L12 7.4z"/></g></symbol>
+    <symbol id="i-sources" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M8 15.2a3.8 3.8 0 0 1 3.8-3.8M8 17.8a6.8 6.8 0 0 1 6.8-6.8"/><circle cx="8" cy="17.8" r="1.2" fill="currentColor" stroke="none"/></g></symbol>
+    <symbol id="i-audit" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M8.6 7.8h6.8M8.6 11h6.8M8.6 14.2h4.2"/></g></symbol>
+    <symbol id="i-status" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="3.4"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/></g></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M9.2 9.2 14.8 14.8M14.8 9.2 9.2 14.8"/></g></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M8.6 15.4 15.4 8.6M9.2 8.6h6.2v6.2"/></g></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M14.6 8 16 9.4 10.4 15H9v-1.4L14.6 8z"/><line x1="12.6" y1="10" x2="14" y2="11.4"/></g></symbol>
+    <symbol id="i-reject" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="3.6"/><path d="M9.6 9.6 14.4 14.4M14.4 9.6 9.6 14.4"/></g></symbol>
+    <symbol id="i-retract" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M9 15V9h6M9 15l3-3"/></g></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M9 14.6a3.6 3.6 0 1 0 .9-3.2L9 13.4V9h4.4"/></g></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M12 8.4 13.2 11l2.6 1-2.6 1L12 15.6 10.8 13l-2.6-1 2.6-1L12 8.4z"/></g></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="14.4" cy="10" r="1.3"/><path d="M8.6 15.4 10.8 12.8 12.6 14.6 14.2 13 16 15.4"/></g></symbol>
+    <symbol id="i-level1" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M8.5 15.5V8.5M12 15.5V11M15.5 15.5V13"/></g></symbol>
+    <symbol id="i-level2" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="9" cy="14.5" r="1.6"/><circle cx="15" cy="14.5" r="1.6"/><path d="M9 12.9V9.5h6V12.9"/></g></symbol>
+    <symbol id="i-date" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><line x1="7.5" y1="9.2" x2="16.5" y2="9.2"/><line x1="9.4" y1="7" x2="9.4" y2="11.4"/><line x1="14.6" y1="7" x2="14.6" y2="11.4"/><line x1="8.5" y1="13" x2="15.5" y2="13"/></g></symbol>
+    <symbol id="i-fusion" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><rect x="8.4" y="8.4" width="3.4" height="3.4" rx="1"/><rect x="12.2" y="12.2" width="3.4" height="3.4" rx="1"/><path d="M11.8 11.8 12.2 12.2"/></g></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><line x1="8" y1="9.5" x2="16" y2="9.5"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="14.5" x2="13" y2="14.5"/></g></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M13.6 9 10.4 12l3.2 3"/></g></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="3.4"/><path d="M12 7.2v1.6M12 15.2v1.6M7.2 12H8.8M15.2 12h1.6M8.7 8.7l1.1 1.1M14.2 14.2l1.1 1.1M15.3 8.7l-1.1 1.1M9.8 14.2l-1.1 1.1"/></g></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M14.2 9.4A4.2 4.2 0 0 0 9.4 14.2 4.2 4.2 0 1 0 14.2 9.4z"/></g></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M9.4 9.4h.01M12 9.4h.01M14.6 9.4h.01M10.7 12h.01M13.3 12h.01"/><path d="M8.6 14.6a3 3 0 0 0 6.8 0"/></g></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="3"/><path d="M12 7.4v1.6M12 15v1.6M7.4 12H9M15 12h1.6M8.8 8.8l1.1 1.1M14.1 14.1l1.1 1.1M15.2 8.8l-1.1 1.1M9.9 14.1l-1.1 1.1"/></g></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="10" r="2.4"/><path d="M8.6 15.6a3.4 3.4 0 0 1 6.8 0"/></g></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="9.6" cy="10.2" r="2.2"/><path d="M6.8 15.4a3 3 0 0 1 5.6 0"/><path d="M13.4 10.8a2.2 2.2 0 0 1 0 4.2M13 15.4a3 3 0 0 1 4.2 0"/></g></symbol>
+    <symbol id="i-user-plus" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="9.6" cy="10" r="2.2"/><path d="M6.8 15.2a3 3 0 0 1 5.6 0M14.6 9.4v4M12.6 11.4h4"/></g></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="9.2" r="1.1" fill="currentColor" stroke="none"/><line x1="12" y1="12" x2="12" y2="15.4"/></g></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M15 9.4H9.6a2.6 2.6 0 0 0 0 5.2H14M11.4 12l-2-2.6M11.4 12l-2 2.6"/></g></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M8.6 8.4h6.8M10 8.4V7h4v1.4M9.2 8.4 10 15.4h4l.8-7"/></g></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><rect x="9" y="10.4" width="6" height="5" rx="1"/><path d="M10.2 10.4V9a1.8 1.8 0 0 1 3.6 0v1.4"/></g></symbol>
+    <symbol id="i-logo" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M9.4 16V8.4h3.4a2.4 2.4 0 0 1 0 4.8H9.4"/></g></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M8 12a4 4 0 0 1 8 0 4 4 0 0 1-8 0z"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></g></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M8.4 8.4a4 4 0 0 1 7.2 3.6 4 4 0 0 1-.8 2.4M9.4 14.6A4 4 0 0 1 8 12"/><path d="M14.6 11.4A4 4 0 0 1 9.4 9.4"/><path d="M8.4 15.6 15.6 8.4"/></g></symbol>
+  </defs>
+</svg></div>
+</body>
+</html>

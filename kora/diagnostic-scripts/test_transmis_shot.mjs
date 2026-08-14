@@ -1,0 +1,22 @@
+import { chromium } from 'playwright';
+const b = await chromium.launch({ executablePath: '/usr/bin/chromium', args: ['--no-sandbox'] });
+const ctx = await b.newContext();
+await ctx.route('**/*', async (route) => {
+  const resp = await route.fetch();
+  const headers = { ...resp.headers(), 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache' };
+  await route.fulfill({ response: resp, headers });
+});
+const p = await ctx.newPage();
+await p.addInitScript(() => { try { if (window.caches) caches.keys().then(ks => ks.forEach(k => caches.delete(k))); } catch(e){} });
+await p.setViewportSize({ width: 390, height: 844 });
+await p.goto('https://213-156-135-139.sslip.io/kora-v2/#cockpit', { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(()=>{});
+await p.waitForTimeout(2500);
+await p.fill('#authUser', 'admin').catch(()=>{});
+await p.fill('#authPass', process.env.KORA_TEST_PASS || 'CHANGE_ME').catch(()=>{});
+await p.click('#authSubmit').catch(()=>{});
+await p.waitForTimeout(3500);
+await p.evaluate(() => { const c = document.querySelector('[data-action="nav-facts-approved"]'); if (c) c.click(); });
+await p.waitForTimeout(2500);
+await p.screenshot({ path: 'kora_transmis.png', fullPage: true });
+await b.close().catch(()=>{});
+process.exit(0);
