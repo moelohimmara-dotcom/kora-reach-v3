@@ -193,7 +193,6 @@ function heroFact(s, pendingCount) {
       <aside class="hero-side">
         ${chip("À décider", "wait", "i-status")}
         ${chip(srcName, "src", "i-sources")}
-        <div class="src-meta"><b>${esc(level)}</b>${esc(srcName)} détectée sur le flux principal.</div>
       </aside>
     </div>`;
 }
