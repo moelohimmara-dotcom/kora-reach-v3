@@ -21,23 +21,12 @@ const _render = (s) => {
 };
 const mdToHtml = (s) => _render(s);
 const mdToHtmlInline = (s) => _render(s);
-// Mapping des anciennes icônes (i-*) vers Google Material Icons (auto-hébergé via @fontsource)
-const MATERIAL = {
-  "i-dashboard": "dashboard", "i-facts": "article", "i-hitl": "fact_check", "i-audit": "history",
-  "i-sources": "source", "i-settings": "settings", "i-trash": "delete", "i-drafts": "draft",
-  "i-level1": "flag", "i-level2": "public", "i-fusion": "hub", "i-date": "event", "i-shield": "verified_user",
-  "i-check": "check", "i-close": "close", "i-send": "send", "i-edit": "edit", "i-reject": "block",
-  "i-undo": "undo", "i-chevron": "chevron_left", "i-chevron-right": "chevron_right", "i-lock": "lock",
-  "i-eye": "visibility", "i-eye-off": "visibility_off", "i-user": "person", "i-user-plus": "person_add",
-  "i-users": "group", "i-palette": "palette", "i-brush": "brush", "i-logo": "image",
-  "i-spark": "auto_awesome", "i-moon": "dark_mode", "i-sun": "light_mode", "i-info": "info",
-  "i-refresh": "refresh", "i-image": "image", "i-menu": "menu", "i-status": "pending",
-  "i-star": "star", "i-send-alt": "send", "i-download": "download", "i-upload": "upload",
-  "i-search": "search", "i-filter": "filter_list", "i-more": "more_vert", "i-add": "add",
-  "i-delete": "delete", "i-warning": "warning", "i-error": "error", "i-help": "help",
-  "i-grid": "grid_view", "i-list": "list", "i-doc": "description",
-};
-const icon = (id, cls = "") => `<span class="material-icons ${cls}">${MATERIAL[id] || id.replace(/^i-/, "")}</span>`;
+// Icônes : on utilise le SPRITE SVG inline (injecté dans le <body> par le
+// build, voir postbuild.mjs + icons.js) plutôt que la police Material Icons.
+// Avantage : aucun flash de texte (ex: "visibility" sur l'œil du mot de passe)
+// car le <use href="#i-..."> résout immédiatement depuis le DOM, sans
+// dépendre d'une police web async.
+const icon = (id, cls = "") => `<svg class="ic ${cls}" aria-hidden="true"><use href="#${id}"></use></svg>`;
 function placeholderSvg(theme) {
   const pal = {
     dark:  ["#241C18", "#15110F", "#F2A98C"],
