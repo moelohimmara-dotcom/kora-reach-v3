@@ -466,6 +466,14 @@ export const Store = (() => {
         body: JSON.stringify({ ids }),
       });
       if (r.error) throw new Error(r.error);
+      // Disparition IMMEDIATE : on retire les ids de l'etat local AVANT le rechargement
+      // (le backend a deja purge). Ferme aussi tout tiroir ouvert pour eviter
+      // d'afficher un article devenu fantome.
+      const set = new Set(ids);
+      const curFacts = (state.facts || []).filter(f => !set.has(f.fact_id));
+      const curTrash = (state.trash || []).filter(f => !set.has(f.fact_id));
+      closeSheet();
+      setState({ facts: curFacts, trash: curTrash });
       await loadTrash();
       await loadHITL();
       try { await loadStats(); } catch (_) {}
