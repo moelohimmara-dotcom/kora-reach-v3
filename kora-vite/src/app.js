@@ -153,21 +153,16 @@ function evolutionChart(s) {
 }
 
 function viewCockpit(s) {
-  const facts = s.facts || [];
-  const totalRaw = facts.length;
-  // B+C : catégorisation EXCLUSIVE (même source de vérité que la page Articles)
-  const cat = { pending: 0, transmitted: 0, rejected: 0, drafts: 0, trash: 0 };
-  for (const ft of facts) cat[factCategory(s, ft)]++;
-  // Option C (2026-08-14) : 'Articles' = faits réellement en circulation
-  // (hors corbeille et hors rejetés). Le total brut reste disponible en base.
-  const total = cat.pending + cat.transmitted + cat.drafts;
-  const approved = (typeof s.publishedCount === "number") ? s.publishedCount : cat.transmitted;
-  const pending = cat.pending;        // en attente PURE (hors brouillons/déjà traités)
-  const draft = cat.drafts;
-  const trash = cat.trash;
-  // Compteurs dérivés du backend (croisés) pour couvrir tout le cycle de vie.
-  const rejected = (typeof s.rejectedCount === "number") ? s.rejectedCount : cat.rejected;
-  const deleted = (typeof s.deletedCount === "number") ? s.deletedCount : 0;
+  // SSOT : tous les compteurs viennent de s.stats (calcules une fois par le backend).
+  // Plus aucun recalcul divergent cote front (ancien cat.pending / s.trash, etc.).
+  const st = s.stats || {};
+  const total = (typeof st.articles === "number") ? st.articles : 0;       // Articles (en circulation)
+  const pending = (typeof st.pending === "number") ? st.pending : 0;        // A decider (PENDING_REVIEW)
+  const approved = (typeof st.published === "number") ? st.published : 0;   // Publies (articles publies)
+  const draft = (typeof st.drafts === "number") ? st.drafts : 0;            // Brouillons (EDITED)
+  const trash = (typeof st.trash === "number") ? st.trash : 0;             // Corbeille (TRASHED)
+  const rejected = (typeof st.rejected === "number") ? st.rejected : 0;     // Rejetes (corbeille+decision)
+  const deleted = (typeof st.deleted === "number") ? st.deleted : 0;        // Supprimes (audit)
   const health = s.health;
   const audit = s.audit;
   const sources = s.sources || [];
@@ -1408,11 +1403,13 @@ function render() {
   try {
     const facts = s.facts || [];
     let pending = 0; for (const ft of facts) if (factCategory(s, ft) === "pending") pending++;
+    // SSOT : badges de navigation tires de s.stats (calcules une seule fois par le backend)
+    const stats = s.stats || {};
     const badges = {
-      facts: facts.length,
+      facts: (typeof stats.total_facts === "number") ? stats.total_facts : facts.length,
       sources: (s.sources || []).length,
-      drafts: facts.filter(f => (f.status || "") === "EDITED").length,
-      trash: (s.trash || []).length || facts.filter(f => (f.status || "") === "DELETED").length,
+      drafts: (typeof stats.drafts === "number") ? stats.drafts : facts.filter(f => (f.status || "") === "EDITED").length,
+      trash: (typeof stats.trash === "number") ? stats.trash : (s.trash || []).length || facts.filter(f => (f.status || "") === "DELETED").length,
     };
     document.querySelectorAll("[data-badge]").forEach(el => {
       const key = el.getAttribute("data-badge");
