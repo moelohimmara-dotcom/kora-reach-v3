@@ -78,8 +78,8 @@ def db_expected(e):
     published = int(cur.fetchone()[0])
     cur.execute(
         "SELECT count(*) FROM hitl_facts f "
-        "JOIN hitl_decisions d ON d.fact_id = f.fact_id "
-        "WHERE f.status = 'TRASHED' AND d.status = 'REJECTED'"
+        "LEFT JOIN hitl_decisions d ON d.fact_id = f.fact_id "
+        "WHERE f.status = 'REJECTED' OR (f.status = 'TRASHED' AND d.status = 'REJECTED')"
     )
     rejected = int(cur.fetchone()[0])
     cur.execute("SELECT count(*) FROM audit_events WHERE action IN ('SUPPRIME', 'PURGE')")
