@@ -206,6 +206,10 @@ export const Store = (() => {
       // Brouillons / Transmis / Rejetés). Sans ça, viewDrafts filtre sur {} -> rien ne s'affiche.
       const decisions = Object.fromEntries((faits || []).map(f => [f.fact_id, f.status || "PENDING_REVIEW"]));
       setState({ facts: faits, decisions, ui: { ...state.ui, loading: false } });
+      // B+C : forcer un 2e rendu après chargement complet. Le DOM doit refléter le
+      // store stabilisé (80 facts, dont 3 EDITED -> Brouillons), pas un batch partiel
+      // peint trop tôt (où les EDITED sont encore vus comme PENDING_REVIEW).
+      setTimeout(() => { try { Store.setState({ ui: { ...Store.state.ui, _bcTick: Date.now() } }); } catch (_) {} }, 80);
     } catch (e) { setState({ facts: [], ui: { ...state.ui, loading: false, error: e.message } }); }
   }
   async function loadAudit() {

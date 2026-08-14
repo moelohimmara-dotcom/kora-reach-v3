@@ -81,11 +81,11 @@ function viewCockpit(s) {
   const facts = s.facts || [];
   const total = facts.length;
   // B+C : catégorisation EXCLUSIVE (même source de vérité que la page Articles)
-  const cat = { pending: 0, transmitted: 0, rejected: 0, draft: 0, trash: 0 };
+  const cat = { pending: 0, transmitted: 0, rejected: 0, drafts: 0, trash: 0 };
   for (const ft of facts) cat[factCategory(s, ft)]++;
   const approved = cat.transmitted;   // APPROVED/TRANSMITTED = validés
   const pending = cat.pending;        // en attente PURE (hors brouillons/déjà traités)
-  const draft = cat.draft;
+  const draft = cat.drafts;
   const health = s.health;
   const audit = s.audit;
   const sources = s.sources || [];
@@ -414,22 +414,30 @@ function viewDrafts(s) {
 // Garantit que les filtres du Tableau de bord / Articles sont mutuellement
 // exclusifs et que leur somme égale exactement le total (plus de chevauchement
 // "en attente" vs "brouillon").
+// On s'appuie sur f.status (déjà calculé par le backend list_facts : hitl_facts.status
+// prime pour la corbeille, sinon la décision HITL) — PAS sur s.decisions qui
+// écraserait f.status et fausserait le comptage (ex: EDITED compté en attente).
 function factCategory(s, f) {
-  // Corbeille : priorité ABSOLUE, basée sur le statut réel de la base
-  // (status TRASHED ou trashed_at), indépendamment de la décision HITL
-  // (un fact remis en attente mais toujours à la corbeille reste "Corbeille").
   if ((f.trashed_at && f.trashed_at !== "") || f.status === "TRASHED") return "trash";
-  const st = s.decisions[f.fact_id] || f.status || "PENDING_REVIEW";
-  if (st === "TRANSMITTED" || st === "APPROVED") return "transmitted";
-  if (st === "REJECTED") return "rejected";
-  if (st === "EDITED") return "draft";
+  if (f.status === "TRANSMITTED" || f.status === "APPROVED") return "transmitted";
+  if (f.status === "REJECTED") return "rejected";
+  if (f.status === "EDITED") return "drafts";
   return "pending";
 }
 function viewFacts(s) {
   const facts = s.facts || [];
-  // B+C : catégorisation EXCLUSIVE (chaque fact -> 1 seule catégorie)
+  // B+C : catégorisation EXCLUSIVE (chaque fact -> 1 seule catégorie).
+  // Comptage INLINE sur ft.status (source de vérité du backend list_facts),
+  // sans passer par s.decisions (qui écraserait EDITED en PENDING_REVIEW).
   const counts = { all: 0, pending: 0, transmitted: 0, rejected: 0, drafts: 0, trash: 0 };
-  for (const ft of facts) counts[factCategory(s, ft)]++;
+  for (const ft of facts) {
+    let cat = "pending";
+    if (ft.status === "TRASHED" || (ft.trashed_at && ft.trashed_at !== "")) cat = "trash";
+    else if (ft.status === "TRANSMITTED" || ft.status === "APPROVED") cat = "transmitted";
+    else if (ft.status === "REJECTED") cat = "rejected";
+    else if (ft.status === "EDITED") cat = "drafts";
+    counts[cat]++;
+  }
   counts.all = counts.pending + counts.transmitted + counts.rejected + counts.drafts + counts.trash;
   const f = (Store.getFactFilter() || "all").toLowerCase();
   if (!facts.length) return (s.lastCycle && s.lastCycle.result && s.lastCycle.result.status === "empty_or_stale") ? staleBox(s) : stateBox("i-check", "Aucun article à afficher", "Lance un cycle ou génère une démo pour générer des articles à valider.", false, "Générer démo", () => Store.seed());
@@ -445,16 +453,24 @@ function viewFacts(s) {
       <button class="btn btn-tonal" id="enterSelect">${s.selectMode ? "Annuler la sélection" : "Sélectionner"}</button>
     </div>`;
   let body;
-  // B+C : filtrage par catégorie EXCLUSIVE (même source de vérité que les compteurs)
+  // B+C : filtrage par catégorie EXCLUSIVE (même logique inline que les compteurs)
+  const catOf = (ft) => {
+    if (ft.status === "TRASHED" || (ft.trashed_at && ft.trashed_at !== "")) return "trash";
+    if (ft.status === "TRANSMITTED" || ft.status === "APPROVED") return "transmitted";
+    if (ft.status === "REJECTED") return "rejected";
+    if (ft.status === "EDITED") return "drafts";
+    return "pending";
+  };
   if (f === "all") {
     body = factGroupsByDay(facts, s);
-  } else if (["pending", "transmitted", "rejected", "draft", "trash"].includes(f)) {
-    body = factGroupsByDay(facts.filter(x => factCategory(s, x) === f), s);
+  } else if (["pending", "transmitted", "rejected", "drafts", "trash"].includes(f)) {
+    body = factGroupsByDay(facts.filter(x => catOf(x) === f), s);
   } else {
     body = factGroupsByDay(facts, s);
   }
   return filterBar + body;
 }
+globalThis.__viewFacts = viewFacts; // DEBUG B+C
 function trashCard(f, s) {
   const c = f.champion || {};
   const img = imgSrc(f);

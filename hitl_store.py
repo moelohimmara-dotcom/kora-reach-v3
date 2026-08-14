@@ -185,10 +185,25 @@ def list_facts() -> list:
         img_meta = json.loads(d["image_meta"]) if d["image_meta"] else {}
         if not img_meta.get("image") and d["image"] and d["image"].startswith("http"):
             img_meta = {"image": d["image"], "provider": "loremflickr", "generated": True}
+        # B+C backend : hitl_facts.status prime sur la décision HITL pour la
+        # corbeille (priorité absolue). Un fact à la corbeille (status='TRASHED'
+        # en base) doit rester "Corbeille" côté frontend, même si hitl_decisions
+        # porte une autre décision (ex: remis en attente). Sinon on utilise la
+        # décision HITL (d_status) pour refléter APPROVED/REJECTED/EDITED/TRANSMITTED.
+        # B+C backend : hitl_facts.status EST la source de vérité (mirroré par decide()
+        # et mark_transmitted()). On l'utilise directement — sauf si c'est PENDING_REVIEW
+        # et qu'une décision HITL le précise (cas d'un fact décidé mais non mirroiré).
+        _raw_status = d.get("status") or "PENDING_REVIEW"
+        if _raw_status == "TRASHED":
+            _eff_status = "TRASHED"
+        elif _raw_status == "PENDING_REVIEW" and d.get("d_status"):
+            _eff_status = d["d_status"]
+        else:
+            _eff_status = _raw_status
         out.append({
             "fact_id": d["fact_id"], "champion": champ, "contexts": ctx, "article": art,
             "image": d["image"], "image_meta": img_meta, "gen_model": d["gen_model"],
-            "n_sources": d["n_sources"], "status": d["d_status"] or "PENDING_REVIEW",
+            "n_sources": d["n_sources"], "status": _eff_status,
             "decided_by": d["decided_by"], "decided_at": d["decided_at"],
             "final_text": d["final_text"], "provider": d["provider"],
             "created_at": d["created_at"],
@@ -255,6 +270,12 @@ def decide(fact_id: str, decision: str, decided_by: str,
                    (fact_id, status, decision, edited_text, final_text, decided_by, decided_at)
                    VALUES ({p},{p},{p},{p},{p},{p},{p})""",
                 (fact_id, decision, decision, edited_text, final_text, decided_by, now))
+        # Miroir du statut dans hitl_facts : list_facts() priorise hitl_facts.status,
+        # donc sans ça un fact EDITED/APPROVED/REJECTED/TRANSMITTED reste vu comme
+        # PENDING_REVIEW (rebound via hitl_decisions) -> compteurs instables.
+        if decision in ("EDITED", "APPROVED", "REJECTED", "TRANSMITTED"):
+            cur.execute(f"UPDATE hitl_facts SET status={p} WHERE fact_id={p} AND status <> 'TRASHED'",
+                        (decision, fact_id))
         con.commit()
     finally:
         con.close()
@@ -281,6 +302,9 @@ def mark_transmitted(fact_id: str, provider: str, http_status: int,
                 f"UPDATE hitl_decisions SET status='TRANSMITTED', transmitted_at={p}, "
                 f"provider={p}, http_status={p} WHERE fact_id={p}",
                 (now, provider, http_status, fact_id))
+        # Miroir dans hitl_facts (voir decide())
+        cur.execute(f"UPDATE hitl_facts SET status='TRANSMITTED' WHERE fact_id={p} AND status <> 'TRASHED'",
+                    (fact_id,))
         con.commit()
     finally:
         con.close()
