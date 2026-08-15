@@ -17,6 +17,13 @@ from dedup import url_hash, is_dup
 from clusterer import cluster, pick_champion, score_item
 from state_store import seen, mark, new_cycle, end_cycle, init as _init_state
 from writer import write_article
+
+# Flag d'annulation de cycle (bouton « Interrompre » côté UI)
+CANCEL_FLAG = {"requested": False}
+
+def cancel_cycle():
+    """Demande l'interruption du cycle en cours (arrêt propre après l'article en cours)."""
+    CANCEL_FLAG["requested"] = True
 from hitl_store import fact_id_of
 from audit import log
 from illustrate import illustrate, illustrate_all
@@ -243,11 +250,16 @@ class ReachAgent:
                     f"0 cluster mais pool={len(pool)} -> 1 article de secours "
                     f"depuis {best.get('source')} ({best.get('title','')[:50]})")
 
-            # P1: debit realiste — jusqu'a daily_article_limit articles/cycle (pas 1 seul)
-            cap = config.LIMITS.get("daily_article_limit", 10)
-            limit = max(1, min(cap, len(clusters)))
+            # REGLE METIER : 1 cycle = 1 article (génération unique et verrouillée)
+            limit = 1
             facts = []
             for c in clusters[:limit]:
+                if CANCEL_FLAG["requested"]:
+                    # Interruption propre : on arrête après l'article en cours,
+                    # on libère le flag et on rend les faits déjà générés.
+                    CANCEL_FLAG["requested"] = False
+                    log(cid, "CYCLE_CANCEL", "annulation demandee par l'utilisateur", action="CYCLE")
+                    break
                 champ, ctx = pick_champion(c)
                 fact = {"champion": champ, "contexts": ctx, "n_sources": len(c), "forced_stale": forced_stale, "cycle_id": cid}
                 written = write_article(fact)

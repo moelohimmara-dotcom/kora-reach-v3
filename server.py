@@ -304,7 +304,8 @@ class Handler(BaseHTTPRequestHandler):
             if reach_agent.agent.is_busy:
                 return self._send(429, {"error": "cycle_en_cours"})
             scope = payload.get("scope")
-            demand = payload.get("demand", 3)
+            # REGLE METIER : 1 cycle = 1 article (génération unique et verrouillée)
+            demand = 1
             initiator = payload.get("initiator", "dashboard")
             # Détache le cycle en arrière-plan (il peut durer 1-2 min en prod)
             def _run():
@@ -335,7 +336,21 @@ class Handler(BaseHTTPRequestHandler):
                 LAST_CYCLE["result"] = None
             threading.Thread(target=_run, daemon=True).start()
             return self._send(200, {"started": True, "detail": "Cycle lancé en arrière-plan. Poll /api/last ou /api/hitl."})
+        if p.path == "/api/cycle/cancel":
+            # Interrompt le cycle en cours (arrêt propre après l'article en cours).
+            # Le flag est lu par reach_agent.run ; le verrou LAST_CYCLE est relâché
+            # à la fin du cycle (finally). On le relâche aussi immédiatement pour
+            # débloquer l'UI si le cycle était déjà terminé/crashé.
+            reach_agent.cancel_cycle()
+            with _LAST_LOCK:
+                if not LAST_CYCLE["running"]:
+                    LAST_CYCLE["running"] = False
+            return self._send(200, {"cancelled": True, "detail": "Demande d'interruption envoyée. Le cycle s'arrêtera après l'article en cours."})
         if p.path == "/api/regenerate":
+            # VERROU : aucune génération ne doit être possible tant qu'un cycle tourne.
+            with _LAST_LOCK:
+                if LAST_CYCLE["running"]:
+                    return self._send(429, {"error": "cycle_en_cours", "detail": "Génération verrouillée : un cycle est en cours. Interrompez ou attendez la fin."})
             # Régénère UN article depuis les INFOS DÉJÀ ACQUISES (hitl_facts).
             # AUCUN re-scraping : le champion/contexts source est relu depuis la base.
             fid = payload.get("fact_id")
