@@ -1387,12 +1387,14 @@ function render() {
   // login au reload) : on attend l'issue de checkAuth() avant de trancher.
   if (!s.auth || !s.auth.loggedIn) {
     if (s.auth && s.auth.pending) { return; } // verification en cours -> pas de login
+    hideBootSplash(); // auth resolue (login affiche) -> splash plus utile
     if (!_authRendered) { renderAuth("login"); }
     return;
   }
   // Session confirmee (login ou reload avec cookie valide) : on masque l'overlay
   // d'auth et on reaffiche l'app. Sans ca, l'overlay login reste au-dessus de
   // l'app apres un refresh (bug : redirige vers login a chaque reload).
+  hideBootSplash(); // app montee -> on retire le splash de boot
   showApp();
   const agent = document.getElementById("agentStatus");
   if (agent) agent.innerHTML = s.ui.busy
@@ -2200,6 +2202,14 @@ function showApp() {
   if (overlay) overlay.hidden = true;
   const app = document.getElementById("app");
   if (app) app.style.display = "";
+}
+
+// Masque le splash de boot statique (index.html) une fois l'app reellement
+// montee. Appelé par render() des que l'auth est resolue (plus de pending),
+// que ce soit l'app ou le formulaire de login -> aucun artefact au refresh.
+function hideBootSplash() {
+  const el = document.getElementById("bootSplash");
+  if (el && el.parentNode) el.parentNode.removeChild(el);
 }
 
 export const App = { render, snack, bind, boot, navigate, openFact, renderAuth, showApp };

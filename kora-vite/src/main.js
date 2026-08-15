@@ -43,3 +43,7 @@ App.boot();
 Store.subscribe(() => App.render());
 // debug : expose Store pour tests navigateur
 window.Store = Store; window.App = App;
+// Sécurité splash : si l'app ne monte pas dans les 8s (erreur réseau/IP), on
+// retire le splash pour ne pas bloquer l'utilisateur sur un ecran figé.
+setTimeout(() => { const el = document.getElementById("bootSplash"); if (el) el.remove(); }, 8000);
+
