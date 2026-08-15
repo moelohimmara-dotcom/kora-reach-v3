@@ -1944,5 +1944,7 @@ html.icons-ready .material-icons { visibility: visible; }
   .section-title { font-size: 20px; margin-bottom: 12px; }
   .view p.muted, p.muted { background: rgba(244, 238, 226, .08); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 12px 14px; color: rgba(244, 238, 226, .72); margin-bottom: 16px; font-size: 13px; line-height: 1.5; }
   .src-row .chip, .fact-group .chip { border-radius: 8px; }
+  /* Conformite wireframe : tags Articles rectangulaires (pas pilules) */
+  .fact-card .tag, .fact-chips .tag, .fact-card [class*="tag"] { border-radius: 8px !important; }
 }
 
