@@ -1421,7 +1421,7 @@ function render() {
     // SSOT : badges de navigation tires de s.stats (calcules une seule fois par le backend)
     const stats = s.stats || {};
     const badges = {
-      facts: (typeof stats.total_facts === "number") ? stats.total_facts : facts.length,
+      facts: (typeof stats.articles === "number") ? stats.articles : ((typeof stats.total_facts === "number") ? stats.total_facts : facts.length),
       sources: (s.sources || []).length,
       drafts: (typeof stats.drafts === "number") ? stats.drafts : facts.filter(f => (f.status || "") === "EDITED").length,
       trash: (typeof stats.trash === "number") ? stats.trash : (s.trash || []).length || facts.filter(f => (f.status || "") === "DELETED").length,

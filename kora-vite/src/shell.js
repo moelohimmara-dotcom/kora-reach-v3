@@ -93,7 +93,6 @@ export const SHELL = `
     <button class="navitem" data-route="facts"><svg class="ic"><use href="#i-facts"/></svg><span>Total</span><span class="nav-badge" data-badge="facts"></span></button>
     <button class="navitem" data-route="drafts"><svg class="ic"><use href="#i-edit"/></svg><span>Brouil</span><span class="nav-badge" data-badge="drafts"></span></button>
     <button class="navitem" data-route="trash"><svg class="ic"><use href="#i-trash"/></svg><span>Corbeille</span><span class="nav-badge" data-badge="trash"></span></button>
-    <button class="navitem navitem-center" data-plus><svg class="ic"><use href="#i-more"/></svg><span>Plus</span></button>
   </nav>
 
   <div class="nav-scrim" id="navScrim" hidden></div>
