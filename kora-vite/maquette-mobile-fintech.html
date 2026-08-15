@@ -1,6 +1,80 @@
-// Sprite SVG KORA — Lucide Icons (MIT, https://lucide.dev)
-// Outline 24px, stroke 2px, currentColor. Mêmes id #i-* que l'ancien sprite -> app.js inchangé.
-const SPRITE = `<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KORA Mobile — Fintech Bold (maquette)</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+:root {
+  --neon-lime: #C6FF00;
+  --neon-purple: #A855F7;
+  --neon-blue: #38BDF8;
+  --text: #F4F6F8;
+  --text-2: rgba(244,246,248,.62);
+  --surface: rgba(10,14,10,.42);
+  --border: rgba(255,255,255,.10);
+}
+html, body { height: 100%; }
+body {
+  font-family: Inter, system-ui, sans-serif;
+  background: #050805;
+  display: flex; justify-content: center;
+  padding: 16px; /* safe area desktop preview */
+}
+/* Écran mobile */
+.phone {
+  width: 100%; max-width: 390px;
+  min-height: 844px;
+  background: linear-gradient(180deg, #16210F 0%, #2E4216 48%, #6E9316 78%, var(--neon-lime) 100%);
+  border-radius: 28px; overflow: hidden;
+  display: flex; flex-direction: column;
+  position: relative;
+  box-shadow: 0 30px 80px rgba(0,0,0,.6);
+}
+.screen { padding: 16px; display: flex; flex-direction: column; gap: 16px; flex: 1; padding-bottom: 84px; /* space bottom-nav */ }
+/* Header */
+.header { display: flex; align-items: center; justify-content: space-between; }
+.logo { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 20px; color: var(--text); letter-spacing: .5px; }
+.logo .k { width: 30px; height: 30px; border-radius: 8px; background: var(--neon-lime); color: #0a0f06; display: flex; align-items: center; justify-content: center; font-weight: 900; }
+.status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: #3DD68C; box-shadow: 0 0 8px #3DD68C; }
+.icon-btn { width: 44px; height: 44px; min-width: 44px; border: none; border-radius: 12px; background: rgba(0,0,0,.3); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.ic { width: 20px; height: 20px; }
+/* Donut */
+.donut-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.donut { width: 180px; height: 180px; }
+.donut-center { font-size: 30px; font-weight: 800; fill: var(--text); }
+.donut-sub { font-size: 12px; fill: var(--text-2); }
+/* KPI grid */
+.kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  padding: 14px; display: flex; flex-direction: column; gap: 8px; min-height: 92px;
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+}
+.stat-card.full { grid-column: 1 / -1; }
+.stat-icon { width: 18px; height: 18px; color: var(--neon-lime); }
+.stat-value { font-size: 30px; font-weight: 800; color: var(--text); line-height: 1; font-variant-numeric: tabular-nums; }
+.stat-label { font-size: 13px; font-weight: 500; color: var(--text-2); }
+/* Bottom nav */
+.bottom-nav {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 60px; /* 56-64dp */
+  display: flex; align-items: stretch;
+  background: rgba(5,8,5,.72); backdrop-filter: blur(16px);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.nav-item {
+  flex: 1; min-height: 44px; /* touch target */
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  color: var(--text-2); font-size: 10px; font-weight: 600; position: relative; cursor: pointer;
+}
+.nav-item.active { color: var(--neon-lime); }
+.nav-item .ic { width: 22px; height: 22px; }
+.nav-item.active::after { content: ""; position: absolute; bottom: 4px; width: 22px; height: 3px; border-radius: 2px; background: var(--neon-lime); }
+.badge { position: absolute; top: 6px; right: 50%; margin-right: -18px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #E5484D; color: #fff; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+</style></head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
   <symbol id="i-dashboard" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <rect width="7" height="9" x="3" y="3" rx="1" />
   <rect width="7" height="5" x="14" y="3" rx="1" />
@@ -190,17 +264,82 @@ const SPRITE = `<svg xmlns="http://www.w3.org/2000/svg" style="display:none" ari
   <path d="M6.5 21A3.5 3.5 0 1 0 3 17.5a2.62 2.62 0 0 1-.708 1.792A1 1 0 0 0 3 21z" />
   <path d="M9.969 17.031 21.378 5.624a1 1 0 0 0-3.002-3.002L6.967 14.031" />
 </g></symbol>
-  <symbol id="i-help" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="12" cy="12" r="10" />
-  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-  <path d="M12 17h.01" />
-</g></symbol>
-  <symbol id="i-gauge" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="m12 14 4-4" />
-  <path d="M3.34 19a10 10 0 1 1 17.32 0" />
-</g></symbol>
-  <symbol id="i-plus" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M5 12h14" />
-  <path d="M12 5v14" />
-</g></symbol>
-</svg>`;
+</svg></svg>
+
+<div class="phone">
+  <div class="screen">
+    <div class="header">
+      <div class="logo"><span class="k">K</span> KORA</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="status"><span class="dot"></span> prêt</div>
+        <button class="icon-btn"><svg class="ic"><use href="#i-refresh"></use></svg></button>
+      </div>
+    </div>
+
+    <div class="donut-wrap">
+      <svg class="donut" viewBox="0 0 200 200">
+        <circle cx="100" cy="100" r="78" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="22"/>
+        <circle cx="100" cy="100" r="78" fill="none" stroke="var(--neon-purple)" stroke-width="22"
+          stroke-dasharray="330 490" stroke-dashoffset="0" stroke-linecap="round" transform="rotate(-90 100 100)"/>
+        <circle cx="100" cy="100" r="78" fill="none" stroke="var(--neon-lime)" stroke-width="22"
+          stroke-dasharray="160 490" stroke-dashoffset="-330" stroke-linecap="round" transform="rotate(-90 100 100)"/>
+        <text x="100" y="94" text-anchor="middle" class="donut-center">76</text>
+        <text x="100" y="114" text-anchor="middle" class="donut-sub">Articles</text>
+      </svg>
+    </div>
+
+    <div class="kpi-grid">
+      
+  <div class="stat-card">
+    <svg class="stat-icon"><use href="#i-facts"></use></svg>
+    <div class="stat-value">76</div>
+    <div class="stat-label">Articles</div>
+  </div>
+      
+  <div class="stat-card">
+    <svg class="stat-icon"><use href="#i-status"></use></svg>
+    <div class="stat-value">68</div>
+    <div class="stat-label">À décider</div>
+  </div>
+      
+  <div class="stat-card">
+    <svg class="stat-icon"><use href="#i-check"></use></svg>
+    <div class="stat-value">0</div>
+    <div class="stat-label">Publiés</div>
+  </div>
+      
+  <div class="stat-card">
+    <svg class="stat-icon"><use href="#i-edit"></use></svg>
+    <div class="stat-value">6</div>
+    <div class="stat-label">Brouillons</div>
+  </div>
+      
+  <div class="stat-card">
+    <svg class="stat-icon"><use href="#i-reject"></use></svg>
+    <div class="stat-value">7</div>
+    <div class="stat-label">Rejetés</div>
+  </div>
+      
+  <div class="stat-card">
+    <svg class="stat-icon"><use href="#i-trash"></use></svg>
+    <div class="stat-value">19</div>
+    <div class="stat-label">Corbeille</div>
+  </div>
+      
+  <div class="stat-card full">
+    <svg class="stat-icon"><use href="#i-close"></use></svg>
+    <div class="stat-value">14</div>
+    <div class="stat-label">Supprimés</div>
+  </div>
+    </div>
+  </div>
+
+  <nav class="bottom-nav">
+    <div class="nav-item active"><svg class="ic"><use href="#i-dashboard"></use></svg><span>Tableau de bord</span></div>
+    <div class="nav-item"><svg class="ic"><use href="#i-facts"></use></svg><span>Articles</span><span class="badge">76</span></div>
+    <div class="nav-item"><svg class="ic"><use href="#i-edit"></use></svg><span>Brouillons</span><span class="badge">6</span></div>
+    <div class="nav-item"><svg class="ic"><use href="#i-trash"></use></svg><span>Corbeille</span><span class="badge">19</span></div>
+    <div class="nav-item"><svg class="ic"><use href="#i-settings"></use></svg><span>Paramètres</span></div>
+  </nav>
+</div>
+</body></html>
