@@ -1234,8 +1234,8 @@ html.icons-ready .material-icons { visibility: visible; }
 .stat-card.stat-full { grid-column: 1 / -1; }
 .stat-card.loading { opacity: 0.6; pointer-events: none; }
 .stat-card.error { border-color: var(--danger); }
-.stat-icon { width: 24px; height: 24px; color: var(--text-secondary); opacity: .7; margin-bottom: 12px; }
-.stat-value { font-family: var(--font-display); font-size: 30px; font-weight: 700; color: var(--text-primary); line-height: 1; font-variant-numeric: tabular-nums; margin-bottom: 4px; }
+.stat-icon { width: 20px; height: 20px; color: var(--text-secondary); opacity: .7; margin-bottom: 16px; }
+.stat-value { font-family: var(--font-display); font-size: 30px; font-weight: 700; color: var(--text-primary); line-height: 1; font-variant-numeric: tabular-nums; margin-bottom: 4px; text-align: center; width: 100%; }
 .stat-value .skeleton { display: inline-block; width: 60px; height: 28px; background: linear-gradient(90deg, var(--surface-raised) 25%, var(--border) 50%, var(--surface-raised) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 .stat-label { font-size: 13px; font-weight: 500; letter-spacing: .2px; color: var(--text-secondary); line-height: 1.2; display: flex; align-items: center; justify-content: center; gap: 4px; }
