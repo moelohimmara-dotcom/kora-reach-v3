@@ -1344,7 +1344,7 @@ html.icons-ready .material-icons { visibility: visible; }
      qui debordait la bulle (cf. capture user). Meme agencement desktop preserve. */
   .stat-value { font-size: 1.375rem; } /* 22px (~0.69x desktop, affinage suite feedback 'trop gros') */
   .stat-label { font-size: 12px; }     /* 12px (ratio desktop, plancher lisible) */
-  .stat-icon { width: 20px; height: 20px; }
+  .stat-icon { width: 18px; height: 18px; display: block; margin: 0 auto 16px; align-self: center; }
   .health-row { flex-direction: column; }
   .health-item { text-align: center; }
   .cycle-actions { flex-direction: column; }
