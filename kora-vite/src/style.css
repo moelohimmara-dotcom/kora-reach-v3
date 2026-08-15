@@ -1854,7 +1854,8 @@ html.icons-ready .material-icons { visibility: visible; }
     border-color: rgba(255, 255, 255, .14) !important;
     backdrop-filter: blur(12px);
   }
-  .stat-card .stat-icon, .stat .stat-icon { color: var(--kora-accent2) !important; }
+  .stat-card .stat-icon, .stat .stat-icon { color: var(--kora-accent2) !important; width: 24px; height: 24px; }
+  /* Icônes KPI uniformes 24px (grille 8pt) — bonnes pratiques mobile */
   .kora-donut { width: 180px; height: 180px; display: block; margin: 8px auto; }
   .kora-donut-center { font-size: 32px; font-weight: 800; fill: var(--kora-paper); }
   .kora-donut-sub { font-size: 12px; fill: rgba(244,238,226,.64); }
