@@ -1244,41 +1244,6 @@ html.icons-ready .material-icons { visibility: visible; }
 .stat-trend.down { background: rgba(229,72,77,.16); color: var(--danger); }
 .stat-error { width: 20px; height: 20px; color: var(--danger); position: absolute; top: 8px; right: 8px; }
 
-/* HERO maquette : Bonjour Admin + date */
-.hero-greeting { margin-bottom: var(--space-5); }
-.hero-eyebrow { font-size: 14px; font-weight: 600; color: var(--accent); margin: 0 0 2px; letter-spacing: .3px; }
-.hero-title { font-family: var(--font-display); font-size: 24px; font-weight: 700; color: var(--text-primary); line-height: 1.15; margin: 0 0 10px; }
-.hero-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.hero-badge { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: var(--radius-pill); }
-.hero-badge.warn { background: rgba(245,168,60,.16); color: var(--warning); }
-.hero-badge.ok { background: rgba(61,214,140,.16); color: var(--success); }
-.hero-fact { font-size: 12px; color: var(--text-secondary); }
-
-/* BARRE DE SANTÉ maquette */
-.health-bar { margin-bottom: 14px; }
-.health-bar-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
-.health-score { font-family: var(--font-display); font-size: 20px; font-weight: 700; }
-.health-score.good { color: var(--success); }
-.health-score.mid { color: var(--warning); }
-.health-score.bad { color: var(--danger); }
-.health-label { font-size: 12px; color: var(--text-secondary); }
-.health-track { height: 8px; border-radius: var(--radius-pill); background: var(--surface-raised); overflow: hidden; }
-.health-fill { height: 100%; border-radius: var(--radius-pill); transition: width var(--dur-med) var(--ease); }
-.health-fill.good { background: var(--success); }
-.health-fill.mid { background: var(--warning); }
-.health-fill.bad { background: var(--danger); }
-.health-services { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; }
-.hsvc { font-size: 12px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px; }
-.hsvc-dot { width: 7px; height: 7px; border-radius: 50%; }
-.hsvc.on .hsvc-dot { background: var(--success); }
-.hsvc.off .hsvc-dot { background: var(--danger); }
-.hsvc.off { color: var(--danger); }
-
-/* Bouton Forcer Sync (maquette) */
-.sync-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-secondary); background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 6px 12px; cursor: pointer; transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
-.sync-btn:hover { border-color: var(--accent); color: var(--accent); }
-.sync-btn .ic { width: 14px; height: 14px; }
-
 /* Variantes neutralisées : TOUTES les cartes partagent le même surface rempli (spec #3/#6) */
 .stat-card.stat-primary .stat-icon,
 .stat-card.stat-success .stat-icon,

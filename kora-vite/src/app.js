@@ -140,7 +140,7 @@ function evolutionChart(s) {
   return `
     <section class="ev-chart kora-wire" aria-label="Graphique d'évolution de l'activité">
       <div class="ev-head">
-        <h2 class="section-title">Évolution contenu</h2>
+        <h2 class="section-title">Évolution de l'activité</h2>
         <div class="ev-legend">${legend}</div>
       </div>
       <div class="ev-plot">
@@ -170,8 +170,8 @@ function viewCockpit(s) {
 
   return `
     <div class="cockpit kora-wire">
-      <!-- HERO maquette : Bonjour Admin + date + résumé fact en attente (fonction live) -->
-      ${heroGreeting(s, pending)}
+      <!-- HERO : le fact en attente de décision (cœur du produit) -->
+      ${heroFact(s, pending)}
 
       <!-- STATS discrètes (bandeau, pas le hero template) -->
       <div class="cockpit-grid stats-row kora-stats">
@@ -190,11 +190,7 @@ function viewCockpit(s) {
       <!-- ROW 2 : System Health + Sources + Cycle Control -->
       <div class="cockpit-grid system-row">
         <section class="system-section">
-          <div class="section-head">
-            <h2 class="section-title">Santé système</h2>
-            <button class="sync-btn" data-action="force-all" title="Forcer la synchronisation"><svg class="ic" aria-hidden="true"><use href="#i-refresh"></use></svg> Forcer Sync</button>
-          </div>
-          ${healthBar(health)}
+          <h2 class="section-title">Santé système</h2>
           ${systemHealthPill(health)}
         </section>
         <section class="system-section sources-section" data-nav="sources" role="button" tabindex="0" aria-label="Voir la gouvernance des sources">
@@ -202,8 +198,8 @@ function viewCockpit(s) {
           <div class="source-chips">
             ${sources.length ? (() => {
               // Guinee7 isolée en fin de liste (demande : séparée des autres sources)
-              const others = sources.filter(s => !/guin[ée]e?\s*7/i.test(s.name || s.id || ""));
-              const guinee7 = sources.filter(s => /guin[ée]e?\s*7/i.test(s.name || s.id || ""));
+              const others = sources.filter(s => !/guin[ée]e?\\s*7/i.test(s.name || s.id || ""));
+              const guinee7 = sources.filter(s => /guin[ée]e?\\s*7/i.test(s.name || s.id || ""));
               return [...others, ...guinee7].map(src => sourceStatusChip(src)).join("");
             })() : '<span class="source-chip empty">Aucune source</span>'}
           </div>
@@ -224,52 +220,6 @@ function viewCockpit(s) {
       </section>
     </div>
   `;
-}
-
-// HERO maquette : "Bonjour Admin" + date du jour + résumé du fact en attente (fonction live).
-function heroGreeting(s, pendingCount) {
-  const now = new Date();
-  const dateStr = now.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-  const cap = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
-  const fact = (s.facts && s.facts.length) ? s.facts[0] : null;
-  const pendingTxt = pendingCount > 0
-    ? `<span class="hero-badge warn">${pendingCount} à décider</span>`
-    : `<span class="hero-badge ok">Tout est à jour</span>`;
-  return `
-    <header class="hero-greeting kora-wire">
-      <div class="hero-greet-main">
-        <p class="hero-eyebrow">Bonjour Admin</p>
-        <h1 class="hero-title">${cap}</h1>
-        <div class="hero-meta">${pendingTxt}${fact ? `<span class="hero-fact">Dernier : ${esc(fact.title || fact.srcName || "Fact")}</span>` : ""}</div>
-      </div>
-    </header>`;
-}
-
-// BARRE DE SANTÉ maquette : pourcentage + services ON (alimenté par s.health live).
-function healthBar(health) {
-  if (!health) return `<div class="health-bar loading"><span class="skeleton"></span></div>`;
-  // Score de santé dérivé des signaux live (mutex libre + LLM ok + sources ok).
-  const llm = health.llm_circuit || {};
-  const llmOk = !(llm.failures > 0 || (llm.open_until && llm.open_until > Date.now() / 1000));
-  const services = [
-    { name: "Base", ok: true },
-    { name: "Collecte", ok: (health.sources_ok ?? true) },
-    { name: "LLM", ok: llmOk },
-    { name: "Mutex", ok: !health.mutex }
-  ];
-  const score = Math.round((services.filter(s => s.ok).length / services.length) * 100);
-  const scoreCls = score >= 90 ? "good" : score >= 70 ? "mid" : "bad";
-  return `
-    <div class="health-bar">
-      <div class="health-bar-head">
-        <span class="health-score ${scoreCls}">${score}%</span>
-        <span class="health-label">Santé globale</span>
-      </div>
-      <div class="health-track"><div class="health-fill ${scoreCls}" style="width:${score}%"></div></div>
-      <div class="health-services">
-        ${services.map(sv => `<span class="hsvc ${sv.ok ? "on" : "off"}"><span class="hsvc-dot"></span>${sv.name}</span>`).join("")}
-      </div>
-    </div>`;
 }
 
 // HERO wire-desk : la carte fact en attente de décision la plus récente.
