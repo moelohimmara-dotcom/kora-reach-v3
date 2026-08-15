@@ -1882,8 +1882,6 @@ html.icons-ready .material-icons { visibility: visible; }
   }
   .overflow-menu button, .overflow-item, .more-item { min-height: 48px !important; display: flex; align-items: center; gap: 12px; color: var(--kora-paper); }
   .empty p, .trash-empty p, .view .empty { color: rgba(244,238,226,.72) !important; }
-  .kora-donut-center { font-size: 32px; font-weight: 800; fill: var(--kora-paper); }
-  .kora-donut-sub { font-size: 12px; fill: rgba(244,238,226,.64); }
   .bottomnav, .bottom-nav {
     background: rgba(20, 12, 6, .82) !important;
     backdrop-filter: blur(16px);
