@@ -605,7 +605,6 @@ function viewSources(s) {
         <div class="name">${esc(e.name)} ${e.guinee_filter ? chip("Filtre Guinée", "warning", "i-shield") : ""}</div>
         <div class="sub">${esc(e.category)} · ${esc(e.vector_primary)} · ${esc(e.entry_url)}</div>
       </div>
-      ${chip("National", "primary")}
     </div>`;
   return `<div class="section-title">Gouvernance des sources (${gn.length})</div>
     <p class="muted" style="margin-bottom:16px">Whitelist figée G1 — aucune découverte automatique. Toute cible hors liste est refusée.</p>
