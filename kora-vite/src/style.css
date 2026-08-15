@@ -1334,7 +1334,7 @@ html.icons-ready .material-icons { visibility: visible; }
 .cycle-actions md-outlined-button { flex: 1; min-width: 140px; }
 
 /* Mobile adjustments */
-@media (max-width: 599px) {
+@media (max-width: 819px) {
   .cockpit { padding: var(--space-4); }
   .cockpit-grid.stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stat-card { min-height: 96px; gap: 8px; }
