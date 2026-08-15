@@ -310,17 +310,26 @@ class Handler(BaseHTTPRequestHandler):
             def _run():
                 # NB: on NE supprime plus reach_state.db (sinon on perd l'historique
                 # des décisions + faits à chaque cycle). Upsert à la place.
-                result = reach_agent.agent.run(demand=demand, scope_filter=scope,
-                                                initiator=initiator, force=bool(payload.get("force", False)))
-                # Persiste les faits pour qu'ils survivent au redémarrage
-                facts = (result.get("facts") if isinstance(result, dict) else None) or []
-                for fct in facts:
-                    try: upsert_fact(fct)
-                    except Exception as _e: log("cycle", "FACT_PERSIST_WARN", str(_e), "hitl")
-                with _LAST_LOCK:
-                    LAST_CYCLE["result"] = result
-                    LAST_CYCLE["ts"] = datetime.now().isoformat(timespec="seconds")
-                    LAST_CYCLE["running"] = False
+                try:
+                    result = reach_agent.agent.run(demand=demand, scope_filter=scope,
+                                                    initiator=initiator, force=bool(payload.get("force", False)))
+                    # Persiste les faits pour qu'ils survivent au redémarrage
+                    facts = (result.get("facts") if isinstance(result, dict) else None) or []
+                    for fct in facts:
+                        try: upsert_fact(fct)
+                        except Exception as _e: log("cycle", "FACT_PERSIST_WARN", str(_e), "hitl")
+                    with _LAST_LOCK:
+                        LAST_CYCLE["result"] = result
+                        LAST_CYCLE["ts"] = datetime.now().isoformat(timespec="seconds")
+                except Exception as _cyc:
+                    import traceback as _tb
+                    _tb.print_exc()
+                    with _LAST_LOCK:
+                        LAST_CYCLE["result"] = {"error": str(_cyc)}
+                        LAST_CYCLE["ts"] = datetime.now().isoformat(timespec="seconds")
+                finally:
+                    with _LAST_LOCK:
+                        LAST_CYCLE["running"] = False
             with _LAST_LOCK:
                 LAST_CYCLE["running"] = True
                 LAST_CYCLE["result"] = None
@@ -333,7 +342,12 @@ class Handler(BaseHTTPRequestHandler):
             suggestion = payload.get("suggestion")  # id parmi les suggestions, ou None
             if not fid:
                 return self._send(400, {"error": "fact_id_requis"})
-            res = writer.regenerate(fid, suggestion=suggestion)
+            try:
+                res = writer.regenerate(fid, suggestion=suggestion)
+            except Exception as _re:
+                import traceback as _tb
+                _tb.print_exc()
+                return self._send(500, {"error": f"regenerate_error: {_re}"})
             if res.get("error"):
                 return self._send(404, res)
             return self._send(200, res)

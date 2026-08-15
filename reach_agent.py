@@ -235,7 +235,7 @@ class ReachAgent:
             if not clusters and pool:
                 best = sorted(
                     pool,
-                    key=lambda i: (i.title or ""),
+                    key=lambda i: (i.get("title", "") or ""),
                     reverse=False,
                 )[0]
                 clusters = [[best]]
