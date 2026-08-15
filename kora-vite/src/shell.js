@@ -107,19 +107,11 @@ export const SHELL = `
     </button>
   </nav>
 
-  <script>
-    (function () {
-      var plus = document.getElementById('navPlus');
-      if (plus) plus.addEventListener('click', function () {
-        var ov = document.getElementById('overflowMenu');
-        if (ov) ov.hidden = !ov.hidden;
-      });
-    })();
-  </script>
-
   <div class="nav-scrim" id="navScrim" hidden></div>
   <div class="overflow-menu" id="overflowMenu" hidden>
-    <button class="overflow-item" data-route="trash"><svg class="ic"><use href="#i-trash"/></svg><span>Corbeille</span></button>
+    <button class="overflow-item" data-route="drafts"><svg class="ic"><use href="#i-edit"/></svg><span>Brouillons</span></button>
+    <button class="overflow-item" data-route="audit"><svg class="ic"><use href="#i-check"/></svg><span>Historique</span></button>
+    <button class="overflow-item" data-route="sources"><svg class="ic"><use href="#i-sources"/></svg><span>Sources</span></button>
     <button class="overflow-item" data-route="settings"><svg class="ic"><use href="#i-settings"/></svg><span>Paramètres</span></button>
   </div>
 
