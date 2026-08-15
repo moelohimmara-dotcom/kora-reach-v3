@@ -1820,6 +1820,18 @@ function bind() {
   const closeOverflow = () => { if (overflowMenu) overflowMenu.classList.remove("open"); if (navScrim) navScrim.hidden = true; };
   if (overflowMenu) overflowMenu.querySelectorAll(".overflow-item").forEach(it => it.onclick = () => { navigate(it.dataset.route); closeOverflow(); });
 
+  // Ouverture du menu Plus (mobile) — délégation document CAPTURE (shell injecté apres init)
+  document.addEventListener("click", (e) => {
+    const plus = e.target.closest && e.target.closest("#navPlus");
+    if (plus) {
+      e.preventDefault(); e.stopPropagation();
+      if (!overflowMenu) return;
+      overflowMenu.classList.add("open");   // idempotent : reste ouvert malgre events multiples d'un meme tap
+      if (navScrim) navScrim.hidden = false;
+    }
+  }, true);
+  if (navScrim) navScrim.addEventListener("click", () => { overflowMenu.classList.remove("open"); navScrim.hidden = true; });
+
   // Swipe dismiss for overflow menu (downward swipe)
   if (overflowMenu) {
     overflowMenu.addEventListener("touchstart", (e) => {
