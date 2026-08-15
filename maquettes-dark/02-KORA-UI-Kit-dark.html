@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KORA - UI Kit (Dark)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root{
+            --bg:#0E1114; --surface:#171C21; --surface-raised:#1D242B; --border:rgba(255,255,255,.08);
+            --text-primary:#F4F6F8; --text-secondary:#9AA5B1; --accent:#E9705D; --success:#3DD68C; --warning:#F5A83C; --danger:#E5484D;
+            --font-sans:'Inter',system-ui,sans-serif; --radius:20px;
+        }
+        body{background-color:var(--bg);color:var(--text-primary);font-family:var(--font-sans);}
+        .kora-kpi-card{background-color:var(--surface);border:1px solid var(--border);border-radius:20px;padding:22px;min-height:112px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;}
+        .kora-kpi-icon{font-size:24px;color:var(--text-secondary);opacity:.7;margin-bottom:12px;}
+        .kora-kpi-value{font-size:30px;font-weight:700;color:var(--text-primary);font-variant-numeric:tabular-nums;line-height:1;margin-bottom:4px;}
+        .kora-kpi-label{font-size:13px;font-weight:500;color:var(--text-secondary);}
+    </style>
+</head>
+<body class="p-8">
+    <div class="max-w-4xl mx-auto">
+        <header class="mb-12 border-b pb-6" style="border-color:var(--border)">
+            <h1 class="text-4xl font-bold mb-2" style="color:var(--accent)">KORA Design System</h1>
+            <p style="color:var(--text-secondary)">Bibliothèque de composants et tokens de style (Dark).</p>
+        </header>
+
+        <section class="mb-16">
+            <h2 class="text-2xl font-semibold mb-6 flex items-center gap-2"><i class="fa-solid fa-palette text-sm"></i> Tokens de Couleur</h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="space-y-2"><div class="h-16 w-full rounded-lg border" style="background:var(--bg);border-color:var(--border)"></div><p class="text-xs font-mono">--bg</p></div>
+                <div class="space-y-2"><div class="h-16 w-full rounded-lg" style="background:var(--accent)"></div><p class="text-xs font-mono">--accent</p></div>
+                <div class="space-y-2"><div class="h-16 w-full rounded-lg" style="background:var(--surface)"></div><p class="text-xs font-mono">--surface</p></div>
+                <div class="space-y-2"><div class="h-16 w-full rounded-lg" style="background:var(--success)"></div><p class="text-xs font-mono">--success</p></div>
+            </div>
+        </section>
+
+        <section class="mb-16">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-semibold flex items-center gap-2"><i class="fa-solid fa-chart-line text-sm"></i> MT-02: KPI Card</h2>
+                <span class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider" style="background:rgba(233,112,93,.16);color:var(--accent)">Composant C01</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                <div class="kora-kpi-card"><div class="kora-kpi-icon"><i class="fa-solid fa-newspaper"></i></div><div class="kora-kpi-value">76</div><div class="kora-kpi-label">Articles</div></div>
+                <div class="kora-kpi-card"><div class="kora-kpi-icon"><i class="fa-solid fa-circle-exclamation"></i></div><div class="kora-kpi-value">68</div><div class="kora-kpi-label">À décider</div></div>
+                <div class="kora-kpi-card"><div class="kora-kpi-icon"><i class="fa-solid fa-file-pen"></i></div><div class="kora-kpi-value">06</div><div class="kora-kpi-label">Brouillons</div></div>
+                <div class="kora-kpi-card"><div class="kora-kpi-icon"><i class="fa-solid fa-ban"></i></div><div class="kora-kpi-value">07</div><div class="kora-kpi-label">Rejetés</div></div>
+                <div class="kora-kpi-card"><div class="kora-kpi-icon"><i class="fa-solid fa-trash-can"></i></div><div class="kora-kpi-value">21</div><div class="kora-kpi-label">Corbeille</div></div>
+                <div class="kora-kpi-card"><div class="kora-kpi-icon"><i class="fa-solid fa-xmark"></i></div><div class="kora-kpi-value">14</div><div class="kora-kpi-label">Supprimés</div></div>
+            </div>
+            <div class="mt-8 p-4 rounded-xl border" style="background:var(--surface-raised);border-color:var(--border)">
+                <h3 class="text-sm font-bold mb-2">Spécifications techniques :</h3>
+                <ul class="text-xs space-y-1 list-disc ml-4" style="color:var(--text-secondary)">
+                    <li>Structure flex column, center alignment</li>
+                    <li>Icône: 24px, color: --text-secondary (opacity 0.7)</li>
+                    <li>Numéro: 30px, 700 weight, tabular-nums</li>
+                    <li>Label: 13px, 500 weight, --text-secondary</li>
+                    <li>Container: radius 20px, padding 22px, min-height 112px</li>
+                    <li>Toutes les cartes identiques (même --surface rempli)</li>
+                </ul>
+            </div>
+        </section>
+
+        <section class="mb-16">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-semibold flex items-center gap-2"><i class="fa-solid fa-window-maximize text-sm"></i> MT-03: Header</h2>
+                <span class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider" style="background:rgba(233,112,93,.16);color:var(--accent)">Composant C02</span>
+            </div>
+            <div class="rounded-2xl border overflow-hidden" style="background:var(--surface);border-color:var(--border)">
+                <header class="h-16 px-6 flex items-center justify-between border-b" style="background:var(--bg);border-color:var(--border)">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-xl" style="background:var(--accent)">K</div>
+                        <span class="text-xl font-bold tracking-tight">KORA</span>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-2 px-3 py-1.5 rounded-full" style="background:rgba(61,214,140,.16);border:1px solid rgba(61,214,140,.3)">
+                            <div class="w-2 h-2 rounded-full" style="background:var(--success)"></div>
+                            <span class="text-xs font-bold uppercase tracking-wide" style="color:var(--success)">prêt</span>
+                        </div>
+                        <button class="w-11 h-11 rounded-full border flex items-center justify-center hover:brightness-125 transition-colors" style="background:var(--surface-raised);border-color:var(--border);color:var(--accent)" aria-label="Rafraîchir"><i class="fa-solid fa-arrows-rotate"></i></button>
+                    </div>
+                </header>
+                <div class="p-12 text-center text-sm italic" style="background:var(--bg);color:var(--text-secondary)">Contenu de la page...</div>
+            </div>
+        </section>
+
+        <section class="mb-16">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-semibold flex items-center gap-2"><i class="fa-solid fa-mobile-screen text-sm"></i> MT-04: BottomNav</h2>
+                <span class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider" style="background:rgba(233,112,93,.16);color:var(--accent)">Composant C03</span>
+            </div>
+            <div class="max-w-[375px] mx-auto border rounded-[40px] overflow-hidden shadow-xl" style="background:var(--surface);border-color:var(--border)">
+                <div class="h-[400px] p-6 flex flex-col justify-end" style="background:var(--bg)">
+                    <nav class="h-16 border-t flex items-center justify-around px-2 relative" style="background:var(--surface);border-color:var(--border)">
+                        <div class="absolute top-0 left-[10%] w-6 h-0.5 -translate-x-1/2" style="background:var(--accent)"></div>
+                        <a href="#" class="flex flex-col items-center justify-center gap-1" style="color:var(--accent)"><i class="fa-solid fa-gauge-high text-lg"></i><span class="text-[10px] font-bold">Tableau de bord</span></a>
+                        <a href="#" class="flex flex-col items-center justify-center gap-1 relative" style="color:var(--text-secondary)"><i class="fa-solid fa-newspaper text-lg"></i><span class="text-[10px] font-medium">Articles</span><span class="absolute -top-1 -right-1 w-4 h-4 text-white text-[9px] flex items-center justify-center rounded-full font-bold" style="background:var(--danger)">76</span></a>
+                        <a href="#" class="flex flex-col items-center justify-center gap-1" style="color:var(--text-secondary)"><i class="fa-solid fa-file-pen text-lg"></i><span class="text-[10px] font-medium">Brouillons</span></a>
+                        <a href="#" class="flex flex-col items-center justify-center gap-1 relative" style="color:var(--text-secondary)"><i class="fa-solid fa-trash-can text-lg"></i><span class="text-[10px] font-medium">Corbeille</span><span class="absolute -top-1 -right-1 w-4 h-4 text-white text-[9px] flex items-center justify-center rounded-full font-bold" style="background:var(--danger)">21</span></a>
+                        <a href="#" class="flex flex-col items-center justify-center gap-1" style="color:var(--text-secondary)"><i class="fa-solid fa-gear text-lg"></i><span class="text-[10px] font-medium">Paramètres</span></a>
+                    </nav>
+                </div>
+            </div>
+        </section>
+    </div>
+</body>
+</html>

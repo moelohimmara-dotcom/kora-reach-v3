@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <script>window.FontAwesomeConfig={autoReplaceSvg:'nest'};</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KORA · Cockpit</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-3.1.1.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root{
+            --bg:#0E1114; --surface:#171C21; --surface-raised:#1D242B; --border:rgba(255,255,255,.08);
+            --text-primary:#F4F6F8; --text-secondary:#9AA5B1; --accent:#E9705D; --success:#3DD68C; --warning:#F5A83C; --danger:#E5484D;
+            --font-sans:'Inter',system-ui,sans-serif; --radius:20px;
+        }
+        body{-webkit-font-smoothing:antialiased;background-color:var(--bg);color:var(--text-primary);font-family:var(--font-sans);}
+        .panel{border:1px solid var(--border);background-color:var(--surface);border-radius:var(--radius);}
+        .btn-flat{transition:transform .08s ease,brightness .08s ease;border-radius:var(--radius);}
+        .btn-flat:active{transform:translateY(1px);}
+        ::-webkit-scrollbar{display:none;}
+    </style>
+</head>
+<body class="min-h-screen">
+<div class="max-w-md mx-auto pb-28">
+
+  <!-- HEADER -->
+  <header class="sticky top-0 z-30 bg-bg/95 backdrop-blur px-5 pt-5 pb-3 border-b" style="border-color:var(--border)">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 flex items-center justify-center relative rounded-sm" style="background:var(--text-primary)">
+          <span class="text-lg font-bold leading-none" style="color:var(--bg)">K</span>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight leading-none uppercase">KORA</h1>
+          <p class="text-[10px] font-bold mt-0.5 tracking-widest uppercase" style="color:var(--text-secondary)">Admin Panel</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 border rounded-sm uppercase tracking-wide" style="color:var(--success);background:rgba(61,214,140,.16);border-color:rgba(61,214,140,.3)">
+          <span class="w-1.5 h-1.5 rounded-full" style="background:var(--success)"></span> prêt
+        </span>
+        <button class="btn-flat w-9 h-9 flex items-center justify-center border hover:brightness-125" style="border-color:var(--border);background:var(--surface-raised);color:var(--accent)" aria-label="Rafraîchir">
+          <i class="fa-solid fa-arrows-rotate text-sm"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- HERO -->
+  <section class="px-5 pt-6 pb-2">
+    <h2 class="text-2xl font-bold tracking-tight">Bonjour Admin</h2>
+    <p class="text-xs font-medium mt-1" style="color:var(--text-secondary)">Vendredi 29 mai 2026 · 09:14</p>
+  </section>
+
+  <!-- KPI GRID (7 cartes, mêmes surfaces) -->
+  <section class="px-5 py-4">
+    <div class="grid grid-cols-2 gap-3">
+      <div class="panel p-4 flex flex-col items-center justify-center text-center">
+        <i class="fa-solid fa-newspaper text-[24px] mb-3" style="color:var(--text-secondary);opacity:.7"></i>
+        <p class="text-3xl font-bold tabular-nums">76</p>
+        <p class="text-[13px] font-medium mt-1" style="color:var(--text-secondary)">Articles</p>
+      </div>
+      <div class="panel p-4 flex flex-col items-center justify-center text-center">
+        <i class="fa-solid fa-circle-exclamation text-[24px] mb-3" style="color:var(--text-secondary);opacity:.7"></i>
+        <p class="text-3xl font-bold tabular-nums">68</p>
+        <p class="text-[13px] font-medium mt-1" style="color:var(--text-secondary)">À décider</p>
+      </div>
+      <div class="panel p-4 flex flex-col items-center justify-center text-center">
+        <i class="fa-solid fa-check text-[24px] mb-3" style="color:var(--text-secondary);opacity:.7"></i>
+        <p class="text-3xl font-bold tabular-nums">0</p>
+        <p class="text-[13px] font-medium mt-1" style="color:var(--text-secondary)">Publiés</p>
+      </div>
+      <div class="panel p-4 flex flex-col items-center justify-center text-center">
+        <i class="fa-solid fa-file-pen text-[24px] mb-3" style="color:var(--text-secondary);opacity:.7"></i>
+        <p class="text-3xl font-bold tabular-nums">6</p>
+        <p class="text-[13px] font-medium mt-1" style="color:var(--text-secondary)">Brouillons</p>
+      </div>
+      <div class="panel p-4 flex flex-col items-center justify-center text-center">
+        <i class="fa-solid fa-ban text-[24px] mb-3" style="color:var(--text-secondary);opacity:.7"></i>
+        <p class="text-3xl font-bold tabular-nums">7</p>
+        <p class="text-[13px] font-medium mt-1" style="color:var(--text-secondary)">Rejetés</p>
+      </div>
+      <div class="panel p-4 flex flex-col items-center justify-center text-center">
+        <i class="fa-solid fa-trash-can text-[24px] mb-3" style="color:var(--text-secondary);opacity:.7"></i>
+        <p class="text-3xl font-bold tabular-nums">21</p>
+        <p class="text-[13px] font-medium mt-1" style="color:var(--text-secondary)">Corbeille</p>
+      </div>
+      <div class="panel p-4 flex flex-col items-center justify-center text-center col-span-2">
+        <i class="fa-solid fa-xmark text-[24px] mb-3" style="color:var(--text-secondary);opacity:.7"></i>
+        <p class="text-3xl font-bold tabular-nums">14</p>
+        <p class="text-[13px] font-medium mt-1" style="color:var(--text-secondary)">Supprimés</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- GRAPHIQUE -->
+  <section class="px-5 py-4">
+    <div class="panel p-4">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-xs font-bold uppercase tracking-widest">Évolution de l'activité</h3>
+        <span class="text-[10px] font-bold uppercase tracking-widest" style="color:var(--text-secondary)">7j</span>
+      </div>
+      <div id="chart-evolution" class="h-[200px]"></div>
+    </div>
+  </section>
+
+  <!-- SYSTÈME -->
+  <section class="px-5 py-4">
+    <div class="panel p-4 flex items-center justify-between">
+      <div class="flex items-center gap-2" style="color:var(--text-secondary)"><i class="fa-solid fa-heart-pulse text-xs"></i><span class="text-[10px] uppercase tracking-widest font-bold">Santé système</span></div>
+      <div class="flex items-center gap-3">
+        <div class="w-24 h-1.5 rounded-full overflow-hidden" style="background:var(--surface-raised)"><div class="h-full" style="width:98%;background:var(--accent)"></div></div>
+        <span class="text-xs font-bold tabular-nums">98%</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONTRÔLE -->
+  <section class="px-5 py-4">
+    <div class="panel p-4">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-xs font-bold uppercase tracking-widest">Maintenance</h3>
+        <span class="text-[10px] font-bold uppercase tracking-widest" style="color:var(--text-secondary)">Sync: 14m</span>
+      </div>
+      <button class="btn-flat w-full text-white text-[10px] font-black py-4 flex items-center justify-center gap-2 hover:brightness-90 uppercase tracking-[0.2em]" style="background:var(--accent)">
+        <i class="fa-solid fa-rotate"></i> Forcer Sync
+      </button>
+    </div>
+  </section>
+
+</div>
+
+<!-- BOTTOM NAV (5 onglets KORA) -->
+<nav class="fixed bottom-0 inset-x-0 z-40 border-t" style="background:var(--surface);border-color:var(--border)">
+  <div class="max-w-md mx-auto flex items-stretch h-16">
+    <a href="#" class="flex-1 flex flex-col items-center justify-center gap-1 border-t-4" style="color:var(--accent);border-color:var(--accent);background:rgba(233,112,93,.12)">
+      <i class="fa-solid fa-gauge-high text-lg"></i><span class="text-[8px] font-black uppercase tracking-widest">Tableau de bord</span>
+    </a>
+    <a href="#" class="flex-1 flex flex-col items-center justify-center gap-1 relative" style="color:var(--text-secondary)">
+      <i class="fa-solid fa-newspaper text-lg"></i><span class="text-[8px] font-black uppercase tracking-widest text-center">Articles</span>
+      <span class="absolute top-1 right-1/2 translate-x-3 w-4 h-4 text-white text-[9px] flex items-center justify-center rounded-full font-bold" style="background:var(--danger)">76</span>
+    </a>
+    <a href="#" class="flex-1 flex flex-col items-center justify-center gap-1 relative" style="color:var(--text-secondary)">
+      <i class="fa-solid fa-file-pen text-lg"></i><span class="text-[8px] font-black uppercase tracking-widest text-center">Brouillons</span>
+      <span class="absolute top-1 right-1/2 translate-x-3 w-4 h-4 text-white text-[9px] flex items-center justify-center rounded-full font-bold" style="background:var(--danger)">6</span>
+    </a>
+    <a href="#" class="flex-1 flex flex-col items-center justify-center gap-1 relative" style="color:var(--text-secondary)">
+      <i class="fa-solid fa-trash-can text-lg"></i><span class="text-[8px] font-black uppercase tracking-widest text-center">Corbeille</span>
+      <span class="absolute top-1 right-1/2 translate-x-3 w-4 h-4 text-white text-[9px] flex items-center justify-center rounded-full font-bold" style="background:var(--danger)">21</span>
+    </a>
+    <a href="#" class="flex-1 flex flex-col items-center justify-center gap-1" style="color:var(--text-secondary)">
+      <i class="fa-solid fa-gear text-lg"></i><span class="text-[8px] font-black uppercase tracking-widest text-center">Paramètres</span>
+    </a>
+  </div>
+</nav>
+
+<script>
+window.addEventListener('load', function () {
+    try {
+        const accent='#E9705D', sec='#9AA5B1', border='rgba(255,255,255,.08)';
+        Plotly.newPlot('chart-evolution', [{
+            x:['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'],
+            y:[8,12,9,15,11,18,14], type:'scatter', mode:'lines+markers', name:'Articles',
+            line:{color:accent,width:3,shape:'spline'},
+            marker:{color:accent,size:6,bordercolor:'#fff',borderwidth:2},
+            fill:'tozeroy', fillcolor:'rgba(233,112,93,0.10)'
+        }], {
+            margin:{t:10,r:10,b:30,l:30}, paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)', showlegend:false,
+            xaxis:{tickfont:{color:sec,size:9,family:'Inter'},gridcolor:border,zeroline:false},
+            yaxis:{tickfont:{color:sec,size:9,family:'Inter'},gridcolor:border,zeroline:false}
+        }, {responsive:true,displayModeBar:false});
+    } catch(e){ console.error(e); }
+});
+</script>
+</body>
+</html>

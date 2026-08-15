@@ -181,7 +181,7 @@ function viewCockpit(s) {
         ${statCard({ icon: "edit", value: draft, label: "Brouillons", variant: "info", onClick: "nav-drafts", loading: s.ui?.loading && draft === 0 })}
         ${statCard({ icon: "i-reject", value: rejected, label: "Rejetés", variant: "danger", onClick: "nav-facts-rejected", loading: s.ui?.loading && rejected === 0 })}
         ${statCard({ icon: "i-trash", value: trash, label: "Corbeille", variant: "tertiary", onClick: "nav-trash", loading: s.ui?.loading && trash === 0 })}
-        ${statCard({ icon: "i-close", value: deleted, label: "Supprimés", variant: "primary", onClick: "nav-deleted", loading: s.ui?.loading && deleted === 0 })}
+        ${statCard({ icon: "i-close", value: deleted, label: "Supprimés", variant: "primary", full: true, onClick: "nav-deleted", loading: s.ui?.loading && deleted === 0 })}
       </div>
 
       <!-- GRAPHIQUE D'ÉVOLUTION : activité + décisions par jour -->
@@ -238,8 +238,8 @@ function heroFact(s, pendingCount) {
 // COCKPIT COMPONENTS — Dynamiques, cliquables, temps réel
 // ============================================================
 
-function statCard({ icon, value, label, variant = "primary", onClick, trend, loading = false, error = false }) {
-  const cls = `stat-card stat-${variant}${loading ? " loading" : ""}${error ? " error" : ""}`;
+function statCard({ icon, value, label, variant = "primary", onClick, trend, loading = false, error = false, full = false }) {
+  const cls = `stat-card stat-${variant}${full ? " stat-full" : ""}${loading ? " loading" : ""}${error ? " error" : ""}`;
   const trendHtml = trend ? `<span class="stat-trend ${trend > 0 ? "up" : trend < 0 ? "down" : ""}">${trend > 0 ? "↑" : trend < 0 ? "↓" : "→"}${Math.abs(trend)}</span>` : "";
   const clickAttr = onClick ? `data-action="${onClick}"` : "";
   const icMap = { article: "i-facts", schedule: "i-status", fact_check: "i-check", edit: "i-edit", error: "i-close" };

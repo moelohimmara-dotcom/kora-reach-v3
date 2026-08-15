@@ -1230,6 +1230,8 @@ html.icons-ready .material-icons { visibility: visible; }
 }
 .stat-card:hover { transform: translateY(-3px); border-color: var(--accent); }
 .stat-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* 7e carte "Supprimés" : pleine largeur pour équilibrer la grille 2 colonnes (aligné maquette) */
+.stat-card.stat-full { grid-column: 1 / -1; }
 .stat-card.loading { opacity: 0.6; pointer-events: none; }
 .stat-card.error { border-color: var(--danger); }
 .stat-icon { width: 24px; height: 24px; color: var(--text-secondary); opacity: .7; margin-bottom: 12px; }

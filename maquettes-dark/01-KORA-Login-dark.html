@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <script>window.FontAwesomeConfig={autoReplaceSvg:'nest'};</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KORA - Connexion</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:#0E1114; --surface:#171C21; --surface-raised:#1D242B; --border:rgba(255,255,255,.08);
+            --text-primary:#F4F6F8; --text-secondary:#9AA5B1; --accent:#E9705D; --success:#3DD68C; --warning:#F5A83C; --danger:#E5484D;
+            --font-sans:'Inter',system-ui,sans-serif;
+        }
+        body{background-color:var(--bg);color:var(--text-primary);font-family:var(--font-sans);}
+        .login-input{width:100%;padding:1rem;background-color:var(--surface-raised);border:1px solid var(--border);border-radius:12px;color:var(--text-primary);transition:all .2s ease;}
+        .login-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(233,112,93,.18);background-color:var(--surface);}
+        .login-button{width:100%;padding:1rem;background-color:var(--accent);color:#fff;border:none;border-radius:12px;font-weight:700;cursor:pointer;transition:transform .2s ease,background-color .2s ease;text-transform:uppercase;letter-spacing:.05em;}
+        .login-button:active{transform:scale(.98);}
+        .login-button:hover{background-color:#d65a47;}
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-[800px] p-6">
+    <div class="w-full max-w-sm">
+        <div class="text-center mb-12">
+            <div class="inline-flex w-20 h-20 rounded-2xl items-center justify-center text-white text-4xl font-bold mb-4 shadow-lg" style="background:var(--accent)">K</div>
+            <h1 class="text-3xl font-bold tracking-tight" style="color:var(--text-primary)">KORA</h1>
+            <p class="font-medium mt-2" style="color:var(--text-secondary)">Pilotage éditorial & Veille</p>
+        </div>
+        <div class="p-8 rounded-3xl border" style="background:var(--surface);border-color:var(--border)">
+            <form class="space-y-6">
+                <div>
+                    <label for="email" class="block text-xs font-bold uppercase tracking-widest mb-2 ml-1" style="color:var(--text-secondary)">Identifiant</label>
+                    <div class="relative">
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2" style="color:var(--accent)"><i class="fa-solid fa-user"></i></span>
+                        <input type="text" id="email" class="login-input pl-11" placeholder="Admin Kora">
+                    </div>
+                </div>
+                <div>
+                    <label for="password" class="block text-xs font-bold uppercase tracking-widest mb-2 ml-1" style="color:var(--text-secondary)">Mot de passe</label>
+                    <div class="relative">
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2" style="color:var(--accent)"><i class="fa-solid fa-lock"></i></span>
+                        <input type="password" id="password" class="login-input pl-11" placeholder="••••••••">
+                    </div>
+                </div>
+                <div class="flex items-center justify-between px-1">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" class="w-4 h-4 rounded border" style="border-color:var(--border);color:var(--accent)">
+                        <span class="text-sm font-medium" style="color:var(--text-secondary)">Rester connecté</span>
+                    </label>
+                    <a href="#" class="text-sm font-bold hover:underline" style="color:var(--accent)">Oublié ?</a>
+                </div>
+                <button type="submit" class="login-button mt-4">Accéder au Cockpit</button>
+            </form>
+        </div>
+        <p class="text-center text-xs mt-8 font-medium" style="color:var(--text-secondary)">&copy; 2026 KORA — Interface d'administration sécurisée</p>
+    </div>
+</body>
+</html>
