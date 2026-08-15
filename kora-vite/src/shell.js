@@ -89,12 +89,33 @@ export const SHELL = `
   <main class="view" id="view"></main>
 
   <nav class="bottomnav" id="bottomnav">
-    <button class="navitem" data-route="cockpit"><svg class="ic"><use href="#i-dashboard"/></svg><span>Cockpit</span></button>
-    <button class="navitem" data-route="facts"><svg class="ic"><use href="#i-facts"/></svg><span>Total</span><span class="nav-badge" data-badge="facts"></span></button>
-    <button class="navitem" data-route="drafts"><svg class="ic"><use href="#i-edit"/></svg><span>Brouil</span><span class="nav-badge" data-badge="drafts"></span></button>
-    <button class="navitem" data-route="trash"><svg class="ic"><use href="#i-trash"/></svg><span>Corbeille</span><span class="nav-badge" data-badge="trash"></span></button>
-    <button class="navitem" data-route="settings"><svg class="ic"><use href="#i-settings"/></svg><span>Paramètres</span></button>
+    <button class="navitem navitem-active" data-route="cockpit" aria-current="page">
+      <div class="nav-ico">${ic("i-gauge")}</div>
+      <span>Tableau de bord</span>
+    </button>
+    <button class="navitem" data-route="facts">
+      <div class="nav-ico">${ic("i-facts")}<span class="nav-badge" data-badge="facts"></span></div>
+      <span>Articles</span>
+    </button>
+    <button class="navitem" data-route="trash">
+      <div class="nav-ico">${ic("i-trash")}<span class="nav-badge" data-badge="trash"></span></div>
+      <span>Corbeille</span>
+    </button>
+    <button class="navitem" id="navPlus" aria-label="Plus d'options">
+      <div class="nav-ico">${ic("i-plus")}</div>
+      <span>Plus</span>
+    </button>
   </nav>
+
+  <script>
+    (function () {
+      var plus = document.getElementById('navPlus');
+      if (plus) plus.addEventListener('click', function () {
+        var ov = document.getElementById('overflowMenu');
+        if (ov) ov.hidden = !ov.hidden;
+      });
+    })();
+  </script>
 
   <div class="nav-scrim" id="navScrim" hidden></div>
   <div class="overflow-menu" id="overflowMenu" hidden>

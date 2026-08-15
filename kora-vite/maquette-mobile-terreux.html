@@ -1,6 +1,62 @@
-// Sprite SVG KORA — Lucide Icons (MIT, https://lucide.dev)
-// Outline 24px, stroke 2px, currentColor. Mêmes id #i-* que l'ancien sprite -> app.js inchangé.
-const SPRITE = `<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KORA Mobile — Palette terreuse (maquette)</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+:root {
+  --accent: #E9705D; --accent2: #C8772E; --olive: #7C8B3F;
+  --text: #F4EEE2; --text-2: rgba(244,238,226,.64);
+  --surface: rgba(26,18,10,.46); --border: rgba(255,255,255,.14);
+}
+html, body { height: 100%; }
+body { font-family: Inter, system-ui, sans-serif; background: #1A120A; display: flex; justify-content: center; padding: 16px; }
+.phone {
+  width: 100%; max-width: 390px; min-height: 844px;
+  background: linear-gradient(180deg, #22150C 0%, #432C18 46%, #B98A55 100%);
+  border-radius: 28px; overflow: hidden; display: flex; flex-direction: column;
+  position: relative; box-shadow: 0 30px 80px rgba(0,0,0,.6);
+}
+.screen { padding: 16px; display: flex; flex-direction: column; gap: 16px; flex: 1; padding-bottom: 84px; }
+.header { display: flex; align-items: center; justify-content: space-between; }
+.logo { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 20px; color: #F4EEE2; letter-spacing: .5px; }
+.logo .k { width: 30px; height: 30px; border-radius: 8px; background: #E9705D; color: #1A120A; display: flex; align-items: center; justify-content: center; font-weight: 900; }
+.status { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: #E8DCC8; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: #3DD68C; box-shadow: 0 0 8px #3DD68C; }
+.icon-btn { width: 44px; height: 44px; min-width: 44px; border: none; border-radius: 12px; background: rgba(0,0,0,.32); color: #F4EEE2; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.ic { width: 20px; height: 20px; }
+.donut-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.donut { width: 180px; height: 180px; }
+.donut-center { font-size: 32px; font-weight: 800; fill: #F4EEE2; }
+.donut-sub { font-size: 12px; fill: rgba(244,238,226,.64); }
+.kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  padding: 14px; display: flex; flex-direction: column; gap: 8px; min-height: 92px;
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+}
+.stat-card.full { grid-column: 1 / -1; }
+.stat-icon { width: 18px; height: 18px; color: #C8772E; }
+.stat-value { font-size: 30px; font-weight: 800; color: #F4EEE2; line-height: 1; font-variant-numeric: tabular-nums; }
+.stat-label { font-size: 13px; font-weight: 500; color: var(--text-2); }
+.bottom-nav {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 60px;
+  display: flex; align-items: stretch; background: rgba(20,12,6,.78); backdrop-filter: blur(16px);
+  border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom);
+}
+.nav-item {
+  flex: 1; min-height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  color: var(--text-2); font-size: 9px; font-weight: 600; line-height: 1; white-space: nowrap; letter-spacing: -0.2px;
+  position: relative; cursor: pointer; padding: 0;
+}
+.nav-item.active { color: #E9705D; }
+.nav-item .ic { width: 22px; height: 22px; flex-shrink: 0; display: block; }
+.nav-ico { position: relative; display: inline-flex; }
+.nav-item > span { display: block; width: 100%; text-align: center; }
+.nav-item.active::after { content: ""; position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); width: 22px; height: 3px; border-radius: 2px; background: #E9705D; }
+.badge { position: absolute; top: -4px; right: -8px; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 9px; background: #E9705D; color: #1A120A; font-size: 10px; font-weight: 800; line-height: 17px; display: flex; align-items: center; justify-content: center; white-space: nowrap; }
+</style></head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
   <symbol id="i-dashboard" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <rect width="7" height="9" x="3" y="3" rx="1" />
   <rect width="7" height="5" x="14" y="3" rx="1" />
@@ -203,4 +259,78 @@ const SPRITE = `<svg xmlns="http://www.w3.org/2000/svg" style="display:none" ari
   <path d="M5 12h14" />
   <path d="M12 5v14" />
 </g></symbol>
-</svg>`;
+</svg></svg>
+
+<div class="phone">
+  <div class="screen">
+    <div class="header">
+      <div class="logo"><span class="k">K</span> KORA</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="status"><span class="dot"></span> prêt</div>
+        <button class="icon-btn"><svg class="ic"><use href="#i-refresh"></use></svg></button>
+      </div>
+    </div>
+    <div class="donut-wrap">
+      <svg class="donut" viewBox="0 0 200 200">
+        <circle cx="100" cy="100" r="78" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="22"/>
+        <circle cx="100" cy="100" r="78" fill="none" stroke="#C8772E" stroke-width="22"
+          stroke-dasharray="330 490" stroke-dashoffset="0" stroke-linecap="round" transform="rotate(-90 100 100)"/>
+        <circle cx="100" cy="100" r="78" fill="none" stroke="#7C8B3F" stroke-width="22"
+          stroke-dasharray="160 490" stroke-dashoffset="-330" stroke-linecap="round" transform="rotate(-90 100 100)"/>
+        <text x="100" y="94" text-anchor="middle" class="donut-center">76</text>
+        <text x="100" y="114" text-anchor="middle" class="donut-sub">Articles</text>
+      </svg>
+    </div>
+    <div class="kpi-grid">
+      
+  <div class="stat-card">
+    <svg class="stat-icon"><use href="#i-facts"></use></svg>
+    <div class="stat-value">76</div>
+    <div class="stat-label">Articles</div>
+  </div>
+      
+  <div class="stat-card">
+    <svg class="stat-icon"><use href="#i-help"></use></svg>
+    <div class="stat-value">68</div>
+    <div class="stat-label">À décider</div>
+  </div>
+      
+  <div class="stat-card">
+    <svg class="stat-icon"><use href="#i-check"></use></svg>
+    <div class="stat-value">0</div>
+    <div class="stat-label">Publiés</div>
+  </div>
+      
+  <div class="stat-card">
+    <svg class="stat-icon"><use href="#i-edit"></use></svg>
+    <div class="stat-value">6</div>
+    <div class="stat-label">Brouillons</div>
+  </div>
+      
+  <div class="stat-card">
+    <svg class="stat-icon"><use href="#i-reject"></use></svg>
+    <div class="stat-value">7</div>
+    <div class="stat-label">Rejetés</div>
+  </div>
+      
+  <div class="stat-card">
+    <svg class="stat-icon"><use href="#i-trash"></use></svg>
+    <div class="stat-value">19</div>
+    <div class="stat-label">Corbeille</div>
+  </div>
+      
+  <div class="stat-card full">
+    <svg class="stat-icon"><use href="#i-close"></use></svg>
+    <div class="stat-value">14</div>
+    <div class="stat-label">Supprimés</div>
+  </div>
+    </div>
+  </div>
+  <nav class="bottom-nav">
+    <div class="nav-item active"><span class="nav-ico"><svg class="ic"><use href="#i-gauge"></use></svg></span><span>Tableau de bord</span></div>
+    <div class="nav-item"><span class="nav-ico"><svg class="ic"><use href="#i-facts"></use></svg><span class="badge">76</span></span><span>Articles</span></div>
+    <div class="nav-item"><span class="nav-ico"><svg class="ic"><use href="#i-trash"></use></svg><span class="badge">19</span></span><span>Corbeille</span></div>
+    <div class="nav-item"><span class="nav-ico"><svg class="ic"><use href="#i-plus"></use></svg></span><span>Plus</span></div>
+  </nav>
+</div>
+</body></html>

@@ -43,11 +43,14 @@ const map = {
   'i-eye-off': 'eye-off',
   'i-more': 'more-vertical',
   'i-brush': 'brush',
+  'i-help': 'help-circle',
+  'i-gauge': 'gauge',
+  'i-plus': 'plus',
   'i-sources2': null, // placeholder
 };
 
 // Liste réelle des IDs présents dans l'ancien sprite (extraite manuellement)
-const ids = ['i-dashboard','i-facts','i-check','i-shield','i-sources','i-source','i-audit','i-status','i-close','i-send','i-edit','i-reject','i-retract','i-refresh','i-spark','i-image','i-level1','i-level2','i-date','i-fusion','i-menu','i-chevron','i-chevron-right','i-sun','i-moon','i-palette','i-settings','i-user','i-users','i-user-plus','i-info','i-undo','i-trash','i-lock','i-logo','i-eye','i-eye-off','i-more','i-brush'];
+const ids = ['i-dashboard','i-facts','i-check','i-shield','i-sources','i-source','i-audit','i-status','i-close','i-send','i-edit','i-reject','i-retract','i-refresh','i-spark','i-image','i-level1','i-level2','i-date','i-fusion','i-menu','i-chevron','i-chevron-right','i-sun','i-moon','i-palette','i-settings','i-user','i-users','i-user-plus','i-info','i-undo','i-trash','i-lock','i-logo','i-eye','i-eye-off','i-more','i-brush','i-help','i-gauge','i-plus'];
 
 let symbols = '';
 let missing = [];

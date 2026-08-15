@@ -152,6 +152,27 @@ function evolutionChart(s) {
     </section>`;
 }
 
+function donutSVG(total, subLabel) {
+  // Donut terreux : segment orange (total) + olive (reste). Style maquette.
+  const total2 = (typeof total === 'number' && total > 0) ? total : 0;
+  const pct = total2 > 0 ? 62 : 0;            // ~62% orange pour Articles
+  const c = 2 * Math.PI * 78;
+  const off = c * (1 - pct / 100);
+  const olive = c - off;
+  return `
+  <div class="kora-donut-wrap" aria-hidden="true">
+    <svg class="kora-donut" viewBox="0 0 200 200">
+      <circle cx="100" cy="100" r="78" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="22"/>
+      <circle cx="100" cy="100" r="78" fill="none" stroke="var(--kora-accent2,#C8772E)" stroke-width="22"
+        stroke-dasharray="${off} ${c}" stroke-dashoffset="0" stroke-linecap="round" transform="rotate(-90 100 100)"/>
+      <circle cx="100" cy="100" r="78" fill="none" stroke="var(--kora-olive,#7C8B3F)" stroke-width="22"
+        stroke-dasharray="${olive} ${c}" stroke-dashoffset="${-off}" stroke-linecap="round" transform="rotate(-90 100 100)"/>
+      <text x="100" y="94" text-anchor="middle" class="kora-donut-center">${total2}</text>
+      <text x="100" y="114" text-anchor="middle" class="kora-donut-sub">${subLabel || 'Articles'}</text>
+    </svg>
+  </div>`;
+}
+
 function viewCockpit(s) {
   // SSOT : tous les compteurs viennent de s.stats (calcules une fois par le backend).
   // Plus aucun recalcul divergent cote front (ancien cat.pending / s.trash, etc.).
@@ -170,6 +191,9 @@ function viewCockpit(s) {
 
   return `
     <div class="cockpit kora-wire">
+      <!-- DONUT terreux (mobile ≤819px via media query) -->
+      ${donutSVG(total, 'Articles')}
+
       <!-- HERO : le fact en attente de décision (cœur du produit) -->
       ${heroFact(s, pending)}
 
