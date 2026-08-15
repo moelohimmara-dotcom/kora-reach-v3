@@ -1940,5 +1940,9 @@ html.icons-ready .material-icons { visibility: visible; }
   .group-count { background: rgba(244, 238, 226, .12); color: var(--kora-paper); border: 1px solid var(--glass-border-strong); font-size: 12px; padding: 4px 12px; }
   .src-row .meta-ic, .audit-row .meta-ic { background: var(--kora-accent); color: var(--kora-ink); border-radius: var(--radius-sm); }
   .src-row .meta-ic .ic, .audit-row .meta-ic .ic { color: var(--kora-ink); width: 18px; height: 18px; }
+  /* Ensemble de la page : callout notice + chips rectangulaires (wireframe) */
+  .section-title { font-size: 20px; margin-bottom: 12px; }
+  .view p.muted, p.muted { background: rgba(244, 238, 226, .08); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 12px 14px; color: rgba(244, 238, 226, .72); margin-bottom: 16px; font-size: 13px; line-height: 1.5; }
+  .src-row .chip, .fact-group .chip { border-radius: 8px; }
 }
 
