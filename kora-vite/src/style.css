@@ -567,7 +567,7 @@ html.icons-ready .material-icons { visibility: visible; }
 /* Mobile (≤819px) : la bottom-nav fixe (56px + safe-area) masque le bas du
    contenu. On remonte le padding pour que la derniere carte/detail ne soit
    jamais coupe (bug : 5e carte dashboard invisible sous la nav). */
-@media (max-width: 819px) {
+@media (max-width: 767px) {
   .view { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
 }
 
@@ -743,7 +743,7 @@ html.icons-ready .material-icons { visibility: visible; }
 }
 
 /* Mobile (≤819px) : 5 items principaux + bouton "Plus" coral */
-@media (max-width: 819px) {
+@media (max-width: 767px) {
   .bottomnav .navitem span { font-size: 10px; letter-spacing: -0.1px; }
   .bottomnav .navitem-secondary { display: flex; }
   /* bouton "Plus" supprimé : .navitem-more plus utilisé */
@@ -788,7 +788,7 @@ html.icons-ready .material-icons { visibility: visible; }
 .overflow-item:active { background: var(--glass-bg-hover); }
 
 /* Tablette / Desktop : bottom nav masquée, pas d'overflow */
-@media (min-width: 820px) {
+@media (min-width: 768px) {
   .bottomnav { display: none !important; }
   .nav-scrim, .overflow-menu { display: none !important; }
 }
@@ -945,7 +945,7 @@ html.icons-ready .material-icons { visibility: visible; }
 /* CTA principal (Publier) : hauteur tactile standard 48dp, cohérent avec les autres */
 .select-bar-actions .btn-primary { min-height: var(--btn-h); }
 /* ---- SMARTPHONE (<=819px) : barre CENTRÉE, équidistante des bords, 2 lignes ---- */
-@media (max-width: 819px) {
+@media (max-width: 767px) {
   .select-bar {
     left: 50%; right: auto; transform: translateX(-50%); width: auto;
     bottom: calc(env(safe-area-inset-bottom, 0px) + 80px);
@@ -981,7 +981,7 @@ html.icons-ready .material-icons { visibility: visible; }
   .select-bar-actions .btn-primary { min-height: 46px; }
 }
 /* ---- TABLETTE (820-1023px) : barre centrée contrainte, taille confort ---- */
-@media (min-width: 820px) and (max-width: 1023px) {
+@media (min-width: 768px) and (max-width: 1023px) {
   .select-bar { max-width: min(720px, calc(100vw - 48px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 96px); gap: 8px; }
   .select-bar-actions { gap: 8px; }
   .select-bar-actions .btn { padding: 12px 16px; font-size: var(--t-label); min-height: var(--btn-h); }
@@ -1001,7 +1001,7 @@ html.icons-ready .material-icons { visibility: visible; }
   box-shadow: var(--shadow-3);
   animation: quizIn .25s var(--ease);
 }
-@media (max-width: 819px) {
+@media (max-width: 767px) {
   .mini-sheet { align-items: flex-end; padding: 0; }
   .mini-sheet-card {
     width: 100%;
@@ -1334,7 +1334,7 @@ html.icons-ready .material-icons { visibility: visible; }
 .cycle-actions md-outlined-button { flex: 1; min-width: 140px; }
 
 /* Mobile adjustments */
-@media (max-width: 819px) {
+@media (max-width: 767px) {
   .cockpit { padding: var(--space-4); }
   .cockpit-grid.stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stat-card { min-height: 96px; gap: 8px; }
@@ -1353,7 +1353,7 @@ html.icons-ready .material-icons { visibility: visible; }
 
 .btn-sm { padding: 8px 15px; font-size: var(--t-label-sm); }
 
-@media (min-width: 820px) {
+@media (min-width: 768px) {
   #app { flex-direction: row; }
   .topbar { position: fixed; top: 0; left: 0; right: 0; }
   .view { padding-top: 84px; padding-left: calc(72px + var(--space-6)); padding-right: var(--space-6); transition: padding-left var(--dur-med) var(--ease); }
@@ -1393,7 +1393,7 @@ html.icons-ready .material-icons { visibility: visible; }
 }
 
 /* Rail en drawer coulissant sur mobile (≤820px) */
-@media (max-width: 819px) {
+@media (max-width: 767px) {
   .rail {
     transform: translateX(-100%); transition: transform var(--dur-med) var(--ease);
     position: fixed; left: 0; top: 0; bottom: 0; width: min(300px, 86vw); z-index: 22; padding: calc(var(--space-3) + env(safe-area-inset-top)) var(--space-3) var(--space-4);
@@ -1573,7 +1573,7 @@ html.icons-ready .material-icons { visibility: visible; }
 .settings-panel { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); animation: none; z-index: auto; }
 .settings-panel[hidden] { display: none; }
 /* Mobile : écran plein (s'arrête au-dessus de la bottomnav) */
-@media (max-width: 819px) {
+@media (max-width: 767px) {
   .settings-panel {
     position: fixed; left: 0; right: 0; top: 0; bottom: calc(64px + env(safe-area-inset-bottom, 0px));
     width: auto; height: auto; background: var(--md-sys-color-surface);
@@ -1592,7 +1592,7 @@ html.icons-ready .material-icons { visibility: visible; }
   body:has(.settings-panel:not([hidden])) #fabMenu { display: none !important; }
 }
 /* Desktop/tablette : panneau détail inline (plus de recouvrement) */
-@media (min-width: 820px) {
+@media (min-width: 768px) {
   .settings-panel { position: static; width: auto; height: auto; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); animation: none; z-index: auto; transform: none !important; }
   .drawer-back, #setDrawerScrim { display: none !important; }
 }
@@ -1606,7 +1606,7 @@ html.icons-ready .material-icons { visibility: visible; }
 
 
 /* ---- Desktop / Tablette (≥820px) : master-detail inline ---- */
-@media (min-width: 820px) {
+@media (min-width: 768px) {
   .settings-layout { display: grid; grid-template-columns: 264px 1fr; gap: 28px; align-items: start; }
   .settings-rail { gap: 4px; }
   .settings-nav-item { border-color: transparent; background: transparent; }
@@ -1618,7 +1618,7 @@ html.icons-ready .material-icons { visibility: visible; }
   .drawer-body { padding: 22px 24px; }
 }
 /* Tablette 820–1023px : rail en grille 2 col, détail en stack plein largeur */
-@media (min-width: 820px) and (max-width: 1023px) {
+@media (min-width: 768px) and (max-width: 1023px) {
   .settings-layout { grid-template-columns: 1fr; gap: 22px; }
   .settings-rail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
   .settings-rail-group { grid-column: 1 / -1; }
@@ -1714,7 +1714,7 @@ html.icons-ready .material-icons { visibility: visible; }
   .hero { grid-template-columns: 1fr; }
   .hero-side { border-left: none; padding-left: 0; border-top: 1px solid var(--glass-border, transparent); padding-top: 14px; }
 }
-@media (max-width: 819px) {
+@media (max-width: 767px) {
   .decision-band { left: 0; top: 6px; width: 100%; height: 5px; }
 }
 
@@ -1789,6 +1789,6 @@ html.icons-ready .material-icons { visibility: visible; }
 .bottomnav .nav-badge.show { display: flex; }
 
 /* En mobile, le rail desktop est masqué (bottom-nav le remplace) — placé EN FIN pour primer */
-@media (max-width: 819px) {
+@media (max-width: 767px) {
   .rail { display: none; }
 }
