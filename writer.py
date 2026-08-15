@@ -263,7 +263,7 @@ def _ollama_chat(messages: List[Dict], max_tokens: int = 600) -> str:
         try:
             import urllib.request as _req
             import json as _json
-            model = os.environ.get("NVIDIA_MODEL", "meta/llama-3.1-8b-instruct")
+            model = os.environ.get("NVIDIA_MODEL", "nvidia/llama-3.3-nemotron-super-49b-v1")
             base = os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
             req = _req.Request(
                 f"{base.rstrip('/')}/chat/completions",
