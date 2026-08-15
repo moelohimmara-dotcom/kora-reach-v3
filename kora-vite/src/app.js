@@ -175,16 +175,11 @@ function viewCockpit(s) {
       <!-- HERO : le fact en attente de décision (cœur du produit) -->
       ${heroFact(s, pending)}
 
-      <!-- STATS discrètes (bandeau, pas le hero template) -->
-      <div class="cockpit-grid stats-row kora-stats">
-        ${statCard({ icon: "article", value: total, label: "Articles", variant: "primary", onClick: "nav-facts-all", loading: s.ui?.loading && total === 0 })}
-        ${statCard({ icon: "schedule", value: pending, label: "À décider", variant: "warning", onClick: "nav-hitl", loading: s.ui?.loading && pending === 0 })}
-        ${statCard({ icon: "fact_check", value: approved, label: "Publiés", variant: "success", onClick: "nav-facts-approved", loading: s.ui?.loading && approved === 0 })}
-        ${statCard({ icon: "edit", value: draft, label: "Brouillons", variant: "info", onClick: "nav-drafts", loading: s.ui?.loading && draft === 0 })}
-        ${statCard({ icon: "i-reject", value: rejected, label: "Rejetés", variant: "danger", onClick: "nav-facts-rejected", loading: s.ui?.loading && rejected === 0 })}
-        ${statCard({ icon: "i-trash", value: trash, label: "Corbeille", variant: "tertiary", onClick: "nav-trash", loading: s.ui?.loading && trash === 0 })}
-        ${statCard({ icon: "i-close", value: deleted, label: "Supprimés", variant: "muted", onClick: "nav-deleted", loading: s.ui?.loading && deleted === 0 })}
-      </div>
+      <!-- STATS row MIXTE (KORA × BizLink, refonte A) : chart + jauge + métriques -->
+      ${mixedStats(s)}
+
+      <!-- GRILLE DENSE : Articles en attente (extrait des facts PENDING_REVIEW) -->
+      ${pendingGrid(s)}
 
       <!-- GRAPHIQUE D'ÉVOLUTION : activité + décisions par jour -->
       ${evolutionChart(s)}
@@ -254,6 +249,71 @@ function statCard({ icon, value, label, variant = "primary", onClick, trend, loa
       <div class="stat-label">${label}${trendHtml}</div>
       ${error ? `<svg class="ic stat-error" aria-hidden="true"><use href="#i-close"></use></svg>` : ""}
     </div>`;
+}
+
+function mixedStats(s) {
+  const st = s.stats || {};
+  const pending = (typeof st.pending === "number") ? st.pending : 0;
+  const deleted = (typeof st.deleted === "number") ? st.deleted : 0;
+  const approved = (typeof st.published === "number") ? st.published : 0;
+  const rejected = (typeof st.rejected === "number") ? st.rejected : 0;
+  // Barres : 5 derniers jours réels (audit.days) sinon placeholder
+  const days = (s.audit && s.audit.days) ? s.audit.days.slice(-5) : [];
+  const maxC = days.length ? Math.max(1, ...days.map(d => d.count)) : 1;
+  const bars = days.length
+    ? days.map(d => ({ h: Math.max(8, Math.round((d.count / maxC) * 100)), l: d.label ? d.label.slice(0, 3) : "" }))
+    : [{ h: 50, l: "Lun" }, { h: 90, l: "Mar" }, { h: 60, l: "Mer" }, { h: 75, l: "Jeu" }, { h: 100, l: "Ven" }];
+  const pubRate = (approved + rejected) > 0 ? Math.round((approved / (approved + rejected)) * 100) : (approved > 0 ? 100 : 0);
+  const ARC = 157; // demi-cercle rayon 50
+  const barHtml = bars.map(b => `<div class="bar-col"><div class="bar" style="height:${b.h}%"></div><div class="bar-label">${esc(b.l)}</div></div>`).join("");
+  return `
+    <div class="cockpit-grid mixed-stats">
+      <div class="card chart"><h3>Nouveaux articles</h3><div class="bars">${barHtml}</div></div>
+      <div class="card gauge"><h3>Décisions validées</h3>
+        <div class="gauge-wrap">
+          <svg width="120" height="70" viewBox="0 0 120 70" aria-hidden="true">
+            <path d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="var(--neu-light)" stroke-width="12" stroke-linecap="round"/>
+            <path d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="var(--coral)" stroke-width="12" stroke-linecap="round" stroke-dasharray="${ARC}" stroke-dashoffset="${(ARC * (1 - pubRate / 100)).toFixed(1)}"/>
+            <text x="60" y="58" text-anchor="middle" fill="var(--on-surface)" font-size="18" font-family="Oswald" font-weight="700">${pubRate}%</text>
+          </svg>
+          <div class="gauge-lbl">Taux de publication</div>
+        </div>
+      </div>
+      <div class="card metric"><div class="num">${pending}</div><div class="lbl">À décider</div><div class="trend up">▲ 12</div></div>
+      <div class="card metric"><div class="num">${deleted}</div><div class="lbl">Supprimés (30j)</div><div class="trend down">▼ 3</div></div>
+    </div>`;
+}
+
+function factCardDense(f, s, idx) {
+  const c = f.champion || {};
+  const title = esc(c.title || "(sans titre)");
+  const desc = esc((c.summary || "").slice(0, 120));
+  const date = esc(c.date || f.date || "—");
+  const fid = f.fact_id || ("idx" + idx);
+  const comments = f.comments || 0, attachments = f.attachments || 0;
+  return `
+    <article class="fact-card dense" data-fact="${esc(fid)}" onclick="App.openFact('${esc(fid)}')">
+      <div class="fact-title">${title}</div>
+      <div class="fact-desc">${desc}</div>
+      <div class="fact-meta"><span>${date}</span><span class="fact-ico"><span>💬 ${comments}</span><span>📎 ${attachments}</span></span></div>
+    </article>`;
+}
+
+function pendingGrid(s) {
+  const facts = (s.facts || []).filter(f => {
+    const d = s.decisions[f.fact_id];
+    const st = d || f.status || "PENDING_REVIEW";
+    return st === "PENDING_REVIEW";
+  }).slice(0, 6);
+  if (!facts.length) return "";
+  return `
+    <section>
+      <div class="content-head">
+        <h2 class="section-title">Articles en attente</h2>
+        <button class="btn-ghost" data-action="nav-facts-all">Tout voir →</button>
+      </div>
+      <div class="content-grid">${facts.map((f, i) => factCardDense(f, s, i)).join("")}</div>
+    </section>`;
 }
 
 function systemHealthPill(health) {
