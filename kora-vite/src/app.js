@@ -1817,7 +1817,7 @@ function bind() {
   let overflowTouchStartY = 0;
   let overflowTouchStartTime = 0;
 
-  const closeOverflow = () => { if (overflowMenu) overflowMenu.classList.remove("open"); if (navScrim) navScrim.hidden = true; };
+  const closeOverflow = () => { if (overflowMenu) { overflowMenu.classList.remove("open"); overflowMenu.hidden = true; } if (navScrim) navScrim.hidden = true; };
   if (overflowMenu) overflowMenu.querySelectorAll(".overflow-item").forEach(it => it.onclick = () => { navigate(it.dataset.route); closeOverflow(); });
 
   // Ouverture du menu Plus (mobile) — délégation document CAPTURE (shell injecté apres init)
@@ -1826,6 +1826,7 @@ function bind() {
     if (plus) {
       e.preventDefault(); e.stopPropagation();
       if (!overflowMenu) return;
+      overflowMenu.hidden = false;              // retire l'attribut hidden (sinon display:none UA)
       overflowMenu.classList.add("open");   // idempotent : reste ouvert malgre events multiples d'un meme tap
       if (navScrim) navScrim.hidden = false;
     }
