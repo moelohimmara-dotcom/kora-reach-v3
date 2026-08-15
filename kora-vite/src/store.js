@@ -8,7 +8,7 @@ const BASE = "/kora-v2";  // nginx route /kora-v2/api -> backend Python (port 87
 export const Store = (() => {
   const state = {
     route: "cockpit",
-    ui: { loading: false, error: null, busy: false, overlay: null, theme: "dark", rail: "expanded", factFilter: "all" },
+    ui: { loading: false, error: null, busy: false, overlay: null, theme: "dark", rail: "expanded", factFilter: "all", factQuery: "", factSort: "recent" },
     health: null,
     lastCycle: null,
     facts: [],
@@ -351,6 +351,10 @@ export const Store = (() => {
   function closeSheet() { setState({ sheet: null }); }
   function getFactFilter() { return state.ui.factFilter || "all"; }
   function setFactFilter(f) { setState({ ui: { ...state.ui, factFilter: f } }); }
+  function getFactQuery() { try { return localStorage.getItem("kora-factQuery") || state.ui.factQuery || ""; } catch (e) { return state.ui.factQuery || ""; } }
+  function setFactQuery(q) { try { localStorage.setItem("kora-factQuery", q || ""); } catch (e) {} setState({ ui: { ...state.ui, factQuery: q || "" } }); }
+  function getFactSort() { try { return localStorage.getItem("kora-factSort") || state.ui.factSort || "recent"; } catch (e) { return state.ui.factSort || "recent"; } }
+  function setFactSort(o) { try { localStorage.setItem("kora-factSort", o || "recent"); } catch (e) {} setState({ ui: { ...state.ui, factSort: o || "recent" } }); }
   function wait(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
   // ---- Thème (dark par défaut, + light cassé & cacao color) ----
@@ -612,6 +616,7 @@ export const Store = (() => {
     loadHealth, loadLast, loadHITL, loadAudit, loadSources, loadSettings, applySettings,
     startCycle, seed, decide, retract, setRoute, openSheet, closeSheet, wait,
     getFactFilter, setFactFilter,
+    getFactQuery, setFactQuery, getFactSort, setFactSort,
     getTheme, setTheme, initTheme,
     getRailMode, setRailMode, initRailMode, applyRailMode,
     // alias rétro-compat (certains appels utilisent initRail)
