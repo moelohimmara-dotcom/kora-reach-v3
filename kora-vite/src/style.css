@@ -1337,8 +1337,13 @@ html.icons-ready .material-icons { visibility: visible; }
 @media (max-width: 599px) {
   .cockpit { padding: var(--space-4); }
   .cockpit-grid.stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .stat-card { min-height: 96px; gap: 8px; } /* 96px = multiple de 8, >= 48dp tactile */
-  .stat-value { font-size: 1.7rem; }
+  .stat-card { min-height: 96px; gap: 8px; }
+  /* Scaling PROPORTIONNEL a la bulle mobile (=0.75x de la carte desktop 186px) :
+     nombre 32->24px, libelle 16->12px, icone 28->21px. Evite le nombre dominant
+     qui debordait la bulle (cf. capture user). Meme agencement desktop preserve. */
+  .stat-value { font-size: 1.375rem; } /* 22px (~0.69x desktop, affinage suite feedback 'trop gros') */
+  .stat-label { font-size: 12px; }     /* 12px (ratio desktop, plancher lisible) */
+  .stat-icon { width: 20px; height: 20px; }
   .health-row { flex-direction: column; }
   .health-item { text-align: center; }
   .cycle-actions { flex-direction: column; }
