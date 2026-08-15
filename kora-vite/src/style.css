@@ -1854,9 +1854,19 @@ html.icons-ready .material-icons { visibility: visible; }
     border-color: rgba(255, 255, 255, .14) !important;
     backdrop-filter: blur(12px);
   }
-  .stat-card, .stat { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-  .stat-card .stat-icon, .stat .stat-icon { color: var(--kora-accent2) !important; width: 16px; height: 16px; margin: 0 auto 12px; }
-  /* Icônes KPI 16×16px (mode réductif) + centrage au beau milieu — bonnes pratiques mobile */
+  /* STYLE CANVA : cartes orange vif, icone noire grande, chiffre/label noirs */
+  .stat-card, .stat {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+    background: #FF7A3C !important; border: none !important;
+    box-shadow: 0 6px 18px rgba(0,0,0,.22); border-radius: var(--radius-lg);
+  }
+  .stat-card .stat-icon, .stat .stat-icon { color: #1A120A !important; width: 40px; height: 40px; margin: 0 auto 10px; }
+  .stat-card .stat-icon svg, .stat-card .stat-icon .ic, .stat-card .stat-icon use,
+  .stat .stat-icon svg, .stat .stat-icon .ic, .stat .stat-icon use { color: #1A120A !important; }
+  .stat-card .stat-value, .stat-card .n, .stat .n,
+  .stat-card .stat-label, .stat-card .l, .stat .l { color: #1A120A !important; }
+  .stat-card .stat-value, .stat-card .n, .stat .n { font-size: 32px; font-weight: 800; line-height: 1; }
+  .stat-card .stat-label, .stat-card .l, .stat .l { font-size: 13px; font-weight: 600; margin-top: 4px; text-transform: none; letter-spacing: 0; }
   .kora-donut { width: 180px; height: 180px; display: block; margin: 8px auto; }
   .kora-donut-center { font-size: 32px; font-weight: 800; fill: var(--kora-paper); }
   .kora-donut-sub { font-size: 12px; fill: rgba(244,238,226,.64); }
