@@ -1783,6 +1783,41 @@ html.icons-ready .material-icons { visibility: visible; }
   font-family: var(--mono, monospace); font-size: 10px; font-weight: 600; display: none; align-items: center; justify-content: center; }
 .bottomnav .nav-badge.show { display: flex; }
 
+/* ===== Design cible (capture 20:27) : 6 cartes KPI en grille 2 colonnes ===== */
+.cards-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 16px 0;
+}
+.cards-grid .stat-card {
+  margin: 0;
+  min-height: 96px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 14px 16px;
+}
+/* Badge navbar (rouge, coin icône) */
+.tab { position: relative; }
+.tab .badge {
+  position: absolute; top: 2px; right: 50%; margin-right: -22px;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: var(--danger, #D32F2F); color: #fff;
+  font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; line-height: 1;
+}
+/* Bouton refresh orange circulaire (header) */
+.refresh-btn {
+  margin-left: auto;
+  color: var(--coral, #FF6B4A);
+}
+/* Statut prêt (vert) */
+.status-chip.ready { color: #4CAF50; display: inline-flex; align-items: center; gap: 6px; }
+.status-chip.ready .dot { width: 8px; height: 8px; border-radius: 50%; background: #4CAF50; display: inline-block; }
+
+
 /* En mobile, le rail desktop est masqué (bottom-nav le remplace) — placé EN FIN pour primer */
 @media (max-width: 767px) {
   .rail { display: none; }
@@ -1826,4 +1861,39 @@ html.icons-ready .material-icons { visibility: visible; }
   display: none; align-items: center; justify-content: center; line-height: 1;
 }
 .bottomnav .nav-badge.show { display: flex; }
+
+/* ===== Design cible (capture 20:27) : 6 cartes KPI en grille 2 colonnes ===== */
+.cards-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 16px 0;
+}
+.cards-grid .stat-card {
+  margin: 0;
+  min-height: 96px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 14px 16px;
+}
+/* Badge navbar (rouge, coin icône) */
+.tab { position: relative; }
+.tab .badge {
+  position: absolute; top: 2px; right: 50%; margin-right: -22px;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: var(--danger, #D32F2F); color: #fff;
+  font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; line-height: 1;
+}
+/* Bouton refresh orange circulaire (header) */
+.refresh-btn {
+  margin-left: auto;
+  color: var(--coral, #FF6B4A);
+}
+/* Statut prêt (vert) */
+.status-chip.ready { color: #4CAF50; display: inline-flex; align-items: center; gap: 6px; }
+.status-chip.ready .dot { width: 8px; height: 8px; border-radius: 50%; background: #4CAF50; display: inline-block; }
+
 
