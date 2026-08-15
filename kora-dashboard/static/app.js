@@ -80,7 +80,7 @@ function esc(s) {
 async function refresh() {
   try {
     const [health, stats, facts, audit, config] = await Promise.all([
-      api("/api/health"), api("/api/stats"), api("/api/facts"), api("/api/audit"), api("/api/config")
+      api("api/health"), api("api/stats"), api("api/facts"), api("api/audit"), api("api/config")
     ]);
     const pill = $("#dbPill");
     pill.textContent = health.demo ? "DEMO" : "DB OK";

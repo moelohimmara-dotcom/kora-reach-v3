@@ -16,7 +16,8 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # HARDCODE project root — background(background=true) launches with cwd="/"
-ROOT = "/opt/data/kora-dashboard"
+# Deployed on VPS at /opt/kora-dashboard (NOT /opt/data/kora-dashboard).
+ROOT = "/opt/kora-dashboard"
 STATIC = os.path.join(ROOT, "static")
 PORT = 8765
 BIND = "127.0.0.1"  # localhost only — not reachable from the internet
