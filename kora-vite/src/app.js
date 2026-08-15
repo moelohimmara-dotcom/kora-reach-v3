@@ -170,8 +170,6 @@ function viewCockpit(s) {
 
   return `
     <div class="cockpit kora-wire">
-      <div class="decision-band" aria-hidden="true"></div>
-
       <!-- HERO : le fact en attente de décision (cœur du produit) -->
       ${heroFact(s, pending)}
 
@@ -183,7 +181,7 @@ function viewCockpit(s) {
         ${statCard({ icon: "edit", value: draft, label: "Brouillons", variant: "info", onClick: "nav-drafts", loading: s.ui?.loading && draft === 0 })}
         ${statCard({ icon: "i-reject", value: rejected, label: "Rejetés", variant: "danger", onClick: "nav-facts-rejected", loading: s.ui?.loading && rejected === 0 })}
         ${statCard({ icon: "i-trash", value: trash, label: "Corbeille", variant: "tertiary", onClick: "nav-trash", loading: s.ui?.loading && trash === 0 })}
-        ${statCard({ icon: "i-close", value: deleted, label: "Supprimés", variant: "muted", onClick: "nav-deleted", loading: s.ui?.loading && deleted === 0 })}
+        ${statCard({ icon: "i-close", value: deleted, label: "Supprimés", variant: "primary", onClick: "nav-deleted", loading: s.ui?.loading && deleted === 0 })}
       </div>
 
       <!-- GRAPHIQUE D'ÉVOLUTION : activité + décisions par jour -->
@@ -1399,7 +1397,7 @@ function render() {
   const agent = document.getElementById("agentStatus");
   if (agent) agent.innerHTML = s.ui.busy
     ? `<span class="dot dot-busy"></span><span>${s.ui.overlay || "Agent occupé…"}</span>`
-    : `<span class="dot dot-ok"></span><span>prêt</span>`;
+    : `<span class="dot dot-ready"></span><span>prêt</span>`;
   const view = document.getElementById("view");
   if (!view) return;
   const map = { cockpit: viewCockpit, facts: viewFacts, sources: viewSources, audit: viewAudit, drafts: viewDrafts, settings: viewSettings, trash: viewTrash };
@@ -1468,7 +1466,7 @@ function render() {
     else am.textContent = "prêt";
   }
   const amDot = document.querySelector("#agentStatus .dot");
-  if (amDot) amDot.className = "dot " + (busy ? "dot-busy" : (s.health && s.health.status === "error" ? "dot-err" : "dot-ok"));
+  if (amDot) amDot.className = "dot " + (busy ? "dot-busy" : (s.health && s.health.status === "error" ? "dot-err" : "dot-ready"));
   const gl = document.getElementById("globalLoader");
   if (gl) {
     const t = document.getElementById("globalLoaderText");
