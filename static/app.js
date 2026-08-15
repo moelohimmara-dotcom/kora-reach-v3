@@ -64,7 +64,12 @@ async function refreshState() {
 // ---------- Dashboard : lancer cycle (détaché + polling) ----------
 async function runCycle() {
   const btn = $("#runBtn");
+  const cancel = $("#cancelBtn");
   btn.disabled = true;
+  cancel.classList.remove("hidden");
+  cancel.disabled = false;
+  $("#scopeSel").disabled = true;
+  $("#demandSel").disabled = true;
   $("#runStatus").textContent = "Lancement du cycle…";
   $("#runStatus").classList.remove("err");
   clearInterval(state.pollTimer);
@@ -75,17 +80,17 @@ async function runCycle() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         scope: $("#scopeSel").value || null,
-        demand: parseInt($("#demandSel").value, 10) || 3,
+        demand: 1,
         initiator: "dashboard",
       }),
     });
     if (res.error) {
       $("#runStatus").textContent = "⚠ " + res.error;
       $("#runStatus").classList.add("err");
-      btn.disabled = false;
+      endCycleUI();
       return;
     }
-    $("#runStatus").textContent = "Collecte en cours… (cela peut prendre 1-2 min)";
+    $("#runStatus").textContent = "Génération de l'article en cours… (cela peut prendre 1-2 min)";
     // 2) Polling jusqu'à la fin du cycle
     state.pollTimer = setInterval(async () => {
       try {
@@ -96,18 +101,17 @@ async function runCycle() {
           if (last.result.status === "empty_or_stale") {
             $("#runStatus").textContent = "Aucune publication dans la fenêtre 24h. " + (last.result.message || "");
           } else {
-            $("#runStatus").textContent = `Cycle OK — ${last.result.facts_to_generate} fait(s) généré(s).`;
+            $("#runStatus").textContent = `Cycle OK — ${last.result.facts_to_generate} article généré.`;
             fillStats(last.result);
             renderFacts(last.result.facts);
             $("#statSources").textContent = last.result.sources_ok;
           }
-          btn.disabled = false;
+          endCycleUI();
           refreshState();
         } else if (!last.running && !last.result) {
-          // cycle terminé sans résultat
           clearInterval(state.pollTimer);
           $("#runStatus").textContent = "Cycle terminé (aucun fait).";
-          btn.disabled = false;
+          endCycleUI();
         }
       } catch (e) {
         // erreur de poll : on continue d'attendre un peu
@@ -116,8 +120,34 @@ async function runCycle() {
   } catch (e) {
     $("#runStatus").textContent = "Erreur réseau : " + e.message;
     $("#runStatus").classList.add("err");
-    btn.disabled = false;
+    endCycleUI();
   }
+}
+
+// Réactive l'UI après la fin (ou l'annulation) d'un cycle
+function endCycleUI() {
+  const btn = $("#runBtn");
+  const cancel = $("#cancelBtn");
+  btn.disabled = false;
+  cancel.classList.add("hidden");
+  cancel.disabled = false;
+  $("#scopeSel").disabled = false;
+  $("#demandSel").disabled = false;
+}
+
+// Interrompt le cycle en cours (arrêt propre après l'article en cours)
+async function cancelCycle() {
+  const cancel = $("#cancelBtn");
+  cancel.disabled = true;
+  $("#runStatus").textContent = "Interruption demandée… (arrêt après l'article en cours)";
+  try {
+    await api("/api/cycle/cancel", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    });
+  } catch (e) {
+    $("#runStatus").textContent = "Erreur interruption : " + e.message;
+  }
+  // Le poll détectera running=False et réactivera l'UI via endCycleUI()
 }
 
 function fillStats(res) {
@@ -317,6 +347,7 @@ function esc(s) {
 
 // ---------- Events ----------
 $("#runBtn").onclick = runCycle;
+$("#cancelBtn").onclick = cancelCycle;
 $("#menuBtn").onclick = () => { $("#drawer").classList.add("open"); $("#scrim").classList.add("show"); };
 $("#scrim").onclick = () => { $("#drawer").classList.remove("open"); $("#scrim").classList.remove("show"); };
 $("#modalClose").onclick = () => $("#detailModal").classList.add("hidden");

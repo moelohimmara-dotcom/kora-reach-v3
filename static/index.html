@@ -66,13 +66,17 @@
           <option value="INTL">International filtré</option>
         </select>
       </label>
-      <label class="field">
+      <label class="field" style="display:none">
         <span>Faits à générer</span>
-        <input type="number" id="demandSel" value="3" min="1" max="10">
+        <input type="number" id="demandSel" value="1" min="1" max="1">
       </label>
       <button class="btn-primary" id="runBtn">
         <svg viewBox="0 0 24 24" class="ic"><path d="M8 5v14l11-7z"/></svg>
         Lancer un cycle
+      </button>
+      <button class="btn-danger hidden" id="cancelBtn">
+        <svg viewBox="0 0 24 24" class="ic"><path d="M6 6h12v12H6z"/></svg>
+        Interrompre
       </button>
     </div>
     <div id="runStatus" class="run-status"></div>
