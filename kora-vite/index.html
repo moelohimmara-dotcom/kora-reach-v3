@@ -6,7 +6,11 @@
 <title>KORA Agent — Poste de pilotage éditorial</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&display=swap" rel="stylesheet">
+<!-- Police display non bloquante : on charge en "print" puis on bascule en
+     "all" une fois prete (technique standard pour accelerer le first paint). -->
+<link rel="stylesheet" media="print" onload="this.media='all'"
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&display=swap">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&display=swap"></noscript>
 <script>
   // Anti-FOUC : applique le thème avant le premier paint (évite flash clair→sombre).
   (function () {
@@ -33,10 +37,41 @@
     setTimeout(reveal, 2000);
   })();
 </script>
+<!-- CSS CRITIQUE INLINE du splash de boot : peint IMMEDIATEMENT (avant style.css
+     externe) -> aucun flash de page vide/partielle au refresh. Methode SPA
+     standard (app-shell + loader statique masque au montage de l'app). -->
+<style>
+  #bootSplash {
+    position: fixed; inset: 0; z-index: 9999;
+    background: #15171D;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 18px; color: #E6C079; font-family: "Montserrat", system-ui, sans-serif;
+  }
+  #bootSplash .bs-logo { font-weight: 800; font-size: 30px; letter-spacing: 2px; color: #FF6B4A; }
+  #bootSplash .bs-sub { font-size: 13px; color: #8A93A6; letter-spacing: 1px; }
+  #bootSplash .bs-wave { display: flex; gap: 7px; }
+  #bootSplash .bs-wave i {
+    width: 9px; height: 9px; border-radius: 50%; background: #FF6B4A;
+    animation: bs-bounce 1s infinite ease-in-out both;
+  }
+  #bootSplash .bs-wave i:nth-child(1) { animation-delay: -0.32s; }
+  #bootSplash .bs-wave i:nth-child(2) { animation-delay: -0.16s; }
+  #bootSplash .bs-wave i:nth-child(3) { animation-delay: 0s; }
+  #bootSplash .bs-wave i:nth-child(4) { animation-delay: 0.16s; }
+  #bootSplash .bs-wave i:nth-child(5) { animation-delay: 0.32s; }
+  @keyframes bs-bounce { 0%, 80%, 100% { transform: scale(0.5); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
+</style>
 </head>
 <body>
 <div id="app"></div>
 <div id="authOverlay" hidden></div>
+<!-- Splash de boot : visible des le premier paint, masque par app.js une fois
+     l'app reellement montee (auth resolue + vue rendue). -->
+<div id="bootSplash">
+  <div class="bs-logo">KORA</div>
+  <div class="bs-wave"><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="bs-sub">VEILLE GUINÉE</div>
+</div>
 <script type="module" src="/src/main.js"></script>
 </body>
 </html>
