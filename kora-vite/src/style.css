@@ -1225,18 +1225,19 @@ html.icons-ready .material-icons { visibility: visible; }
   box-shadow: var(--glass-shadow);
   transition: transform var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
   cursor: pointer;
-  min-height: 112px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  min-height: 112px; /* >= 48dp tactile (standards iOS/Android) */
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; /* 8pt grid (etait 6px) */
 }
 .stat-card:hover { transform: translateY(-3px); border-color: var(--coral); box-shadow: var(--shadow-card-hover); }
 .stat-card:focus-visible { outline: 2px solid var(--coral); outline-offset: 2px; }
 .stat-card.loading { opacity: 0.6; pointer-events: none; }
 .stat-card.error { border-color: var(--md-sys-color-error); }
 .stat-icon { width: 28px; height: 28px; color: var(--md-sys-color-primary); }
-.stat-value { font-family: var(--font-display); font-size: 2rem; font-weight: 800; color: var(--md-sys-color-on-surface); line-height: 1; }
+.stat-value { font-family: var(--font-display); font-size: 2rem; font-weight: 800; color: var(--md-sys-color-on-surface); line-height: 1; font-variant-numeric: tabular-nums; }
 .stat-value .skeleton { display: inline-block; width: 60px; height: 28px; background: linear-gradient(90deg, var(--glass-bg) 25%, var(--glass-bg-hover) 50%, var(--glass-bg) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-.stat-label { font-size: var(--t-label-sm); letter-spacing: .2px; color: var(--on-surface-soft); font-weight: 700; line-height: 1.2; display: flex; align-items: center; justify-content: center; gap: 4px; }
+.stat-label { font-size: var(--t-label-sm); letter-spacing: .2px; color: var(--on-surface); font-weight: 700; line-height: 1.2; display: flex; align-items: center; justify-content: center; gap: 4px; }
 .stat-trend { font-size: var(--t-label-xs); font-weight: 800; padding: 2px 6px; border-radius: var(--radius-pill); }
 .stat-trend.up { background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); }
 .stat-trend.down { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
@@ -1336,7 +1337,7 @@ html.icons-ready .material-icons { visibility: visible; }
 @media (max-width: 599px) {
   .cockpit { padding: var(--space-4); }
   .cockpit-grid.stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .stat-card { min-height: 92px; }
+  .stat-card { min-height: 96px; gap: 8px; } /* 96px = multiple de 8, >= 48dp tactile */
   .stat-value { font-size: 1.7rem; }
   .health-row { flex-direction: column; }
   .health-item { text-align: center; }
