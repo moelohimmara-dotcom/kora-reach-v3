@@ -370,7 +370,13 @@ export const Store = (() => {
     // KORA = neumorphisme SOMBRE par défaut (charte imposée). On ignore
     // prefers-color-scheme pour éviter d'afficher le thème clair cassé.
     let t = "dark";
-    try { t = localStorage.getItem("kora-theme") || "dark"; } catch (e) {}
+    try {
+      t = localStorage.getItem("kora-theme") || "dark";
+      // Migration one-shot : un reglage 'light' résiduel (ancien auto-detect
+      // via prefers-color-scheme) est remis en dark. Un choix 'light' EXPLICITE
+      // via l'UI (setTheme) reste respecté car applyTheme le rejoue.
+      if (t === "light") { localStorage.setItem("kora-theme", "dark"); t = "dark"; }
+    } catch (e) {}
     if (!THEMES.includes(t)) t = "dark";
     applyTheme(t);
     return t;
