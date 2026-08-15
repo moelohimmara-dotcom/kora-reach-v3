@@ -1875,6 +1875,13 @@ html.icons-ready .material-icons { visibility: visible; }
   }
   .meta, .source, .fact-card .meta, .fact-card .source { color: rgba(244,238,226,.72) !important; }
   .chip, .filter-chip, .facts-filter button, .pill-btn { min-height: 40px !important; }
+  /* Ajustement Articles (C) : titre 2 lignes + overflow items 48px + texte corbeille */
+  .fact-card .t, .fact-card h3, .fact-card .title {
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; line-height: 1.3; max-height: 2.6em;
+  }
+  .overflow-menu button, .overflow-item, .more-item { min-height: 48px !important; display: flex; align-items: center; gap: 12px; color: var(--kora-paper); }
+  .empty p, .trash-empty p, .view .empty { color: rgba(244,238,226,.72) !important; }
   .kora-donut-center { font-size: 32px; font-weight: 800; fill: var(--kora-paper); }
   .kora-donut-sub { font-size: 12px; fill: rgba(244,238,226,.64); }
   .bottomnav, .bottom-nav {
