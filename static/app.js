@@ -151,9 +151,16 @@ async function cancelCycle() {
 }
 
 function fillStats(res) {
-  $("#statItems").textContent = res.total_items ?? "–";
-  $("#statClusters").textContent = res.clusters ?? "–";
-  $("#statRej").textContent = res.rejected_intl ?? "–";
+  // 6 cartes KPI (design cible capture 20:27)
+  $("#statArticles").textContent = res.articles ?? res.total_items ?? "–";
+  $("#statDecider").textContent = res.a_decider ?? res.pending ?? "–";
+  $("#statPublies").textContent = res.publies ?? res.transmitted ?? "–";
+  $("#statBrouillons").textContent = res.brouillons ?? res.drafts ?? "–";
+  $("#statRejetes").textContent = res.rejetes ?? res.rejected_intl ?? "–";
+  $("#statCorbeille").textContent = res.corbeille ?? res.trash ?? "–";
+  // Badges navbar
+  if ($("#badgeArticles")) $("#badgeArticles").textContent = $("#statArticles").textContent;
+  if ($("#badgeCorbeille")) $("#badgeCorbeille").textContent = $("#statCorbeille").textContent;
 }
 
 function renderFacts(facts) {
@@ -351,6 +358,7 @@ $("#cancelBtn").onclick = cancelCycle;
 $("#menuBtn").onclick = () => { $("#drawer").classList.add("open"); $("#scrim").classList.add("show"); };
 $("#scrim").onclick = () => { $("#drawer").classList.remove("open"); $("#scrim").classList.remove("show"); };
 $("#modalClose").onclick = () => $("#detailModal").classList.add("hidden");
+$("#refreshBtn").onclick = () => { refreshState(); loadLast(); };
 $$(".nav-item").forEach(n => n.onclick = () => navigate(n.dataset.view));
 $$(".tab").forEach(t => t.onclick = () => navigate(t.dataset.view));
 
