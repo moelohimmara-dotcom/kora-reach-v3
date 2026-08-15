@@ -1867,7 +1867,14 @@ html.icons-ready .material-icons { visibility: visible; }
   .stat-card .stat-label, .stat-card .l, .stat .l { color: var(--kora-paper) !important; }
   .stat-card .stat-value, .stat-card .n, .stat .n { font-size: 32px; font-weight: 800; line-height: 1; }
   .stat-card .stat-label, .stat-card .l, .stat .l { font-size: 13px; font-weight: 600; margin-top: 4px; }
-  .kora-donut { width: 180px; height: 180px; display: block; margin: 8px auto; }
+  /* Vue Articles/Listes : marge ecran 16dp + tags statut lisibles */
+  .view, .shell-main, .app-shell { padding-left: 16px !important; padding-right: 16px !important; }
+  .fact-card .tag, .fact-card .status, .fact-card [class*="tag"], .article-card .tag, .chip-stat, .pill {
+    color: var(--kora-paper) !important; background: rgba(255,255,255,.10) !important;
+    border: 1px solid rgba(255,255,255,.18) !important;
+  }
+  .meta, .source, .fact-card .meta, .fact-card .source { color: rgba(244,238,226,.72) !important; }
+  .chip, .filter-chip, .facts-filter button, .pill-btn { min-height: 40px !important; }
   .kora-donut-center { font-size: 32px; font-weight: 800; fill: var(--kora-paper); }
   .kora-donut-sub { font-size: 12px; fill: rgba(244,238,226,.64); }
   .bottomnav, .bottom-nav {
