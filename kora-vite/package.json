@@ -20,6 +20,7 @@
     "@fontsource/source-sans-3": "^5.3.0",
     "@material/web": "^2.5.0",
     "dompurify": "^3.4.13",
+    "lucide-static": "^1.31.0",
     "marked": "^18.0.9"
   }
 }
