@@ -598,18 +598,23 @@ function viewFacts(s) {
     ["transmitted", "Transmis", counts.transmitted], ["rejected", "Rejetés", counts.rejected],
     ["drafts", "Brouillons", counts.drafts], ["trash", "Corbeille", counts.trash],
   ];
+  const sortSel = Store.getFactSort() || "recent";
   const filterBar = `<div class="filter-bar">${filters.map(([k, lab, n]) =>
     `<button class="filter-pill ${f === k ? "active" : ""}" data-fact-filter="${k}">${lab} <span class="pill-n">${n}</span></button>`).join("")}</div>
     <p class="filter-note">Chaque article compte dans une seule catégorie — la somme des filtres égale le total (${counts.all}).</p>
     <div class="toolbar-row">
       <button class="btn btn-tonal" id="enterSelect">${s.selectMode ? "Annuler la sélection" : "Sélectionner"}</button>
+      <label class="sort-label" for="factSort">Trier :</label>
+      <select class="sort-select" id="factSort">
+        <option value="recent"${sortSel === "recent" ? " selected" : ""}>Plus récents</option>
+        <option value="oldest"${sortSel === "oldest" ? " selected" : ""}>Plus anciens</option>
+        <option value="title"${sortSel === "title" ? " selected" : ""}>Titre A→Z</option>
+      </select>
     </div>`;
   let body;
   // B+C : filtrage par catégorie EXCLUSIVE (même logique inline que les compteurs)
   const catOf = (ft) => {
     if (ft.status === "TRASHED" || (ft.trashed_at && ft.trashed_at !== "")) {
-      // Un article a la corbeille peut etre rejete (decision HITL REJECTED) :
-      // il compte alors dans "Rejetes" (coherent avec s.stats.rejected).
       if (ft.rejected || ft.decision === "REJECTED" || ft.d_status === "REJECTED") return "rejected";
       return "trash";
     }
@@ -618,13 +623,27 @@ function viewFacts(s) {
     if (ft.status === "EDITED") return "drafts";
     return "pending";
   };
-  if (f === "all") {
-    body = factGroupsByDay(facts, s);
-  } else if (["pending", "transmitted", "rejected", "drafts", "trash"].includes(f)) {
-    body = factGroupsByDay(facts.filter(x => catOf(x) === f), s);
-  } else {
-    body = factGroupsByDay(facts, s);
+  // Liste de base filtree par catégorie
+  let list = facts;
+  if (["pending", "transmitted", "rejected", "drafts", "trash"].includes(f)) {
+    list = list.filter(x => catOf(x) === f);
   }
+  // Recherche (refonte A) : query sur titre/source/extrait
+  const q = (Store.getFactQuery() || "").toLowerCase().trim();
+  if (q) {
+    list = list.filter(x => {
+      const c = x.champion || {};
+      return [c.title, c.summary, c.source, x.fact_id].some(v => (v || "").toLowerCase().includes(q));
+    });
+  }
+  // Tri (refonte A)
+  const sort = sortSel;
+  list = list.slice().sort((a, b) => {
+    if (sort === "title") return (a.champion?.title || "").localeCompare(b.champion?.title || "", "fr");
+    if (sort === "oldest") return new Date(a.captured_at || 0) - new Date(b.captured_at || 0);
+    return new Date(b.captured_at || 0) - new Date(a.captured_at || 0); // recent (défaut)
+  });
+  body = factGroupsByDay(list, s);
   return filterBar + body;
 }
 globalThis.__viewFacts = viewFacts; // DEBUG B+C
@@ -1681,6 +1700,33 @@ function bind() {
     if (!f && card.dataset.index) f = facts[parseInt(card.dataset.index, 10)];
     if (f) { Store.openSheet({ type: "fact", fact: f }); renderSheet(Store.state); }
   });
+  // ---- Topbar refonte A : recherche + Trier/Filtres (câblage réel) ----
+  const searchInput = document.querySelector('[data-action="search"]');
+  if (searchInput) {
+    searchInput.value = Store.getFactQuery() || "";
+    searchInput.oninput = (e) => {
+      Store.setFactQuery(e.target.value);
+      if (Store.state.route !== "facts") navigate("facts");
+      else render();
+    };
+  }
+  const SORT_ORDER = ["recent", "oldest", "title"];
+  const SORT_LABEL = { recent: "Plus récents", oldest: "Plus anciens", title: "Titre A→Z" };
+  $$('[data-action="sort"]').forEach(b => b.onclick = () => {
+    if (Store.state.route !== "facts") navigate("facts");
+    setTimeout(() => {
+      const sel = document.getElementById("factSort");
+      if (sel) { sel.focus(); sel.scrollIntoView({ behavior: "smooth", block: "center" }); }
+    }, 250);
+    if (Store.toast) Store.toast("Trier : choisissez un ordre dans le menu");
+  });
+  $$('[data-action="filters"]').forEach(b => b.onclick = () => {
+    if (Store.state.route !== "facts") navigate("facts");
+    setTimeout(() => { const fb = document.querySelector(".filter-bar"); if (fb) fb.scrollIntoView({ behavior: "smooth", block: "start" }); }, 250);
+  });
+  // Select de tri dans la toolbar Facts
+  const sortSelEl = document.getElementById("factSort");
+  if (sortSelEl) sortSelEl.onchange = () => { Store.setFactSort(sortSelEl.value); render(); };
   // Filtres de la vue Articles : chaque pill filtre la liste SAUF "Corbeille"
   // qui pointe vers LA page corbeille unique (meme route/representation que la
   // sidebar) -> un seul endroit pour la corbeille, proprietes identiques.
