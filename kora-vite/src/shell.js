@@ -9,14 +9,8 @@ export const SHELL = `
         <span class="brand-name">KORA</span>
         <span class="brand-sub">Agent</span>
       </div>
-      <div class="topbar-search">
-        <span class="ic">${ic("i-search")}</span>
-        <input class="topbar-search-input" type="search" placeholder="Rechercher un article…" data-action="search" aria-label="Rechercher un article" />
-      </div>
     </div>
     <div class="topbar-right">
-      <button class="btn btn-ghost topbar-filter" data-action="sort" aria-label="Trier">Trier par</button>
-      <button class="btn btn-ghost topbar-filter" data-action="filters" aria-label="Filtres">Filtres</button>
       <div class="topbar-status" id="agentStatus">
         <span class="dot dot-ok"></span><span id="agentMode">prêt</span>
       </div>
