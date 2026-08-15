@@ -596,10 +596,8 @@ function viewTrash(s) {
 function viewSources(s) {
   const src = s.sources || [];
   if (!src.length) return stateBox("i-sources", "Sources en chargement…", "Récupération de la liste de sources autorisées.", !!s.ui.loading);
-  const g1 = src.filter(e => e.category === "GN_NAT" && !/guin[ée]e?\s*7/i.test(e.name || e.id || ""));
-  const g2 = src.filter(e => e.category !== "GN_NAT" && !/guin[ée]e?\s*7/i.test(e.name || e.id || ""));
-  // "Guinee7" isolée en dessous (demande utilisateur : séparée des autres sources)
-  const gOther = src.filter(e => /guin[ée]e?\s*7/i.test(e.name || e.id || ""));
+  // Toutes les sources nationales guinéennes regroupees dans UN seul bloc parent ; internationales supprimees (demande utilisateur)
+  const gn = src.filter(e => e.category === "GN_NAT");
   const srcRow = (e) => `
     <div class="list-row src-row">
       <span class="meta-ic">${icon(e.guinee_filter ? "i-shield" : "i-sources")}</span>
@@ -607,22 +605,14 @@ function viewSources(s) {
         <div class="name">${esc(e.name)} ${e.guinee_filter ? chip("Filtre Guinée", "warning", "i-shield") : ""}</div>
         <div class="sub">${esc(e.category)} · ${esc(e.vector_primary)} · ${esc(e.entry_url)}</div>
       </div>
-      ${chip(e.category === "GN_NAT" ? "Niveau 1" : "Niveau 2", e.category === "GN_NAT" ? "primary" : "secondary")}
+      ${chip("National", "primary")}
     </div>`;
-  return `<div class="section-title">Gouvernance des sources (${src.length})</div>
+  return `<div class="section-title">Gouvernance des sources (${gn.length})</div>
     <p class="muted" style="margin-bottom:16px">Whitelist figée G1 — aucune découverte automatique. Toute cible hors liste est refusée.</p>
     <section class="fact-group">
-      <div class="group-head"><span class="group-ic">${icon("i-level1")}</span><h3 class="group-title">Niveau 1 · Sources guinéennes</h3><span class="group-count">${g1.length}</span></div>
-      ${g1.map(srcRow).join("") || `<div class="muted" style="padding:8px 0">Aucune source de niveau 1.</div>`}
-    </section>
-    <section class="fact-group">
-      <div class="group-head"><span class="group-ic">${icon("i-level2")}</span><h3 class="group-title">Niveau 2 · International filtrées</h3><span class="group-count">${g2.length}</span></div>
-      ${g2.map(srcRow).join("") || `<div class="muted" style="padding:8px 0">Aucune source de niveau 2.</div>`}
-    </section>
-    ${gOther.length ? `<section class="fact-group">
-      <div class="group-head"><span class="group-ic">${icon("i-sources")}</span><h3 class="group-title">Autres sources</h3><span class="group-count">${gOther.length}</span></div>
-      ${gOther.map(srcRow).join("")}
-    </section>` : ""}`;
+      <div class="group-head"><span class="group-ic">${icon("i-level1")}</span><h3 class="group-title">Sources nationales guinéennes</h3><span class="group-count">${gn.length}</span></div>
+      ${gn.map(srcRow).join("") || `<div class="muted" style="padding:8px 0">Aucune source nationale.</div>`}
+    </section>`;
 }
 function viewSettings(s) {
   const theme = Store.getTheme();
