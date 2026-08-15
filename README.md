@@ -124,6 +124,39 @@ Exemple réel : `git checkout bed6443 -- kora-vite/src/*` puis commit (revert Bi
 
 ---
 
+## Fail2Ban & accès SSH (anti-blocage déploiement)
+
+Fail2Ban protège SSH (et nginx). Config versionnée dans `deploy/fail2ban/`.
+
+**Install / restore** :
+```bash
+sudo cp deploy/fail2ban/kora.local /etc/fail2ban/jail.d/kora.local
+sudo cp deploy/fail2ban/sshd.conf /etc/fail2ban/jail.d/sshd.conf
+sudo fail2ban-client reload
+```
+
+**Hardening 2026-08-15** (évite qu'un déploiement légitime se fasse auto-bannir) :
+- `maxretry` sshd : `3 → 10` (tolère les tentatives de connexion répétées du sandbox).
+- `ignoreip` : réseaux internes + IP publique du VPS (`213.156.135.139`) whitelistés.
+- `banaction = ufw` (les bans ajoutent des règles REJECT ufw).
+
+**Si le déploiement est bloqué (SSH `Connection refused`, web `000`)** :
+1. Vérifier si l'IP est bannie : `sudo fail2ban-client status sshd`
+2. Dé-banner (une IP à la fois) :
+   ```bash
+   sudo fail2ban-client set sshd unbanip <IP>
+   ```
+   (`unban --all` n'est PAS supporté par cette version — dé-banner IP par IP.)
+3. Si la VM est injoignable en SSH mais accessible via la console KVM du provider,
+   utiliser la console pour dé-banner, puis redémarrer si besoin :
+   `sudo systemctl start sshd`.
+
+> Note : un `Connection refused` alors que `sshd` tourne (`systemctl status sshd` →
+> active) + `ss -ltnp | grep :22` → `0.0.0.0:22` = IP bannie par Fail2Ban, pas un
+> service down. Dé-banner règle le problème sans reboot.
+
+---
+
 ## Chemins utiles (prod)
 
 | URL | Contenu |
