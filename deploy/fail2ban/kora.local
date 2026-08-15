@@ -1,0 +1,25 @@
+# fail2ban-jail.local — anti-bruteforce SSH + nginx (KORA)
+# Install : sudo cp kora.local /etc/fail2ban/jail.d/kora.local && sudo fail2ban-client reload
+# Hardening 2026-08-15 : maxretry 3->10 (tolère tentatives de deploiement legitimes),
+# ignoreip whiteliste les reseaux internes + IP publique du VPS (evite auto-ban du sandbox de deploiement).
+[DEFAULT]
+bantime = 1h
+findtime = 10m
+maxretry = 10
+banaction = ufw
+ignoreip = 127.0.0.1/8 ::1 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 213.156.135.139
+
+[sshd]
+enabled = true
+port = 22
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 10
+
+[nginx-limit-req]
+enabled = true
+filter = nginx-limit-req
+logpath = /var/log/nginx/error.log
+maxretry = 10
+findtime = 5m
+bantime = 30m
