@@ -676,8 +676,8 @@ html.icons-ready .material-icons { visibility: visible; }
   transition: filter var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
 }
 .btn:active { transform: scale(.97); }
-.btn-primary { background: linear-gradient(135deg, var(--coral), var(--bordeaux)); color: #20100B; box-shadow: var(--glass-glow); }
-.btn-primary:hover { box-shadow: var(--glass-glow-strong); filter: brightness(1.05); }
+.btn-primary { background: linear-gradient(135deg, var(--coral), var(--bordeaux)); color: #20100B; }
+.btn-primary:hover { filter: brightness(1.04); }
 .btn-secondary { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
 .btn-error { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
 .btn-danger { background: linear-gradient(135deg, #E8615A, #C23B34); color: #fff; box-shadow: 0 8px 24px rgba(224,97,90,0.4); }
