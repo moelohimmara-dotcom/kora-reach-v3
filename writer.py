@@ -274,7 +274,14 @@ def _ollama_chat(messages: List[Dict], max_tokens: int = 600) -> str:
             )
             with _req.urlopen(req, timeout=180) as r:
                 data = _json.loads(r.read())
-            return data["choices"][0]["message"]["content"].strip()
+            msg = data["choices"][0]["message"]
+            # Modèles raisonnants (ex: openai/gpt-oss-*) renvoient la réponse
+            # dans 'reasoning'/'reasoning_content' et laissent 'content' à None.
+            text = msg.get("content") or msg.get("reasoning") or msg.get("reasoning_content")
+            if not text:
+                print(f"[LLM_NVIDIA_WARN] pas de content/reasoning: {str(data)[:200]}")
+                return None
+            return text.strip()
         except Exception as e:
             import traceback
             print(f"[LLM_NVIDIA_ERROR] {type(e).__name__}: {e}")
