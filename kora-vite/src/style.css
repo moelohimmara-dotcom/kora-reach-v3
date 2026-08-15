@@ -511,7 +511,7 @@ html.icons-ready .material-icons { visibility: visible; }
 .rail .navitem .material-icons { font-size: 22px; }
 .bottomnav .navitem .material-icons { font-size: 24px; }
 
-#app { min-height: 100%; display: flex; flex-direction: column; }
+#app { min-height: 100dvh; display: flex; flex-direction: column; }
 .topbar {
   position: sticky; top: 0; z-index: var(--z-topbar); display: flex; align-items: center; justify-content: space-between;
   padding: var(--space-3) var(--space-4); padding-top: calc(var(--space-3) + env(safe-area-inset-top));
@@ -563,7 +563,13 @@ html.icons-ready .material-icons { visibility: visible; }
 .dot-busy { background: var(--ambre); color: var(--ambre); animation: pulse 1.2s infinite; }
 .dot-err { background: var(--md-sys-color-error); color: var(--md-sys-color-error); }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
-.view { flex: 1; padding: var(--space-5); padding-bottom: 110px; max-width: 1180px; width: 100%; margin: 0 auto; }
+.view { flex: 1 0 auto; padding: var(--space-5); padding-bottom: 110px; max-width: 1180px; width: 100%; margin: 0 auto; }
+/* Mobile (≤819px) : la bottom-nav fixe (56px + safe-area) masque le bas du
+   contenu. On remonte le padding pour que la derniere carte/detail ne soit
+   jamais coupe (bug : 5e carte dashboard invisible sous la nav). */
+@media (max-width: 819px) {
+  .view { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+}
 
 .glass { background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); border-radius: var(--radius-xl); }
 

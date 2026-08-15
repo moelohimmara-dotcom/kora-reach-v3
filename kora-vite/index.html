@@ -16,7 +16,7 @@
   (function () {
     try {
       var t = localStorage.getItem("kora-theme");
-      if (!t) t = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+      if (!t) t = "dark"; // KORA est dark par défaut (coherence marque) -> pas de bascule auto sur le mode clair du telephone
       if (["dark", "light", "cacao"].indexOf(t) === -1) t = "dark";
       document.documentElement.setAttribute("data-theme", t);
     } catch (e) { document.documentElement.setAttribute("data-theme", "dark"); }
