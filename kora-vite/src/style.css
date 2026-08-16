@@ -377,7 +377,10 @@
 .sheet[hidden], .sheet-scrim[hidden] { display: none !important; pointer-events: none !important; }
 html, body { height: 100%; }
 body {
-  font-family: var(--font); background: #12151A; color: var(--md-sys-color-on-surface);
+  /* BUG CORRIGÉ (audit thèmes) : fond figé en #12151A (sombre) quel que
+     soit le thème actif — recouvrait le dégradé thémé de body::before
+     (var(--bg-grad), lui correctement varié par thème plus bas). */
+  font-family: var(--font); background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface);
   font-size: var(--t-body); line-height: 1.55; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
   overflow-x: hidden;
 }
@@ -780,7 +783,7 @@ html.icons-ready .material-icons { visibility: visible; }
   appearance: none; cursor: pointer;
   padding: 8px 14px; font-size: var(--t-label-sm); border-radius: var(--radius-pill);
   background: var(--md-sys-color-surface-container-high, var(--glass-bg-strong));
-  color: var(--fg-1); border: 1px solid var(--glass-border);
+  color: var(--md-sys-color-on-surface); border: 1px solid var(--glass-border);
   box-shadow: var(--neu-raised); transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
 }
 .regen-chip:hover { transform: translateY(-1px); box-shadow: var(--neu-raised), var(--glass-glow); color: var(--coral-text); }
@@ -850,7 +853,7 @@ html.icons-ready .material-icons { visibility: visible; }
 .section-head-actions { display: flex; gap: 8px; align-items: center; }
 .fact-check { position: absolute; top: 8px; left: 8px; width: 26px; height: 26px; border-radius: 50%;
   background: color-mix(in srgb, var(--md-sys-color-surface) 85%, transparent); border: 2px solid var(--coral);
-  display: grid; place-items: center; color: #fff; z-index: 3; box-shadow: var(--shadow-1); }
+  display: grid; place-items: center; color: #fff; z-index: 3; box-shadow: var(--elev-1); }
 .fact-check.on { background: var(--coral); }
 .fact-card.selectable { cursor: pointer; }
 .fact-card.selectable .fact-img { transition: opacity .2s; }
@@ -937,7 +940,7 @@ html.icons-ready .material-icons { visibility: visible; }
   border: 1px solid var(--glass-border);
   border-radius: 20px;
   padding: 18px;
-  box-shadow: var(--shadow-3);
+  box-shadow: var(--elev-3);
   animation: quizIn .25s var(--ease);
 }
 @media (max-width: 767px) {
@@ -957,11 +960,11 @@ html.icons-ready .material-icons { visibility: visible; }
   display: flex; align-items: center; gap: 14px; text-align: left;
   padding: 12px 14px; border-radius: var(--radius-lg);
   background: var(--glass-bg); border: 1px solid var(--glass-border);
-  box-shadow: var(--shadow-1); cursor: pointer; color: var(--md-sys-color-on-surface);
+  box-shadow: var(--elev-1); cursor: pointer; color: var(--md-sys-color-on-surface);
   font-family: inherit; transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
 }
-.theme-card:hover { background: var(--glass-bg-hover); border-color: var(--glass-border-strong); transform: translateY(-1px); box-shadow: var(--shadow-2); }
-.theme-card.active { border-color: var(--coral); box-shadow: 0 0 0 1px var(--coral) inset, var(--shadow-2); background: var(--glass-bg-strong); }
+.theme-card:hover { background: var(--glass-bg-hover); border-color: var(--glass-border-strong); transform: translateY(-1px); box-shadow: var(--elev-2); }
+.theme-card.active { border-color: var(--coral); box-shadow: 0 0 0 1px var(--coral) inset, var(--elev-2); background: var(--glass-bg-strong); }
 .theme-preview { flex: none; width: 52px; height: 38px; border-radius: 8px; overflow: hidden; border: 1px solid var(--glass-border-strong); display: flex; flex-direction: column; gap: 3px; padding: 5px; }
 .theme-preview .tp-bar { height: 6px; border-radius: 3px; opacity: .9; }
 .theme-preview .tp-card { flex: 1; border-radius: 3px; opacity: .8; }
@@ -1013,7 +1016,7 @@ html.icons-ready .material-icons { visibility: visible; }
 /* ---- Cartes de réglage (Compte / Personnalisation / Comptes) ---- */
 .setting-card {
   background: var(--glass-bg); border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-1);
+  border-radius: var(--radius-lg); box-shadow: var(--elev-1);
   padding: 16px 18px; margin-bottom: 14px; transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
 }
 .setting-card:last-child { margin-bottom: 0; }
@@ -1072,8 +1075,8 @@ html.icons-ready .material-icons { visibility: visible; }
 .chip-filter { font: inherit; font-size: var(--t-label-sm); padding: 6px 12px; border-radius: var(--radius-pill); border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--on-surface-soft); cursor: pointer; transition: all .15s ease; }
 .chip-filter:hover { border-color: var(--coral); }
 .chip-filter.active { background: var(--coral); color: #fff; border-color: var(--coral); }
-.audit-search { flex: 1; min-width: 200px; max-width: 360px; padding: 8px 12px; font: inherit; font-size: var(--t-body-sm); border-radius: var(--radius-pill); border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--on-surface); }
-.audit-search:focus { outline: none; border-color: var(--coral); box-shadow: 0 0 0 3px var(--coral-12); }
+.audit-search { flex: 1; min-width: 200px; max-width: 360px; padding: 8px 12px; font: inherit; font-size: var(--t-body-sm); border-radius: var(--radius-pill); border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--md-sys-color-on-surface); }
+.audit-search:focus { outline: none; border-color: var(--coral); box-shadow: 0 0 0 3px rgba(233,112,93,.12); }
 .btn-danger { background: var(--md-sys-color-error); color: var(--md-sys-color-on-error); border: none; }
 .btn-danger:hover { filter: brightness(0.95); }
 .btn-outline { background: transparent; border: 1px solid var(--md-sys-color-outline); color: var(--on-surface-soft); }
@@ -1204,24 +1207,29 @@ html.icons-ready .material-icons { visibility: visible; }
 .ev-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-3); }
 .ev-head .section-title { margin: 0; }
 .ev-legend { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-.ev-legend-item { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 1px solid var(--glass-border-strong); border-radius: 999px; padding: 4px 10px; font-size: 12px; font-family: var(--font-body); color: var(--md-sys-color-on-surface); cursor: pointer; transition: opacity .15s, background .15s; }
-.ev-legend-item:hover { background: var(--glass-border-soft); }
+.ev-legend-item { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 1px solid var(--glass-border-strong); border-radius: 999px; padding: 4px 10px; font-size: 12px; font-family: var(--font); color: var(--md-sys-color-on-surface); cursor: pointer; transition: opacity .15s, background .15s; }
+.ev-legend-item:hover { background: var(--glass-bg-hover); }
 .ev-legend-item.off { opacity: .35; text-decoration: line-through; }
 .ev-swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 .ev-plot { position: relative; width: 100%; }
 .ev-svg { width: 100%; height: 240px; display: block; overflow: visible; }
-.ev-grid { stroke: var(--glass-border-soft); stroke-width: 1; }
-.ev-axis-y { fill: var(--muted-2, #8a93a3); font-size: 10px; text-anchor: end; }
-.ev-axis-x { fill: var(--muted-2, #8a93a3); font-size: 10px; text-anchor: middle; }
+.ev-grid { stroke: var(--md-sys-color-outline); stroke-width: 1; }
+.ev-axis-y { fill: var(--md-sys-color-on-surface-variant); font-size: 10px; text-anchor: end; }
+.ev-axis-x { fill: var(--md-sys-color-on-surface-variant); font-size: 10px; text-anchor: middle; }
 .ev-line { fill: none; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; transition: opacity .2s; }
 .ev-area { opacity: .12; transition: opacity .2s; }
 .ev-dot { fill: var(--neu-base); stroke-width: 2; cursor: pointer; transition: opacity .2s; }
 .ev-dot:hover { r: 5; }
-.ev-tooltip { position: absolute; pointer-events: none; background: var(--ink); color: #fff; border: 1px solid var(--coral); border-radius: 8px; padding: 6px 10px; font-size: 12px; font-family: var(--font-body); line-height: 1.4; box-shadow: 0 6px 20px rgba(0,0,0,.35); z-index: 20; white-space: nowrap; }
+/* Infobulle du graphique : boîte sombre volontairement INVARIANTE par thème
+   (convention courante — une tooltip flottante reste lisible en se détachant
+   du fond, y compris en thème clair). BUG CORRIGÉ (audit thèmes) : var(--ink)
+   n'était défini nulle part -> fond transparent, texte blanc illisible dans
+   TOUS les thèmes (pas seulement clair). */
+.ev-tooltip { position: absolute; pointer-events: none; background: rgba(20,22,26,.96); color: #fff; border: 1px solid var(--coral); border-radius: 8px; padding: 6px 10px; font-size: 12px; font-family: var(--font); line-height: 1.4; box-shadow: 0 6px 20px rgba(0,0,0,.35); z-index: 20; white-space: nowrap; }
 /* Toggle de série : masque la série ciblée */
 .ev-svg.ev-hide-TOTAL .ev-TOTAL, .ev-svg.ev-hide-APPROUVE .ev-APPROUVE,
 .ev-svg.ev-hide-REJETE .ev-REJETE, .ev-svg.ev-hide-MODIFIE .ev-MODIFIE { opacity: 0; }
-.ev-chart.empty { color: var(--muted-2, #8a93a3); text-align: center; padding: var(--space-5); font-style: italic; }
+.ev-chart.empty { color: var(--md-sys-color-on-surface-variant); text-align: center; padding: var(--space-5); font-style: italic; }
 
 
 .system-section { background: var(--neu-base); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-border-strong); border-radius: var(--radius-lg); padding: var(--space-4); box-shadow: var(--glass-shadow); }
@@ -1508,7 +1516,7 @@ html.icons-ready .material-icons { visibility: visible; }
    Sur desktop/tablette : panneau détail inline à droite du rail (Supabase-like).
    Sur MOBILE (≤819px) : écran PLEIN (occupe l'espace) avec flèche « ← Retour »
    en en-tête ; la barre du bas (bottomnav) reste visible en dessous. */
-.settings-panel { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); animation: none; z-index: auto; }
+.settings-panel { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); box-shadow: var(--elev-1); animation: none; z-index: auto; }
 .settings-panel[hidden] { display: none; }
 /* Mobile : écran plein (s'arrête au-dessus de la bottomnav) */
 @media (max-width: 767px) {
@@ -1531,7 +1539,7 @@ html.icons-ready .material-icons { visibility: visible; }
 }
 /* Desktop/tablette : panneau détail inline (plus de recouvrement) */
 @media (min-width: 768px) {
-  .settings-panel { position: static; width: auto; height: auto; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); animation: none; z-index: auto; transform: none !important; }
+  .settings-panel { position: static; width: auto; height: auto; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); box-shadow: var(--elev-1); animation: none; z-index: auto; transform: none !important; }
   .drawer-back, #setDrawerScrim { display: none !important; }
 }
 .drawer-back {
@@ -1568,8 +1576,8 @@ html.icons-ready .material-icons { visibility: visible; }
 
 /* ---- Auth overlay ---- */
 #authOverlay[hidden] { display: none; }
-.auth-screen { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; background: var(--md-sys-color-background); padding: 24px; }
-.auth-card { width: 100%; max-width: 380px; background: var(--md-sys-color-surface-container-high); border: 1px solid var(--glass-border); border-radius: var(--radius-xl); padding: 28px 24px; box-shadow: var(--shadow-3); text-align: center; }
+.auth-screen { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; background: var(--md-sys-color-surface); padding: 24px; }
+.auth-card { width: 100%; max-width: 380px; background: var(--md-sys-color-surface-container-high); border: 1px solid var(--glass-border); border-radius: var(--radius-xl); padding: 28px 24px; box-shadow: var(--elev-3); text-align: center; }
 .auth-mark { width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 16px; background: linear-gradient(135deg, var(--coral), var(--bordeaux)); display: flex; align-items: center; justify-content: center; }
 .auth-mark .ic { width: 30px; height: 30px; color: #fff; }
 .auth-title { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
@@ -1581,8 +1589,11 @@ html.icons-ready .material-icons { visibility: visible; }
 .auth-wordmark-wrap { display: flex; justify-content: center; margin: 0 auto 22px; }
 .auth-wordmark { width: 80%; max-width: 280px; height: auto; object-fit: contain; }
 .auth-sub { font-size: 14px; color: var(--md-sys-color-on-surface-variant); margin: 0 auto 26px; max-width: 320px; line-height: 1.55; text-align: center; font-weight: 500; }
-.wm-kora { display: block; font-weight: 800; font-size: 2.7rem; letter-spacing: .5px; color: #111; }
-.wm-agent { display: block; font-weight: 300; font-size: 1.15rem; letter-spacing: .3px; color: #111; margin-left: 2px; }
+/* BUG CORRIGÉ (audit thèmes) : texte figé en noir sur une carte (.auth-card)
+   dont le fond, lui, suit le thème -> logo quasi invisible en thème sombre/
+   cacao (texte noir sur carte sombre). */
+.wm-kora { display: block; font-weight: 800; font-size: 2.7rem; letter-spacing: .5px; color: var(--md-sys-color-on-surface); }
+.wm-agent { display: block; font-weight: 300; font-size: 1.15rem; letter-spacing: .3px; color: var(--md-sys-color-on-surface); margin-left: 2px; }
 .wm-a { font-weight: 400; }
 
 /* ============================================================
@@ -1660,31 +1671,36 @@ html.icons-ready .material-icons { visibility: visible; }
   font-family: var(--mono, var(--font)); font-weight: 600; color: #2A1206; font-size: 16px; }
 .rail-word { display: flex; flex-direction: column; line-height: 1.1; }
 .rail-word b { font-family: var(--mono, var(--font)); font-weight: 600; font-size: 15px; letter-spacing: .4px; }
-.rail-word-sub { font-size: 9.5px; color: var(--muted); letter-spacing: .14em; text-transform: uppercase; margin-top: 2px; }
+.rail-word-sub { font-size: 9.5px; color: var(--md-sys-color-on-surface-variant); letter-spacing: .14em; text-transform: uppercase; margin-top: 2px; }
 .rail-toggle { margin-left: auto; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center;
-  color: var(--muted); transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
-.rail-toggle:hover { background: var(--surface-2, #23272F); color: var(--on); }
+  color: var(--md-sys-color-on-surface-variant); transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+.rail-toggle:hover { background: var(--glass-bg-hover); color: var(--md-sys-color-on-surface); }
 .rail-toggle .ic { width: 18px; height: 18px; }
 
 .rail-group { font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase;
-  color: var(--muted); padding: 16px 10px 6px; }
+  color: var(--md-sys-color-on-surface-variant); padding: 16px 10px 6px; }
 .rail-group:first-of-type { padding-top: 4px; }
 
-/* Item calme + indicateur vertical corail sur actif (pas de bloc plein) */
+/* Item calme + indicateur vertical corail sur actif (pas de bloc plein).
+   BUG CORRIGÉ (audit thèmes) : --on/--on-soft/--surface-2/--surface-3/
+   --coral-soft n'étaient définis NULLE PART dans le fichier -> fond au
+   survol et fond "actif" figés sur leur repli codé en dur (ou carrément
+   transparents pour .item.active, dans TOUS les thèmes) au lieu de suivre
+   dark/light/cacao. Remplacés par les vrais tokens M3 déjà variés par thème. */
 .item { position: relative; display: flex; align-items: center; gap: 13px; padding: 10px 11px; border-radius: 10px;
-  color: var(--on-soft); min-height: 44px; width: 100%; text-align: left; background: transparent;
+  color: var(--on-surface-soft); min-height: 44px; width: 100%; text-align: left; background: transparent;
   transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
-.item:hover { background: var(--surface-2, #23272F); color: var(--on); }
+.item:hover { background: var(--glass-bg-hover); color: var(--md-sys-color-on-surface); }
 .item .ico { width: 22px; height: 22px; flex: 0 0 auto; display: grid; place-items: center; color: inherit; }
 .item .ico .ic { width: 21px; height: 21px; }
 .item .lbl { flex: 1; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.item .ct { font-family: var(--mono, monospace); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums;
-  background: var(--surface-3, #262B34); padding: 1px 7px; border-radius: 999px; min-width: 22px; text-align: center; }
-.item.active { background: var(--coral-soft); color: var(--coral); }
-.item.active .ico { color: var(--coral); }
-.item.active .ct { background: rgba(255,107,74,.2); color: var(--coral); }
+.item .ct { font-family: var(--mono, monospace); font-size: 11px; color: var(--md-sys-color-on-surface-variant); font-variant-numeric: tabular-nums;
+  background: var(--md-sys-color-surface-container-high); padding: 1px 7px; border-radius: 999px; min-width: 22px; text-align: center; }
+.item.active { background: var(--md-sys-color-primary-container); color: var(--icon-color-active); }
+.item.active .ico { color: var(--icon-color-active); }
+.item.active .ct { background: var(--md-sys-color-primary-container); color: var(--icon-color-active); }
 .item.active::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px;
-  background: var(--coral); box-shadow: 0 0 8px rgba(255,107,74,.55); }
+  background: var(--coral); box-shadow: 0 0 8px rgba(233,112,93,.55); }
 
 .rail-spacer { flex: 1; min-height: 8px; }
 
@@ -1692,24 +1708,28 @@ html.icons-ready .material-icons { visibility: visible; }
    <button> (rendu cliquable — il n'affichait avant qu'une apparence de CTA
    sans handler, constaté en revue) : reset des styles UA de bouton
    (couleur/police héritées par défaut, curseur explicite). */
+/* Fond en teinte corail douce (BUG CORRIGÉ, audit thèmes : le dégradé était
+   codé en rgba() fixes — deux nuances de rouge/corail qui n'existent dans
+   AUCUN thème, en plus d'être figées quel que soit le thème actif). Le
+   token M3 primary-container est déjà pensé pour ce rôle et varie par thème. */
 .decision-foot { margin-top: 10px; padding: 12px 14px; border-radius: 12px; display: flex; align-items: center; gap: 11px;
-  background: linear-gradient(135deg, rgba(255,107,74,.18), rgba(194,84,47,.10)); border: 1px solid rgba(255,107,74,.25);
+  background: var(--md-sys-color-primary-container); border: 1px solid rgba(233,112,93,.28);
   width: 100%; font: inherit; color: inherit; cursor: pointer; text-align: left;
   transition: border-color var(--dur-fast) var(--ease); }
-.decision-foot:hover { border-color: rgba(255,107,74,.45); }
+.decision-foot:hover { border-color: rgba(233,112,93,.5); }
 .decision-foot:focus-visible { outline: 2px solid var(--coral); outline-offset: 2px; }
-.decision-pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--signal, var(--coral));
-  box-shadow: 0 0 0 0 rgba(230,192,121,.5); animation: koraPulseRail 2.4s ease-in-out infinite; flex: 0 0 auto; }
-@keyframes koraPulseRail { 0%,100% { box-shadow: 0 0 0 0 rgba(230,192,121,.5); } 50% { box-shadow: 0 0 0 7px rgba(230,192,121,0); } }
+.decision-pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--coral);
+  box-shadow: 0 0 0 0 rgba(233,112,93,.5); animation: koraPulseRail 2.4s ease-in-out infinite; flex: 0 0 auto; }
+@keyframes koraPulseRail { 0%,100% { box-shadow: 0 0 0 0 rgba(233,112,93,.5); } 50% { box-shadow: 0 0 0 7px rgba(233,112,93,0); } }
 .decision-meta { display: flex; flex-direction: column; line-height: 1.15; }
-.decision-n { font-family: var(--mono, monospace); font-size: 19px; font-weight: 500; color: var(--signal, var(--coral)); font-variant-numeric: tabular-nums; }
-.decision-l { font-size: 11.5px; color: var(--on-soft); margin-top: 2px; }
+.decision-n { font-family: var(--mono, monospace); font-size: 19px; font-weight: 500; color: var(--icon-color-active); font-variant-numeric: tabular-nums; }
+.decision-l { font-size: 11.5px; color: var(--on-surface-soft); margin-top: 2px; }
 
 /* LARGEUR DU RAIL — seule source de vérité (voir bloc @media 768px plus haut,
    dont les marges .view sont calculées sur ces mêmes valeurs 76px/260px).
    data-rail est toujours explicite dès 768px (store.js applyRailMode), donc
    ces deux règles couvrent tablette ET desktop sans duplication. */
-.rail { transition: width var(--dur-med, 250ms) cubic-bezier(.2,0,0,1); background: #12151A; }
+.rail { transition: width var(--dur-med, 250ms) cubic-bezier(.2,0,0,1); background: var(--md-sys-color-surface); }
 :root[data-rail="expanded"] .rail { width: 260px; }
 :root[data-rail="collapsed"] .rail { width: 76px; }
 :root[data-rail="collapsed"] .rail-head { justify-content: center; padding: 4px 0 14px; }
@@ -1727,7 +1747,7 @@ html.icons-ready .material-icons { visibility: visible; }
 /* Bottom-nav : Brouillons/Corbeille visibles + active coral (cohérence rail) */
 .bottomnav .navitem { position: relative; }
 .bottomnav .nav-badge { position: absolute; top: 2px; right: 50%; margin-right: -22px; min-width: 16px; height: 16px;
-  padding: 0 4px; border-radius: 999px; background: var(--signal, var(--coral)); color: #2A1206;
+  padding: 0 4px; border-radius: 999px; background: var(--coral); color: #2A1206;
   font-family: var(--mono, monospace); font-size: 10px; font-weight: 600; display: none; align-items: center; justify-content: center; }
 .bottomnav .nav-badge.show { display: flex; }
 
@@ -1774,21 +1794,31 @@ html.icons-ready .material-icons { visibility: visible; }
 /* ============================================================
    KORA redesign spec tokens (2026-08-15) — design system imposé
    Redéfinit les couleurs de base pour matcher la charte dashboard.
-   ============================================================ */
+
+   BUG CORRIGÉ (audit thèmes, 2026-08-16) : ce bloc était un `:root {}`
+   NU, sans variante [data-theme="light"]/[data-theme="cacao"] — c'était
+   la seule définition de --bg/--surface/--surface-raised/--text-primary/
+   --text-secondary/--accent/--border dans TOUT le fichier, donc figée en
+   sombre quel que soit le thème actif. Consommé par ~15 composants
+   (cartes KPI du cockpit, centre de notifications, barre d'outils de
+   l'éditeur enrichi, bulle de rejet, tour guidé, bandeau "perdu ?",
+   bulles d'aide, page 403, squelettes de chargement, anneau de focus) —
+   tous restaient sombres en thème clair/cacao. Plutôt que réécrire
+   chaque composant, on ALIASE ces tokens vers les VRAIS tokens déjà
+   correctement variés par thème (bloc M3 ci-dessus + par-thème plus
+   bas) : une seule source de vérité, correction propagée partout d'un
+   coup, zéro nouvelle valeur hex à deviner par thème. */
 :root {
-  --bg: #0E1114;
-  --surface: #171C21;
-  --surface-raised: #1D242B;
-  --border: rgba(255, 255, 255, .08);
-  --text-primary: #F4F6F8;
-  --text-secondary: #9AA5B1;
-  --accent: #E9705D;          /* marque : états interactifs + actifs UNIQUEMENT */
-  --success: #3DD68C;         /* vert = succès / prêt */
-  --warning: #F5A83C;         /* orange = avertissement */
-  --danger: #E5484D;          /* rouge = destructif */
-  --coral: #E9705D;           /* alias accent (rétro-compat) */
-  --on-surface: var(--text-primary);
-  --on-surface-soft: var(--text-secondary);
+  --bg: var(--md-sys-color-surface);
+  --surface: var(--md-sys-color-surface);
+  --surface-raised: var(--md-sys-color-surface-container-high);
+  --border: var(--md-sys-color-outline);
+  --text-primary: var(--md-sys-color-on-surface);
+  --text-secondary: var(--md-sys-color-on-surface-variant);
+  --accent: var(--md-sys-color-primary);  /* déjà assombri en light pour le contraste AA (cf. bloc [data-theme="light"]) */
+  --success: #3DD68C;         /* vert = succès / prêt — constante volontairement inchangée par thème (statut sémantique) */
+  --warning: #F5A83C;         /* orange = avertissement — idem */
+  --danger: #E5484D;          /* rouge = destructif — idem */
 }
 
 /* Focus visible global (WCAG 2.2 AA) : anneau 2px accent, offset 2px */
