@@ -2425,10 +2425,22 @@ function bind() {
     if (sc) sc.hidden = true;
   };
   const rt = document.getElementById("railToggle");
+  // Libellé/aria-label reflètent l'état RÉEL (avant : toujours "Réduire la
+  // barre", même une fois repliée — un lecteur d'écran annonçait l'action
+  // inverse de celle réellement disponible). Recalculé à chaque bind() ET
+  // après chaque clic, donc toujours synchronisé avec l'état affiché.
+  const syncRailToggleLabel = () => {
+    if (!rt) return;
+    const label = Store.getRail() === "expanded" ? "Réduire la barre" : "Agrandir la barre";
+    rt.title = label;
+    rt.setAttribute("aria-label", label);
+  };
+  syncRailToggleLabel();
   if (rt) rt.onclick = () => {
     // Sur mobile, la flèche ferme le drawer ; sur desktop elle réduit/agrandit le rail.
     if (window.matchMedia("(max-width: 819px)").matches) { closeRailDrawer(); return; }
     Store.setRail(Store.getRail() === "expanded" ? "collapsed" : "expanded");
+    syncRailToggleLabel();
   };
   // Clic sur le scrim = ferme le drawer mobile (corrige l'impossibilité de refermer)
   const rsc = document.getElementById("railScrim");

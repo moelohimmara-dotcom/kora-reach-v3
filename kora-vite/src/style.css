@@ -196,6 +196,14 @@
   /* Hauteur standard boutons — cible tactile Android 48dp (iOS 44pt) */
   --btn-h: 48px;
 
+  /* Hauteur du topbar : --btn-h (48px, le CTA "Lancer un cycle") + 2×--space-3
+     (12px) de padding = 72px. Source UNIQUE pour .topbar, .rail (top offset)
+     et .view (padding-top) — avant, le rail utilisait 64px et .view 84px,
+     deux suppositions indépendantes et fausses toutes les deux (la vraie
+     hauteur mesurée est 72.67px) : le rail chevauchait le bas du topbar de
+     ~9px (critique design 2026-08-16). */
+  --topbar-h: 72px;
+
   /* ---- MOTION SCHEME & SPRING TOKENS M3 (Expressive scheme) ---- */
   --md-sys-motion-scheme: "expressive";
 
@@ -451,6 +459,7 @@ html.icons-ready .material-icons { visibility: visible; }
 #app { min-height: 100dvh; display: flex; flex-direction: column; }
 .topbar {
   position: sticky; top: 0; z-index: var(--z-topbar); display: flex; align-items: center; justify-content: space-between;
+  min-height: var(--topbar-h); box-sizing: border-box;
   padding: var(--space-3) var(--space-4); padding-top: calc(var(--space-3) + env(safe-area-inset-top));
   background: var(--glass-bg); backdrop-filter: var(--glass-blur); border-bottom: 1px solid var(--glass-border);
 }
@@ -474,26 +483,13 @@ html.icons-ready .material-icons { visibility: visible; }
 }
 .icon-btn:hover { box-shadow: var(--neu-pressed); color: var(--coral-text); transform: scale(0.97); }
 .ic { width: 20px; height: 20px; }
-/* Flèche de fermeture du drawer : cue seule, affinée (pas de bouton circular) */
-.rail-toggle {
-  align-self: flex-start;
-  margin: 10px 0 10px 12px;
-  display: inline-grid; place-items: center;
-  width: 44px !important; height: 44px !important;
-  padding: 0; border: 1px solid var(--glass-border) !important;
-  background: var(--md-sys-color-surface-container-high, var(--glass-bg-strong)) !important;
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  color: var(--coral); opacity: .85;
-  box-shadow: var(--neu-raised);
-  transition: color var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
-}
-.rail-toggle:hover { color: var(--coral-text); opacity: 1; box-shadow: var(--neu-raised), var(--glass-glow); }
-.rail-toggle:active { transform: scale(0.94); }
-.rail-toggle:focus-visible { outline: 2px solid var(--coral); outline-offset: 2px; }
-.rail-toggle .ic { width: 22px; height: 22px; }
-[data-rail="collapsed"] #railToggle .ic { transform: rotate(180deg); }
-#railToggle .ic { transition: transform var(--dur-med) var(--ease); }
+/* .rail-toggle : définition unique, consolidée en un seul endroit (voir bloc
+   "RÉFONTE RAIL v2" plus bas) — VOIR critique design du 2026-08-16 : deux
+   blocs de règles concurrents (celui-ci + un second dans la refonte v2)
+   s'appliquaient simultanément, dont un avec width/height en !important qui
+   ne l'emportait QUE partiellement selon la propriété -> le bouton rendait
+   à 19px de large au lieu de 44px (flex-shrink par défaut, aucun des deux
+   blocs ne posait flex-shrink:0). */
 .rail-scrim { position: fixed; inset: 0; background: var(--md-sys-color-scrim); z-index: 20; backdrop-filter: blur(3px); }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; box-shadow: 0 0 10px currentColor; }
 .dot-ok { background: var(--sauge); color: var(--sauge); }
@@ -1308,7 +1304,7 @@ html.icons-ready .material-icons { visibility: visible; }
 @media (min-width: 768px) {
   #app { flex-direction: row; }
   .topbar { position: fixed; top: 0; left: 0; right: 0; }
-  .view { padding-top: 84px; padding-right: var(--space-6); transition: padding-left var(--dur-med) var(--ease); }
+  .view { padding-top: var(--topbar-h); padding-right: var(--space-6); transition: padding-left var(--dur-med) var(--ease); }
   /* Largeur du rail ET marge du contenu : source unique = data-rail, qui est
      TOUJOURS explicite ("collapsed"/"expanded") dès 768px, y compris pour le
      mode "auto" — voir store.js applyRailMode(). Les deux valeurs (76px/260px)
@@ -1321,20 +1317,11 @@ html.icons-ready .material-icons { visibility: visible; }
   /* Tablette : on GARDE la bottomnav (navigation au pouce) */
   .fab { bottom: 30px; right: 30px; }
   .fab-menu { bottom: 104px; right: 30px; }
-  .rail { position: fixed; left: 0; top: 64px; bottom: 0; z-index: 21; padding: var(--space-3) var(--space-2) var(--space-4); gap: 2px; display: flex; flex-direction: column; background: var(--md-sys-color-surface); border-right: 1px solid var(--glass-border-strong); box-shadow: var(--shadow-rail); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
-  /* Marque du topbar (.topbar-left > .brand) masquée dès que le rail persistant
-     apparaît : le rail affiche déjà sa propre marque (.rail-head, K + KORA +
-     "Veille Guinée") en tête de la navigation. Sans ce masquage, l'identité
-     KORA s'affichait DEUX FOIS à l'écran (topbar ET rail) — oubli d'une
-     refonte antérieure du rail qui n'avait jamais retiré l'ancienne ancre de
-     marque pensée pour le mobile (seul contexte où le rail n'existe pas et
-     où .brand reste la seule identité visible). Repéré via l'inspecteur. */
-  .topbar-left { display: none; }
-  /* .topbar utilise justify-content:space-between (2 enfants) : masquer
-     .topbar-left laisse .topbar-right seul dans le flex, qui se recale alors
-     à GAUCHE (plus de second élément avec qui se répartir l'espace) — margin
-     auto le renvoie explicitement à droite, indépendamment du nombre d'enfants. */
-  .topbar-right { margin-left: auto; }
+  /* top: var(--topbar-h), pas une valeur devinée séparément (avant : 64px,
+     alors que le topbar mesure réellement 72.67px -> le rail chevauchait le
+     bas du topbar de ~9px, la source du "mal aligné" signalé — critique
+     design 2026-08-16). */
+  .rail { position: fixed; left: 0; top: var(--topbar-h); bottom: 0; z-index: 21; padding: var(--space-3) var(--space-2) var(--space-4); gap: 2px; display: flex; flex-direction: column; background: var(--md-sys-color-surface); border-right: 1px solid var(--glass-border-strong); box-shadow: var(--shadow-rail); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
   .stat-row { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .fact-grid { grid-template-columns: repeat(2, 1fr); }
 }
@@ -1678,17 +1665,32 @@ html.icons-ready .material-icons { visibility: visible; }
    KORA — RÉFONTE RAIL v2 (indicateur vertical corail, items calmes)
    CSS en fin de fichier pour primer sur .rail/.navitem existants
    ============================================================ */
-.rail-head { display: flex; align-items: center; gap: 10px; padding: 4px 6px 14px; }
-.rail-mark { width: 30px; height: 30px; border-radius: 9px; flex: 0 0 auto;
-  background: linear-gradient(135deg, var(--coral), var(--bordeaux)); display: grid; place-items: center;
-  font-family: var(--mono, var(--font)); font-weight: 600; color: #2A1206; font-size: 16px; }
-.rail-word { display: flex; flex-direction: column; line-height: 1.1; }
-.rail-word b { font-family: var(--mono, var(--font)); font-weight: 600; font-size: 15px; letter-spacing: .4px; }
-.rail-word-sub { font-size: 9.5px; color: var(--md-sys-color-on-surface-variant); letter-spacing: .14em; text-transform: uppercase; margin-top: 2px; }
-.rail-toggle { margin-left: auto; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center;
-  color: var(--md-sys-color-on-surface-variant); transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
-.rail-toggle:hover { background: var(--glass-bg-hover); color: var(--md-sys-color-on-surface); }
-.rail-toggle .ic { width: 18px; height: 18px; }
+/* Rail-head simplifié (critique design 2026-08-16) : ne contient plus que le
+   bouton replier/déplier. La marque KORA (badge + "Veille Guinée") vivait ici
+   EN DOUBLE avec le topbar — retirée, le topbar est désormais la seule ancre
+   de marque, à tous les breakpoints. Aligné à droite (le bouton "pousse"
+   visuellement le rail vers la gauche, cohérent avec la flèche qui pointe
+   vers la gauche par défaut). */
+.rail-head { display: flex; align-items: center; justify-content: flex-end; padding: 2px 2px 14px; }
+
+/* Bouton replier/déplier : définition UNIQUE (voir note plus haut sur les
+   deux blocs concurrents qui l'écrasaient à 19px de large). flex-shrink:0
+   est la garantie structurelle que ça ne se reproduise pas, quel que soit
+   ce qui partage sa ligne à l'avenir. */
+.rail-toggle {
+  flex: 0 0 auto; width: 36px; height: 36px; border-radius: var(--radius-md);
+  display: grid; place-items: center; border: 1px solid var(--glass-border-strong);
+  background: var(--glass-bg); color: var(--md-sys-color-on-surface-variant);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.rail-toggle:hover { background: var(--glass-bg-hover); color: var(--md-sys-color-on-surface); border-color: var(--coral); }
+.rail-toggle:active { transform: scale(0.94); }
+.rail-toggle:focus-visible { outline: 2px solid var(--coral); outline-offset: 2px; }
+.rail-toggle .ic { width: 17px; height: 17px; transition: transform var(--dur-med) var(--ease); }
+/* Icône chevron-gauche par défaut (pointe vers le bord qu'on replie) ;
+   pivote à 180° une fois replié (pointe alors vers la droite = "déplier"). */
+:root[data-rail="collapsed"] .rail-toggle .ic { transform: rotate(180deg); }
 
 .rail-group { font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase;
   color: var(--md-sys-color-on-surface-variant); padding: 16px 10px 6px; }
@@ -1745,10 +1747,7 @@ html.icons-ready .material-icons { visibility: visible; }
 .rail { transition: width var(--dur-med, 250ms) cubic-bezier(.2,0,0,1); background: var(--md-sys-color-surface); }
 :root[data-rail="expanded"] .rail { width: 260px; }
 :root[data-rail="collapsed"] .rail { width: 76px; }
-:root[data-rail="collapsed"] .rail-head { justify-content: center; padding: 4px 0 14px; }
-:root[data-rail="collapsed"] .rail-mark { margin: 0; }
-:root[data-rail="collapsed"] .rail-toggle { margin: 0; }
-:root[data-rail="collapsed"] .rail-word, :root[data-rail="collapsed"] .rail-word-sub,
+:root[data-rail="collapsed"] .rail-head { justify-content: center; padding: 2px 0 14px; }
 :root[data-rail="collapsed"] .rail-group, :root[data-rail="collapsed"] .lbl, :root[data-rail="collapsed"] .ct,
 :root[data-rail="collapsed"] .decision-l { display: none; }
 :root[data-rail="collapsed"] .item { justify-content: center; padding: 10px 0; }
