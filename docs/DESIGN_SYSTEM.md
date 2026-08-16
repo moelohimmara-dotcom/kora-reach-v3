@@ -7,9 +7,22 @@ Inspirations mobiles : **Mobbin** (patterns iOS/Android).
 > Le front est **Vite + vanilla JS/CSS** (`kora-vite/src/`). Pas de React/Tailwind. Les composants
 > ci-dessous sont des **conventions HTML/CSS réutilisables**, pas des imports de lib.
 
+> **📐 Source de vérité unique.** Ce fichier est la SEULE référence du design system KORA.
+> Le `README.md` pointe vers lui sans dupliquer la charte. La page vivante **`/style-guide`**
+> (rôle `advanced`) en est le reflet exécutable : elle rend les vrais composants du code.
+>
+> **Règle de gouvernance (anti-dérive)** : *toute modification visuelle passe par `/style-guide`
+> avant merge. Un changement qui n'y apparaît pas correctement rendu n'est pas mergé.* C'est la
+> clause qui, si elle avait existé, aurait évité l'essentiel des 25 commits d'allers-retours
+> visuels (voir la spec B.1, `docs/specs/2026-08-16-design-system-kora-design.md`).
+
 ---
 
 ## 1. Tokens (couleurs — CSS variables, jamais de valeur brute)
+
+Deux natures de tokens à distinguer.
+
+### 1a. Structure — figés (canon)
 
 | Token | Valeur | Usage |
 |---|---|---|
@@ -19,17 +32,37 @@ Inspirations mobiles : **Mobbin** (patterns iOS/Android).
 | `--border` | `rgba(255,255,255,.08)` | Bordures/discrètes |
 | `--text-primary` | `#F4F6F8` | Texte |
 | `--text-secondary` | `#9AA5B1` | Labels, texte secondaire |
-| `--accent` / `--coral` | `#E9705D` | Actions, accent (jamais glow néon) |
 | `--success` | `#3DD68C` | État « prêt », validé |
 | `--warning` | `#F5A83C` | Attention |
 | `--danger` | `#E5484D` | Rejet, suppression |
 
+### 1b. Accent — configurable (branding white-label)
+
+| Token | Défaut | Nature |
+|---|---|---|
+| `--coral` | `#E9705D` | **Accent primaire.** Piloté par `settings.accent_coral` (`/api/settings`), injecté au runtime par `store.js` → `applySettings()`. C'est la fonctionnalité white-label (Paramètres → Personnalisation). |
+| `--bordeaux`, `--coral-strong` | dérivés | Variantes de `--coral` (dégradé bouton primaire, hover). |
+| `--accent` | `#E9705D` | **Legacy** (3 usages) — aligné sur le défaut de `--coral`, en cours de réconciliation. Préférer `--coral`. |
+
+Le défaut de charte KORA est **`#E9705D`** (validé 2026-08-16), unifié dans `settings.py`,
+`style.css` et les fallbacks de `app.js` → pas de flash avant chargement de `/api/settings`.
+Un déploiement ayant stocké son propre `accent_coral` en base garde le sien (white-label intact).
+
 **Règle** : tout est en token sémantique (shadcn principe #4). Pas de `bg-blue-500` ni hex en dur.
+
+> **⚠️ Couche Material Design 3 dépréciée.** `style.css` porte une couche parallèle de tokens
+> `--md-sys-color-*` (héritage), dont ~24 sont **morts** (variantes `-fixed`, `-fixed-dim`,
+> `inverse-*` non consommées). Elle est **en cours de retrait** : ne pas l'étendre, ne pas y
+> brancher de nouveau composant. Les composants KORA consomment la couche sémantique ci-dessus.
 
 ## 2. Typographie
 
-- Police : **Inter / system-ui** (choix validé KORA — frontend-design le déconseille, mais les
-  choix KORA priment : sobre + lisible).
+- Polices (vérifiées par métrique de rendu dans le navigateur, 2026-08-16) :
+  - **Titres / display** (`--font-display` : `.fact-title`, `.group-title`, `.sheet-title`, chiffres KPI) : **Oswald** (condensée), via `@fontsource/oswald`.
+  - **Corps** (`--font`) : **Source Sans 3**, via `@fontsource/source-sans-3`.
+  - *Correctif 2026-08-16* : `--font` référençait `"Source Sans Pro"` (ancien nom) alors que le package expose la famille **`"Source Sans 3"`** → le corps retombait silencieusement sur la police système. Le nom a été aligné sur `"Source Sans 3"`.
+  - *(Ni Inter, ni « Source Sans Pro » : ces noms ne matchent aucune police chargée. `Montserrat` ne sert qu'au splash de démarrage.)*
+- Sobre + lisible ; choix KORA validé.
 - KPI number : **28–32px / 700** (tabular-nums). Label : **13px / 500** `--text-secondary`.
 - Titre section : **18–20px / 700** `--text-primary`.
 - Base body : 16px, line-height 1.5. Pas de texte < 12px.
@@ -85,7 +118,7 @@ Inspirations mobiles : **Mobbin** (patterns iOS/Android).
 couleur dominante + accent tranché (déjà le cas).
 
 **Rejeter** (choix KORA validés priment) :
-- ❌ Changer la police (Inter/system-ui est validé).
+- ❌ Changer la police (**Source Sans Pro** est validée — cf. §2).
 - ❌ Maximalisme / asymétrie / textures (user veut sobre, a rejecté glassmorphism « catastrophique »).
 
 ## 8. Références
