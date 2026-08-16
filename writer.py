@@ -116,6 +116,23 @@ SYSTEM_PROMPT = (
 )
 
 
+def get_system_prompt() -> str:
+    """Prompt système effectif (§9.5) : override DB si défini (advanced, zone
+    sensible avec piste d'audit — voir agent_prompts.py), sinon SYSTEM_PROMPT
+    codé en dur ci-dessus. Un add-on optionnel est ajouté à la suite, sans
+    jamais toucher au marqueur '2. LONGUEUR' dont dépend le split() plus bas."""
+    try:
+        import agent_prompts
+        ov = agent_prompts.get_overrides()
+    except Exception:
+        ov = {"system": "", "addon": ""}
+    base = ov.get("system") or SYSTEM_PROMPT
+    addon = ov.get("addon") or ""
+    if addon:
+        base = base + "\n\nINSTRUCTIONS COMPLÉMENTAIRES (add-on) :\n" + addon
+    return base
+
+
 def compute_length_target(fact: Dict) -> Dict:
     """Calcule la longueur cible (mots) selon pertinence + facteurs.
     Retourne {target, score, reasons[]}. Plage 879-1400 mots.
@@ -230,7 +247,7 @@ def _build_messages(fact: Dict) -> List[Dict]:
             f"information absente des textes) : {angle}"
         )
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": get_system_prompt()},
         {"role": "user", "content": user},
     ]
 
@@ -338,7 +355,7 @@ def _gen_sections(fact: Dict, lt: Dict) -> str:
            f"{clean_source(c.get('raw_content', ''))[:1200]}" for i, c in enumerate(ctx[:3], 1)]
     )
 
-    sys_base = SYSTEM_PROMPT.split("2. LONGUEUR")[0]  # garde rôle + structure + anti-hallu
+    sys_base = get_system_prompt().split("2. LONGUEUR")[0]  # garde rôle + structure + anti-hallu
 
     # 1. Chapô (ouverture, paragraphe nu, 2-3 phrases les 5W)
     lede_msg = [
@@ -389,7 +406,7 @@ def _ensure_min_length(raw: str, fact: Dict, lt: Dict, min_words: int = 879, max
         return raw
     champ = fact.get("champion", {}) or {}
     target = lt.get("target", min_words)
-    sys_base = SYSTEM_PROMPT.split("2. LONGUEUR")[0]
+    sys_base = get_system_prompt().split("2. LONGUEUR")[0]
     for attempt in range(max_attempts):
         need = max(target, min_words) - n
         msg = [
