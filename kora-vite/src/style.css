@@ -1321,7 +1321,7 @@ html.icons-ready .material-icons { visibility: visible; }
      alors que le topbar mesure réellement 72.67px -> le rail chevauchait le
      bas du topbar de ~9px, la source du "mal aligné" signalé — critique
      design 2026-08-16). */
-  .rail { position: fixed; left: 0; top: var(--topbar-h); bottom: 0; z-index: 21; padding: var(--space-3) var(--space-2) var(--space-4); gap: 2px; display: flex; flex-direction: column; background: var(--md-sys-color-surface); border-right: 1px solid var(--glass-border-strong); box-shadow: var(--shadow-rail); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+  .rail { position: fixed; left: 0; top: var(--topbar-h); bottom: 0; z-index: 21; padding: 8px var(--space-2) var(--space-4); gap: 2px; display: flex; flex-direction: column; background: var(--md-sys-color-surface); border-right: 1px solid var(--glass-border-strong); box-shadow: var(--shadow-rail); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
   .stat-row { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .fact-grid { grid-template-columns: repeat(2, 1fr); }
 }
@@ -1671,14 +1671,21 @@ html.icons-ready .material-icons { visibility: visible; }
    de marque, à tous les breakpoints. Aligné à droite (le bouton "pousse"
    visuellement le rail vers la gauche, cohérent avec la flèche qui pointe
    vers la gauche par défaut). */
-.rail-head { display: flex; align-items: center; justify-content: flex-end; padding: 2px 2px 14px; }
+/* Rythme vertical resserré (retour utilisateur : "gap disproportionné
+   au-dessus des items", ~105px mesurés entre le haut du rail et "Tableau
+   de bord" — trois paddings indépendants (.rail, .rail-head, .rail-group)
+   s'empilaient, chacun pensé isolément). Inspiré du sidebar Gemini : le
+   header reste compact, le premier item suit de près, sans empiler
+   plusieurs couches de respiration. */
+.rail-head { display: flex; align-items: center; justify-content: flex-end; padding: 0 2px 8px; }
 
 /* Bouton replier/déplier : définition UNIQUE (voir note plus haut sur les
    deux blocs concurrents qui l'écrasaient à 19px de large). flex-shrink:0
    est la garantie structurelle que ça ne se reproduise pas, quel que soit
-   ce qui partage sa ligne à l'avenir. */
+   ce qui partage sa ligne à l'avenir. Forme pilule/cercle, cohérente avec
+   les items ci-dessous (langage d'interaction unique dans tout le rail). */
 .rail-toggle {
-  flex: 0 0 auto; width: 36px; height: 36px; border-radius: var(--radius-md);
+  flex: 0 0 auto; width: 36px; height: 36px; border-radius: var(--radius-pill);
   display: grid; place-items: center; border: 1px solid var(--glass-border-strong);
   background: var(--glass-bg); color: var(--md-sys-color-on-surface-variant);
   cursor: pointer;
@@ -1693,29 +1700,41 @@ html.icons-ready .material-icons { visibility: visible; }
 :root[data-rail="collapsed"] .rail-toggle .ic { transform: rotate(180deg); }
 
 .rail-group { font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase;
-  color: var(--md-sys-color-on-surface-variant); padding: 16px 10px 6px; }
-.rail-group:first-of-type { padding-top: 4px; }
+  color: var(--md-sys-color-on-surface-variant); padding: 12px 14px 6px; }
+/* BUG CORRIGÉ (préexistant, trouvé en resserrant le rythme vertical) :
+   :first-of-type ne matchait JAMAIS ici — .rail-head est aussi une <div>,
+   donc c'est ELLE le premier "div" parmi les enfants du rail, jamais un
+   .rail-group (qui n'est alors jamais en 1ère position "de son type"). Le
+   padding-top réduit voulu pour le tout premier groupe n'avait donc aucun
+   effet. Sélecteur de sibling adjacent à la place : cible précisément le
+   groupe qui suit .rail-head, peu importe sa position parmi les <div>. */
+.rail-head + .rail-group { padding-top: 0; }
 
-/* Item calme + indicateur vertical corail sur actif (pas de bloc plein).
+/* Item — forme pilule (border-radius plein) et retour d'interaction complet
+   (survol / pressé / focus clavier), sur le modèle du sidebar Gemini : lignes
+   compactes, coins entièrement arrondis, feedback net à chaque état. La
+   marque KORA reste corail (pas de clonage 1:1 de Gemini) : fond teinté +
+   icône/texte corail sur l'item actif, sans la barre latérale précédente
+   (moins cohérente avec une forme pilule pleine largeur).
    BUG CORRIGÉ (audit thèmes) : --on/--on-soft/--surface-2/--surface-3/
    --coral-soft n'étaient définis NULLE PART dans le fichier -> fond au
    survol et fond "actif" figés sur leur repli codé en dur (ou carrément
    transparents pour .item.active, dans TOUS les thèmes) au lieu de suivre
    dark/light/cacao. Remplacés par les vrais tokens M3 déjà variés par thème. */
-.item { position: relative; display: flex; align-items: center; gap: 13px; padding: 10px 11px; border-radius: 10px;
+.item { position: relative; display: flex; align-items: center; gap: 13px; padding: 10px 14px; border-radius: var(--radius-pill);
   color: var(--on-surface-soft); min-height: 44px; width: 100%; text-align: left; background: transparent;
-  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease); }
 .item:hover { background: var(--glass-bg-hover); color: var(--md-sys-color-on-surface); }
+.item:active { transform: scale(0.98); }
+.item:focus-visible { outline: 2px solid var(--coral); outline-offset: 2px; }
 .item .ico { width: 22px; height: 22px; flex: 0 0 auto; display: grid; place-items: center; color: inherit; }
 .item .ico .ic { width: 21px; height: 21px; }
 .item .lbl { flex: 1; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .item .ct { font-family: var(--mono, monospace); font-size: 11px; color: var(--md-sys-color-on-surface-variant); font-variant-numeric: tabular-nums;
   background: var(--md-sys-color-surface-container-high); padding: 1px 7px; border-radius: 999px; min-width: 22px; text-align: center; }
-.item.active { background: var(--md-sys-color-primary-container); color: var(--icon-color-active); }
+.item.active { background: var(--md-sys-color-primary-container); color: var(--icon-color-active); font-weight: 700; }
 .item.active .ico { color: var(--icon-color-active); }
 .item.active .ct { background: var(--md-sys-color-primary-container); color: var(--icon-color-active); }
-.item.active::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px;
-  background: var(--coral); box-shadow: 0 0 8px rgba(233,112,93,.55); }
 
 .rail-spacer { flex: 1; min-height: 8px; }
 
@@ -1747,12 +1766,11 @@ html.icons-ready .material-icons { visibility: visible; }
 .rail { transition: width var(--dur-med, 250ms) cubic-bezier(.2,0,0,1); background: var(--md-sys-color-surface); }
 :root[data-rail="expanded"] .rail { width: 260px; }
 :root[data-rail="collapsed"] .rail { width: 76px; }
-:root[data-rail="collapsed"] .rail-head { justify-content: center; padding: 2px 0 14px; }
+:root[data-rail="collapsed"] .rail-head { justify-content: center; padding: 0 0 8px; }
 :root[data-rail="collapsed"] .rail-group, :root[data-rail="collapsed"] .lbl, :root[data-rail="collapsed"] .ct,
 :root[data-rail="collapsed"] .decision-l { display: none; }
 :root[data-rail="collapsed"] .item { justify-content: center; padding: 10px 0; }
 :root[data-rail="collapsed"] .decision-foot { justify-content: center; padding: 12px 0; }
-:root[data-rail="collapsed"] .item.active::before { top: 6px; bottom: 6px; }
 
 @media (prefers-reduced-motion: reduce) { .decision-pulse { animation: none; } .rail { transition: none; } }
 
