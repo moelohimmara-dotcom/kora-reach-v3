@@ -31,7 +31,7 @@ function placeholderSvg(theme) {
   const pal = {
     dark:  ["#241C18", "#15110F", "#E9705D"],
     cacao: ["#3A2418", "#241712", "#E9705D"],
-    light: ["#ECE7DF", "#F4F1EC", "#B5573A"],
+    light: ["#EDE4D6", "#F6EFE3", "#B5573A"],
   }[theme] || ["#241C18", "#15110F", "#E9705D"];
   return "data:image/svg+xml;utf8," + encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="'+pal[0]+'"/><stop offset="1" stop-color="'+pal[1]+'"/></linearGradient></defs><rect width="320" height="180" fill="url(#g)"/><g fill="none" stroke="'+pal[2]+'" stroke-width="3" opacity=".7"><rect x="118" y="64" width="84" height="60" rx="10"/><circle cx="142" cy="86" r="9"/><path d="M124 118l24-26 18 18 14-12 20 22"/></g></svg>'
@@ -619,7 +619,7 @@ function viewSettings(s) {
   const isAdmin = (s.auth && (s.auth.role === "admin" || s.auth.role === "advanced"));
   const themes = [
     ["dark", "Sombre", "i-moon", "Fond sombre (par défaut)"],
-    ["light", "Clair", "i-sun", "Fond clair"],
+    ["light", "Clair beige", "i-sun", "Beige sable clair"],
     ["cacao", "Cacao", "i-palette", "Chocolat chaud"]
   ];
   // Rail de catégories (type Supabase) : Généraux (tous) / Avancés (role advanced)
@@ -664,7 +664,7 @@ function viewSettings(s) {
           </button>
           <button class="theme-card ${theme === "light" ? "active" : ""}" data-theme-btn="light" aria-pressed="${theme === "light"}">
             <span class="theme-preview theme-preview-light"><span class="tp-bar"></span><span class="tp-card"></span><span class="tp-card short"></span></span>
-            <span class="theme-meta"><span class="name">Clair</span><span class="sub">Fond clair</span></span>
+            <span class="theme-meta"><span class="name">Clair beige</span><span class="sub">Beige sable clair</span></span>
             <span class="check">${theme === "light" ? icon("i-check") : ""}</span>
           </button>
           <button class="theme-card ${theme === "cacao" ? "active" : ""}" data-theme-btn="cacao" aria-pressed="${theme === "cacao"}">

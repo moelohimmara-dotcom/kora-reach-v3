@@ -353,7 +353,7 @@ export const Store = (() => {
   function setFactFilter(f) { setState({ ui: { ...state.ui, factFilter: f } }); }
   function wait(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-  // ---- Thème (dark par défaut, + light cassé & cacao color) ----
+  // ---- Thème (dark par défaut ; Clair beige & Cacao sélectionnables) ----
   const THEMES = ["dark", "light", "cacao"];
   function getTheme() { return state.ui.theme || "dark"; }
   function applyTheme(t) {
@@ -368,15 +368,11 @@ export const Store = (() => {
   }
   function initTheme() {
     // KORA = neumorphisme SOMBRE par défaut (charte imposée). On ignore
-    // prefers-color-scheme pour éviter d'afficher le thème clair cassé.
+    // prefers-color-scheme : le thème n'est jamais auto-détecté ; seul un choix
+    // EXPLICITE (setTheme, persisté dans localStorage) le change. Clair beige et
+    // Cacao sont désormais des thèmes valides et persistants (Piste B, 2026-08-16).
     let t = "dark";
-    try {
-      t = localStorage.getItem("kora-theme") || "dark";
-      // Migration one-shot : un reglage 'light' résiduel (ancien auto-detect
-      // via prefers-color-scheme) est remis en dark. Un choix 'light' EXPLICITE
-      // via l'UI (setTheme) reste respecté car applyTheme le rejoue.
-      if (t === "light") { localStorage.setItem("kora-theme", "dark"); t = "dark"; }
-    } catch (e) {}
+    try { t = localStorage.getItem("kora-theme") || "dark"; } catch (e) {}
     if (!THEMES.includes(t)) t = "dark";
     applyTheme(t);
     return t;

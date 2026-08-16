@@ -238,8 +238,13 @@
 /* ========== THÈMES ========== */
 /* Default = dark (déjà dans :root). Déclinaisons en data-theme. */
 
-/* Light cassé — off-white crème, accents coral/bordeaux/sauge assourdis */
+/* Clair beige — neumorphisme CLAIR CHAUD (sable), aligné sur l'ADN terreux KORA.
+   Refonte 2026-08-16 (Piste B) : l'ancien thème "light" était cassé — palette
+   crème chaude écrasée par un neumorphisme gris-bleu FROID (#E0E5EC) qui jurait
+   avec l'identité terracotta/chocolat. Unifié en beige sable chaud cohérent.
+   Accent terracotta en versions FONCÉES pour respecter WCAG AA sur fond clair. */
 :root[data-theme="light"] {
+  /* Accent terracotta — variantes foncées (AA sur beige) */
   --md-sys-color-primary: #B5573A;
   --md-sys-color-on-primary: #FFF7F2;
   --md-sys-color-primary-container: rgba(181,87,58,0.14);
@@ -261,37 +266,26 @@
   --md-sys-color-warning-container: #FCE3B8;
   --md-sys-color-on-warning-container: #4A3005;
 
-  --md-sys-color-surface: #F4F1EC;
-  --md-sys-color-on-surface: #2A201B;
-  --md-sys-color-surface-container: rgba(40,28,22,0.04);
-  --md-sys-color-surface-container-high: rgba(40,28,22,0.07);
-  --md-sys-color-on-surface-variant: #6B5C52;
-  --md-sys-color-surface-variant: rgba(40,28,22,0.05);
-  --on-surface-soft: #4A3E36;
-  --coral-text: #B23A1E;            /* corail FONCÉ pour TEXTE sur fond pastel clair (light) — WCAG AA+ */
-  /* Icônes : en light, l'actif doit être coral FONCÉ pour contraste AA sur pastel */
-  --icon-color-active: var(--coral-text);
-  --icon-color: #5A626E;
-  --icon-color-hover: #2A2E35;
+  /* ---- NEUMORPHISME CLAIR CHAUD (sable beige) — une seule palette cohérente ---- */
+  --neu-base:  #EDE4D6;   /* surface principale (beige sable) */
+  --neu-light: #F6EFE3;   /* highlight (beige clair) */
+  --neu-dark:  #D6C9B4;   /* creux (beige foncé chaud) */
 
-  --md-sys-color-outline: rgba(40,28,22,0.16);
-
-
-  --md-sys-color-scrim: rgba(40,28,22,0.38);
-  /* ---- NEUMORPHISM LIGHT (pastel clair) ---- */
-  --neu-base: #E0E5EC;
-  --neu-light: #EDF1F6;
-  --neu-dark: #B8BEC8;
   --md-sys-color-surface: var(--neu-base);
-  --md-sys-color-on-surface: #2A2E35;
+  --md-sys-color-on-surface: #2A201B;              /* brun foncé chaud (texte principal) */
   --md-sys-color-surface-container: var(--neu-base);
   --md-sys-color-surface-container-high: var(--neu-light);
-  --md-sys-color-on-surface-variant: #5A626E;
   --md-sys-color-surface-variant: var(--neu-base);
-  --on-surface-soft: #424A56;
+  --md-sys-color-on-surface-variant: #6B5C52;      /* taupe chaud (texte secondaire) */
+  --on-surface-soft: #4A3E36;
 
-  --md-sys-color-outline: rgba(42,46,53,0.10);
-  --md-sys-color-scrim: rgba(120,128,140,0.40);
+  --coral-text: #B23A1E;                 /* corail FONCÉ pour texte/lien sur beige — AA+ */
+  --icon-color-active: var(--coral-text);
+  --icon-color: #6B5C52;                 /* taupe chaud (repos) */
+  --icon-color-hover: #2A201B;
+
+  --md-sys-color-outline: rgba(42,32,24,0.14);
+  --md-sys-color-scrim: rgba(60,44,30,0.40);
   --sheet-action-bg: var(--neu-base);
 
   --glass-bg: var(--neu-base);
@@ -304,10 +298,12 @@
   --glass-glow: var(--neu-raised-sm);
   --glass-glow-strong: var(--neu-raised);
 
-  --neu-raised: -5px -5px 10px rgba(255,255,255,0.95), 5px 5px 10px rgba(163,177,198,0.55);
-  --neu-raised-sm: -3px -3px 6px rgba(255,255,255,0.9), 3px 3px 6px rgba(163,177,198,0.50);
-  --neu-pressed: inset -4px -4px 8px rgba(255,255,255,0.8), inset 4px 4px 8px rgba(163,177,198,0.55);
-  --neu-pressed-sm: inset -2px -2px 4px rgba(255,255,255,0.7), inset 2px 2px 4px rgba(163,177,198,0.50);
+  /* Ombres neumorphiques CHAUDES : highlight blanc crème + ombre brun sable
+     (l'ancien thème utilisait rgba(163,177,198) = bleu froid, source du "cassé") */
+  --neu-raised:     -5px -5px 10px rgba(255,252,245,0.90), 5px 5px 10px rgba(176,158,130,0.45);
+  --neu-raised-sm:  -3px -3px 6px rgba(255,252,245,0.85), 3px 3px 6px rgba(176,158,130,0.40);
+  --neu-pressed:    inset -4px -4px 8px rgba(255,252,245,0.75), inset 4px 4px 8px rgba(176,158,130,0.45);
+  --neu-pressed-sm: inset -2px -2px 4px rgba(255,252,245,0.65), inset 2px 2px 4px rgba(176,158,130,0.40);
 
   --elev-1: var(--neu-raised-sm);
   --elev-2: var(--neu-raised);
@@ -967,9 +963,9 @@ html.icons-ready .material-icons { visibility: visible; }
 .theme-preview-dark { background: #14110f; }
 .theme-preview-dark .tp-bar { background: var(--coral); }
 .theme-preview-dark .tp-card { background: #2a2420; }
-.theme-preview-light { background: #f4f1ee; }
+.theme-preview-light { background: #EDE4D6; }
 .theme-preview-light .tp-bar { background: var(--coral); }
-.theme-preview-light .tp-card { background: #ffffff; }
+.theme-preview-light .tp-card { background: #F6EFE3; }
 .theme-preview-cacao { background: #2b1d16; }
 .theme-preview-cacao .tp-bar { background: var(--bordeaux); }
 .theme-preview-cacao .tp-card { background: #4a3328; }
