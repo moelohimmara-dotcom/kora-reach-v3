@@ -1878,3 +1878,36 @@ html.icons-ready .material-icons { visibility: visible; }
 .rte-btn .ic { width: 16px; height: 16px; }
 .rte-select { height: 32px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); font-size: 12px; padding: 0 6px; }
 .rte-sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
+
+/* ============================================================
+   CENTRE DE NOTIFICATIONS (wireframe 10.2) — cloche + panneau
+   ============================================================ */
+.notif-wrap { position: relative; }
+.notif-bell {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border: none; border-radius: 10px; background: transparent;
+  color: var(--text-primary); cursor: pointer;
+}
+.notif-bell:hover, .notif-bell:focus-visible { background: var(--surface-raised); outline: none; }
+.notif-count {
+  position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px; padding: 0 3px;
+  border-radius: 999px; background: var(--danger); color: #fff; font-size: 10px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; line-height: 1;
+}
+.notif-panel {
+  position: absolute; top: calc(100% + 8px); right: 0; width: 340px; max-height: 420px;
+  overflow-y: auto; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.35); z-index: 60;
+}
+.notif-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.notif-panel-body { padding: 6px; }
+.notif-empty { padding: 16px; text-align: center; }
+.notif-group-label { font-size: 11px; color: var(--text-secondary); padding: 8px 8px 4px; }
+.notif-item { display: flex; align-items: flex-start; gap: 8px; padding: 8px; border-radius: 8px; }
+.notif-item .ic { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 1px; }
+.notif-item-msg { font-size: 13px; color: var(--text-primary); }
+.notif-unread { background: var(--surface-raised); }
+.notif-ic-error { color: var(--danger); }
+.notif-ic-success { color: var(--success); }
+.link-btn { background: none; border: none; color: var(--coral); font-size: 12px; cursor: pointer; padding: 0; }
+.link-btn:hover, .link-btn:focus-visible { text-decoration: underline; outline: none; }

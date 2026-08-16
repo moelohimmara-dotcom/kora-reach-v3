@@ -1785,11 +1785,55 @@ function doBulkTrash(definitive) {
     Store.bulkAction("trash").then(r => snack(`${r.done}/${r.total} mis à la corbeille (11 j)`)).catch(e => snack("Erreur : " + e.message));
   }
 }
+// ============================================================================
+// CENTRE DE NOTIFICATIONS (wireframe 10.2) — historique des toasts (snack()),
+// groupé par récence, avec badge de compteur non-lus sur la cloche.
+// ============================================================================
+function _notifGroupLabel(ts) {
+  const d = new Date(ts), now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) return "Aujourd'hui";
+  const diffDays = Math.floor((now - d) / 86400000);
+  return diffDays <= 7 ? "Cette semaine" : "Plus ancien";
+}
+function renderNotifCenter(s) {
+  const countEl = document.getElementById("notifCount");
+  const bodyEl = document.getElementById("notifBody");
+  if (!countEl || !bodyEl) return;
+  const list = s.notifications || [];
+  const unread = list.filter(n => !n.read).length;
+  countEl.hidden = unread === 0;
+  countEl.textContent = unread > 9 ? "9+" : String(unread);
+  if (!list.length) {
+    bodyEl.innerHTML = `<p class="muted notif-empty">Aucune notification pour l'instant.</p>`;
+    return;
+  }
+  const groups = {};
+  for (const n of list) {
+    const g = _notifGroupLabel(n.ts);
+    (groups[g] = groups[g] || []).push(n);
+  }
+  const iconFor = (t) => t === "error" ? icon("i-close", "notif-ic-error") : t === "success" ? icon("i-check", "notif-ic-success") : icon("i-info");
+  bodyEl.innerHTML = Object.entries(groups).map(([label, items]) => `
+    <div class="notif-group-label">${esc(label)}</div>
+    ${items.map(n => `
+      <div class="notif-item ${n.read ? "" : "notif-unread"}">
+        ${iconFor(n.type)}
+        <span class="notif-item-msg">${esc(n.message)}</span>
+      </div>`).join("")}
+  `).join("");
+}
 function snack(msg) {
   const sn = document.getElementById("snackbar");
-  if (!sn) return;
-  sn.textContent = msg; sn.hidden = false;
-  clearTimeout(sn._t); sn._t = setTimeout(() => sn.hidden = true, 2600);
+  if (sn) {
+    sn.textContent = msg; sn.hidden = false;
+    clearTimeout(sn._t); sn._t = setTimeout(() => sn.hidden = true, 2600);
+  }
+  // Alimente le centre de notifications (10.2). Type inféré du message : la
+  // convention existante préfixe déjà les erreurs par "Erreur" (40 sites
+  // d'appel) — pas besoin de réécrire chaque appelant pour un type explicite.
+  const type = /^erreur/i.test(msg) ? "error" : "success";
+  try { Store.addNotification(type, msg); renderNotifCenter(Store.state); } catch (e) { /* jamais bloquant */ }
 }
 function navigate(route, push = true) {
   if (push && location.hash !== "#" + route) {
@@ -1883,6 +1927,45 @@ function bind() {
   if (trashCancel) trashCancel.onclick = closeTrash;
   const trashDef = document.getElementById("trashDefinitive");
   if (trashDef) trashDef.onchange = () => { document.getElementById("trashDelete").hidden = !trashDef.checked; };
+
+  // ---- Centre de notifications (10.2) ----
+  renderNotifCenter(Store.state);
+  const notifBell = document.getElementById("notifBell");
+  const notifPanel = document.getElementById("notifPanel");
+  const notifMarkAll = document.getElementById("notifMarkAll");
+  if (notifBell && notifPanel) {
+    notifBell.onclick = (e) => {
+      e.stopPropagation();
+      const willOpen = notifPanel.hidden;
+      notifPanel.hidden = !willOpen;
+      notifBell.setAttribute("aria-expanded", String(willOpen));
+      if (willOpen) renderNotifCenter(Store.state);
+    };
+  }
+  if (notifMarkAll) notifMarkAll.onclick = () => { Store.markAllNotificationsRead(); renderNotifCenter(Store.state); };
+  // Fermeture au clic extérieur — bind() est rappelée à chaque render, donc
+  // on garde un flag pour n'enregistrer CE listener document qu'une seule
+  // fois (sinon il s'empilerait à chaque re-render).
+  if (!window.__notifOutsideBound) {
+    window.__notifOutsideBound = true;
+    document.addEventListener("click", (e) => {
+      const panel = document.getElementById("notifPanel");
+      const bell = document.getElementById("notifBell");
+      if (panel && !panel.hidden && !e.target.closest(".notif-wrap")) {
+        panel.hidden = true;
+        if (bell) bell.setAttribute("aria-expanded", "false");
+      }
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      const panel = document.getElementById("notifPanel");
+      if (panel && !panel.hidden) {
+        panel.hidden = true;
+        const bell = document.getElementById("notifBell");
+        if (bell) bell.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
 
   // =========================================================
   // LEFT DRAWER — Mobile (≤819px) : hamburger → 248px slide-in
