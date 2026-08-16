@@ -732,6 +732,17 @@ function viewSettings(s) {
       <div class="drawer-head"><button class="drawer-back" type="button" data-setback aria-label="Retour">${icon("i-chevron")}</button><h2>Compte</h2></div>
       <div class="drawer-body">
         <div class="setting-card">
+          <div class="setting-card-head"><span class="meta-ic">${icon("i-user")}</span><div class="meta"><div class="name">Profil</div><div class="sub">Photo affichée à côté de ton nom.</div></div></div>
+          <div class="avatar-row">
+            <span class="avatar-preview" id="avatarPreview">${s.auth?.avatarData ? `<img src="${esc(s.auth.avatarData)}" alt="">` : icon("i-user")}</span>
+            <div class="avatar-actions">
+              <input type="file" id="avatarFile" accept="image/*" hidden>
+              <button class="btn btn-tonal btn-sm" id="avatarChange">${icon("i-image")} Changer la photo</button>
+              ${s.auth?.avatarData ? `<button class="btn btn-ghost btn-sm" id="avatarRemove">Retirer</button>` : ""}
+            </div>
+          </div>
+        </div>
+        <div class="setting-card">
           <div class="setting-card-head"><span class="meta-ic">${icon("i-lock")}</span><div class="meta"><div class="name">Changer le mot de passe</div><div class="sub">8 caractères minimum.</div></div></div>
           <div class="field-row">
             <div class="field"><span>Mot de passe actuel</span><span class="pw-wrap"><input class="text-input" id="setCurPw" type="password" maxlength="64" autocomplete="current-password"><button type="button" class="pw-toggle" data-pw="setCurPw" aria-label="Afficher">${icon("i-eye")}</button></span></div>
@@ -1388,6 +1399,38 @@ function bindSettings() {
   if (coral) coral.oninput = preview;
   if (bordeaux) bordeaux.oninput = preview;
 
+  // ---- Photo de profil (9.2) ----
+  const avatarFile = document.getElementById("avatarFile");
+  const avatarChange = document.getElementById("avatarChange");
+  const avatarRemove = document.getElementById("avatarRemove");
+  const avatarPreview = document.getElementById("avatarPreview");
+  const AVATAR_MAX_BYTES = 256 * 1024;
+  if (avatarChange && avatarFile) avatarChange.onclick = () => avatarFile.click();
+  if (avatarFile) avatarFile.onchange = () => {
+    const f = avatarFile.files && avatarFile.files[0];
+    if (!f) return;
+    if (f.size > AVATAR_MAX_BYTES) { snack("Image trop lourde (max 256 Ko)"); avatarFile.value = ""; return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      Store.saveAvatar(dataUrl).then(() => {
+        // saveAvatar() met à jour s.auth.avatarData -> setState -> re-render
+        // complet de la vue, qui referme tous les tiroirs Paramètres (limitation
+        // générale de l'archi des tiroirs, pas spécifique à l'avatar). On rouvre
+        // "Compte" pour ne pas éjecter l'utilisateur de la page qu'il modifie.
+        snack("Photo de profil mise à jour");
+        document.querySelector('.settings-nav-item[data-setnav="account"]')?.click();
+      }).catch(e => snack("Erreur : " + e.message));
+    };
+    reader.readAsDataURL(f);
+  };
+  if (avatarRemove) avatarRemove.onclick = () => {
+    Store.saveAvatar("").then(() => {
+      snack("Photo de profil retirée");
+      document.querySelector('.settings-nav-item[data-setnav="account"]')?.click();
+    }).catch(e => snack("Erreur : " + e.message));
+  };
+
   const file = document.getElementById("setLogoFile");
   const logoPreview = document.getElementById("setLogoPreview");
   const clearBtn = document.getElementById("setLogoClear");
@@ -1788,7 +1831,16 @@ function doBulkTrash(definitive) {
 // ============================================================================
 // CENTRE DE NOTIFICATIONS (wireframe 10.2) — historique des toasts (snack()),
 // groupé par récence, avec badge de compteur non-lus sur la cloche.
+//
+// État volontairement LOCAL à ce module, PAS dans le Store réactif : un
+// setState() ici déclencherait un re-render complet de toute l'app à chaque
+// snack() (40 sites d'appel), ce qui refermerait n'importe quel tiroir/panneau
+// ouvert ailleurs (constaté : sauvegarde d'un avatar refermant le panneau
+// Paramètres > Compte qu'elle venait elle-même de rouvrir). Le centre de
+// notifications est un pur affichage dérivé, sans impact sur le reste de l'UI.
 // ============================================================================
+const NOTIF_MAX = 30; // borne mémoire, les plus anciennes sont évincées
+let _notifications = [];
 function _notifGroupLabel(ts) {
   const d = new Date(ts), now = new Date();
   const sameDay = d.toDateString() === now.toDateString();
@@ -1796,20 +1848,19 @@ function _notifGroupLabel(ts) {
   const diffDays = Math.floor((now - d) / 86400000);
   return diffDays <= 7 ? "Cette semaine" : "Plus ancien";
 }
-function renderNotifCenter(s) {
+function renderNotifCenter() {
   const countEl = document.getElementById("notifCount");
   const bodyEl = document.getElementById("notifBody");
   if (!countEl || !bodyEl) return;
-  const list = s.notifications || [];
-  const unread = list.filter(n => !n.read).length;
+  const unread = _notifications.filter(n => !n.read).length;
   countEl.hidden = unread === 0;
   countEl.textContent = unread > 9 ? "9+" : String(unread);
-  if (!list.length) {
+  if (!_notifications.length) {
     bodyEl.innerHTML = `<p class="muted notif-empty">Aucune notification pour l'instant.</p>`;
     return;
   }
   const groups = {};
-  for (const n of list) {
+  for (const n of _notifications) {
     const g = _notifGroupLabel(n.ts);
     (groups[g] = groups[g] || []).push(n);
   }
@@ -1823,17 +1874,21 @@ function renderNotifCenter(s) {
       </div>`).join("")}
   `).join("");
 }
+function markAllNotificationsRead() {
+  _notifications = _notifications.map(n => ({ ...n, read: true }));
+  renderNotifCenter();
+}
 function snack(msg) {
   const sn = document.getElementById("snackbar");
   if (sn) {
     sn.textContent = msg; sn.hidden = false;
     clearTimeout(sn._t); sn._t = setTimeout(() => sn.hidden = true, 2600);
   }
-  // Alimente le centre de notifications (10.2). Type inféré du message : la
-  // convention existante préfixe déjà les erreurs par "Erreur" (40 sites
-  // d'appel) — pas besoin de réécrire chaque appelant pour un type explicite.
+  // Type inféré du message : la convention existante préfixe déjà les erreurs
+  // par "Erreur" (40 sites d'appel) — pas besoin de réécrire chaque appelant.
   const type = /^erreur/i.test(msg) ? "error" : "success";
-  try { Store.addNotification(type, msg); renderNotifCenter(Store.state); } catch (e) { /* jamais bloquant */ }
+  _notifications = [{ id: "n" + Date.now() + Math.random().toString(36).slice(2, 6), type, message: msg, ts: Date.now(), read: false }, ..._notifications].slice(0, NOTIF_MAX);
+  try { renderNotifCenter(); } catch (e) { /* jamais bloquant */ }
 }
 function navigate(route, push = true) {
   if (push && location.hash !== "#" + route) {
@@ -1929,7 +1984,7 @@ function bind() {
   if (trashDef) trashDef.onchange = () => { document.getElementById("trashDelete").hidden = !trashDef.checked; };
 
   // ---- Centre de notifications (10.2) ----
-  renderNotifCenter(Store.state);
+  renderNotifCenter();
   const notifBell = document.getElementById("notifBell");
   const notifPanel = document.getElementById("notifPanel");
   const notifMarkAll = document.getElementById("notifMarkAll");
@@ -1939,10 +1994,10 @@ function bind() {
       const willOpen = notifPanel.hidden;
       notifPanel.hidden = !willOpen;
       notifBell.setAttribute("aria-expanded", String(willOpen));
-      if (willOpen) renderNotifCenter(Store.state);
+      if (willOpen) renderNotifCenter();
     };
   }
-  if (notifMarkAll) notifMarkAll.onclick = () => { Store.markAllNotificationsRead(); renderNotifCenter(Store.state); };
+  if (notifMarkAll) notifMarkAll.onclick = markAllNotificationsRead;
   // Fermeture au clic extérieur — bind() est rappelée à chaque render, donc
   // on garde un flag pour n'enregistrer CE listener document qu'une seule
   // fois (sinon il s'empilerait à chaque re-render).
