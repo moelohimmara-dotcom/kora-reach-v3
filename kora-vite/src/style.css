@@ -1,5 +1,5 @@
 /* Material Icons (auto-hébergé via @fontsource — importé dans main.js) */
-/* Typographies KORA — Neumorphisme : Oswald (titres condensés) + Source Sans Pro (texte) */
+/* Typographies KORA — Neumorphisme : Oswald (titres condensés) + Source Sans 3 (texte) */
 @import "@fontsource/oswald/400.css";
 @import "@fontsource/oswald/500.css";
 @import "@fontsource/oswald/600.css";
@@ -157,9 +157,9 @@
   --shadow-drawer: var(--neu-raised);
   --elev-fab: var(--neu-raised);
 
-  /* ---- TYPOGRAPHY TOKENS — Neumorphisme : Oswald (titres) + Source Sans Pro (texte) ---- */
-  --font: "Source Sans Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-display: "Oswald", "Source Sans Pro", var(--font);
+  /* ---- TYPOGRAPHY TOKENS — Neumorphisme : Oswald (titres) + Source Sans 3 (texte) ---- */
+  --font: "Source Sans 3", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Oswald", "Source Sans 3", var(--font);
   --md-sys-typescale-display-large-size: 57px;   --md-sys-typescale-display-large-weight: 500;   --md-sys-typescale-display-large-line-height: 64px;   --md-sys-typescale-display-large-tracking: -0.25px;
   --md-sys-typescale-display-medium-size: 45px;  --md-sys-typescale-display-medium-weight: 500;  --md-sys-typescale-display-medium-line-height: 52px;  --md-sys-typescale-display-medium-tracking: 0px;
   --md-sys-typescale-display-small-size: 36px;   --md-sys-typescale-display-small-weight: 500;   --md-sys-typescale-display-small-line-height: 44px;   --md-sys-typescale-display-small-tracking: 0px;
@@ -372,7 +372,7 @@
   --shadow-rail: var(--neu-raised);
   --shadow-drawer: var(--neu-raised);
 
-  --font: "Source Sans Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font: "Source Sans 3", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --bg-grad: var(--neu-base);
   --bg-blob1: transparent; --bg-blob2: transparent; --bg-blob3: transparent;
   --grain-op: 0;

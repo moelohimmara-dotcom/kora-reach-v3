@@ -805,7 +805,7 @@ function viewStyleGuide(s) {
       ${tok("--danger", "Rejet / suppression (#E5484D)")}
     </div>
 
-    <h2 class="section-title">Typographie — Source Sans Pro</h2>
+    <h2 class="section-title">Typographie — Oswald (titres) + Source Sans 3 (corps)</h2>
     <div class="sg-type">
       <div style="font-size:28px;font-weight:700">Nombre KPI — 28px / 700</div>
       <div style="font-size:20px;font-weight:700">Titre de section — 20px / 700</div>
