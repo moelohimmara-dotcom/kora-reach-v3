@@ -101,6 +101,37 @@ def set_role(uid, role):
         con.close()
 
 
+def _valid_avatar(data_url):
+    """Même validation que le logo (settings.py) : data:image/...;base64, <256 Ko.
+    Dupliquée ici (plutôt qu'importée) pour garder auth.py indépendant de
+    settings.py — chaque module reste autonome, cohérent avec le reste du repo."""
+    if not data_url or not data_url.startswith("data:image/") or ";base64," not in data_url:
+        return False
+    try:
+        b64 = data_url.split(",", 1)[1]
+        raw = base64.b64decode(b64, validate=True)
+        return len(raw) <= 256 * 1024
+    except Exception:
+        return False
+
+
+def set_avatar(uid, data_url):
+    """Enregistre la photo de profil (data-URL, jamais un chemin de fichier —
+    même principe que le logo white-label : aucune inclusion/traversée de
+    fichier possible). data_url vide -> retire l'avatar."""
+    if data_url and not _valid_avatar(data_url):
+        return {"ok": False, "error": "avatar_invalide"}
+    ph = db.placeholder()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(f"UPDATE kora_users SET avatar_data={ph} WHERE id={ph}", (data_url or None, uid))
+        con.commit()
+        return {"ok": True}
+    finally:
+        con.close()
+
+
 def delete_user(uid):
     ph = db.placeholder()
     con, _ = db.conn()
@@ -163,6 +194,11 @@ def init():
         cur = con.cursor()
         try:
             cur.execute("ALTER TABLE kora_users ADD COLUMN role TEXT DEFAULT 'normal'")
+            con.commit()
+        except Exception:
+            con.rollback()  # colonne déjà présente
+        try:
+            cur.execute("ALTER TABLE kora_users ADD COLUMN avatar_data TEXT")
             con.commit()
         except Exception:
             con.rollback()  # colonne déjà présente
@@ -275,14 +311,14 @@ def get_session_user(sid):
             return None
         uid = s["user_id"] if isinstance(s, dict) else (s[1] if len(s) > 1 else s[0])
         # Renvoie TOUJOURS un dict (mode-agnostique SQLite/Postgres)
-        cur.execute(f"SELECT id, username, email, role, created_at FROM kora_users WHERE id={ph}", (uid,))
+        cur.execute(f"SELECT id, username, email, role, created_at, avatar_data FROM kora_users WHERE id={ph}", (uid,))
         row = cur.fetchone()
         if not row:
             return None
         if isinstance(row, dict):
             return row
         # tuple -> dict (ordre de la SELECT ci-dessus)
-        cols = ["id", "username", "email", "role", "created_at"]
+        cols = ["id", "username", "email", "role", "created_at", "avatar_data"]
         return dict(zip(cols, row))
     finally:
         con.close()

@@ -193,7 +193,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"ok": True,
                                         "username": u["username"] if isinstance(u, dict) else u[1],
                                         "email": u["email"] if isinstance(u, dict) else u[3],
-                                        "role": u["role"] if isinstance(u, dict) else (u[5] if len(u) > 5 else "normal")})
+                                        "role": u["role"] if isinstance(u, dict) else (u[5] if len(u) > 5 else "normal"),
+                                        "avatar_data": u.get("avatar_data") if isinstance(u, dict) else None})
             return self._send(401, {"error": "unauthorized"})
         if path == "/api/auth/users":
             if not self._require_role("advanced"):
@@ -515,6 +516,20 @@ class Handler(BaseHTTPRequestHandler):
             r = auth.change_password(uid, payload.get("current", ""), payload.get("new", ""))
             if r.get("ok"):
                 auth.log_auth_event("password_changed", uname, self.client_address[0])
+            self._send(200 if r.get("ok") else 400, r)
+            return
+        if p.path == "/api/auth/avatar":
+            # Photo de profil (wireframe 9.2). data-URL uniquement (jamais un
+            # chemin de fichier) — même principe que le logo white-label.
+            if not self._require_auth():
+                return
+            sid = auth.read_cookie_sid(self.headers)
+            user = auth.get_session_user(sid)
+            if not user:
+                self._send(401, {"error": "unauthorized"})
+                return
+            uid = user["id"] if isinstance(user, dict) else user[0]
+            r = auth.set_avatar(uid, payload.get("avatar_data", ""))
             self._send(200 if r.get("ok") else 400, r)
             return
         if p.path == "/api/auth/forgot":

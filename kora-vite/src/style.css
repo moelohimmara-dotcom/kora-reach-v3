@@ -1911,3 +1911,16 @@ html.icons-ready .material-icons { visibility: visible; }
 .notif-ic-success { color: var(--success); }
 .link-btn { background: none; border: none; color: var(--coral); font-size: 12px; cursor: pointer; padding: 0; }
 .link-btn:hover, .link-btn:focus-visible { text-decoration: underline; outline: none; }
+
+/* ============================================================
+   PROFIL — photo d'avatar (wireframe 9.2)
+   ============================================================ */
+.avatar-row { display: flex; align-items: center; gap: 16px; margin-top: 4px; }
+.avatar-preview {
+  width: 64px; height: 64px; border-radius: 50%; overflow: hidden; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface-raised); border: 1px solid var(--border); color: var(--text-secondary);
+}
+.avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
+.avatar-preview .ic { width: 28px; height: 28px; }
+.avatar-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }

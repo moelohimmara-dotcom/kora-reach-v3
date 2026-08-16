@@ -21,11 +21,6 @@ export const Store = (() => {
     selection: {},        // { fact_id: true } — sélection multiple
     selectMode: false,    // mode sélection activé
     auth: { loggedIn: false, username: null, email: null, pending: true },
-    // Centre de notifications (wireframe 10.2) : historique des toasts
-    // (snack()), côté client uniquement (pas de persistance backend —
-    // volatile comme les toasts eux-mêmes, juste conservés le temps de
-    // la session pour qu'on puisse les relire).
-    notifications: [],
   };
 
   const subs = new Set();
@@ -101,10 +96,10 @@ export const Store = (() => {
     try {
       const r = await api("/api/auth/me");
       if (r.ok) {
-        const next = { loggedIn: true, username: r.username, email: r.email, role: r.role || "normal", pending: false };
+        const next = { loggedIn: true, username: r.username, email: r.email, role: r.role || "normal", pending: false, avatarData: r.avatar_data || null };
         // Ne pas notifier si identique (évite render->checkAuth->render)
         const a = state.auth || {};
-        if (!a.loggedIn || a.username !== next.username || a.role !== next.role) {
+        if (!a.loggedIn || a.username !== next.username || a.role !== next.role || a.avatarData !== next.avatarData) {
           setState({ auth: next });
         }
         return true;
@@ -154,6 +149,14 @@ export const Store = (() => {
     if (r.error === "wrong_current") throw new Error("Mot de passe actuel incorrect");
     if (r.error === "password_too_short") throw new Error("Le nouveau mot de passe doit faire au moins 8 caractères");
     throw new Error(r.error || "Erreur");
+  }
+  async function saveAvatar(dataUrl) {
+    const r = await api("/api/auth/avatar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ avatar_data: dataUrl }) });
+    if (r.ok) {
+      setState({ auth: { ...state.auth, avatarData: dataUrl || null } });
+      return true;
+    }
+    throw new Error(r.error === "avatar_invalide" ? "Image invalide (doit être une photo, < 256 Ko)" : (r.error || "Erreur"));
   }
   async function forgot(email) {
     const r = await api("/api/auth/forgot", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
@@ -355,19 +358,11 @@ export const Store = (() => {
   function openSheet(s) { setState({ sheet: s }); }
   function closeSheet() { setState({ sheet: null }); }
 
-  // ---- Centre de notifications (10.2) : historique des toasts ----
-  const NOTIF_MAX = 30; // borne mémoire, les plus anciennes sont évincées
-  function addNotification(type, message) {
-    const n = { id: "n" + Date.now() + Math.random().toString(36).slice(2, 6), type, message, ts: Date.now(), read: false };
-    const list = [n, ...(state.notifications || [])].slice(0, NOTIF_MAX);
-    setState({ notifications: list });
-  }
-  function markAllNotificationsRead() {
-    setState({ notifications: (state.notifications || []).map(n => ({ ...n, read: true })) });
-  }
-  function unreadNotificationsCount() {
-    return (state.notifications || []).filter(n => !n.read).length;
-  }
+  // Centre de notifications (10.2) : DÉLIBÉRÉMENT PAS dans le Store réactif.
+  // Voir app.js (_notifications, addNotif) — un setState ici déclencherait un
+  // re-render complet à chaque snack(), qui referme tout tiroir ouvert
+  // ailleurs dans l'app (bug constaté : sauvegarde d'avatar refermant le
+  // panneau Paramètres > Compte qu'elle venait elle-même de rouvrir).
   function getFactFilter() { return state.ui.factFilter || "all"; }
   function setFactFilter(f) { setState({ ui: { ...state.ui, factFilter: f } }); }
   function wait(ms) { return new Promise((r) => setTimeout(r, ms)); }
@@ -630,14 +625,13 @@ export const Store = (() => {
     state, setState, subscribe, api,
     loadHealth, loadLast, loadHITL, loadAudit, loadSources, loadSettings, applySettings,
     startCycle, seed, decide, retract, setRoute, openSheet, closeSheet, wait,
-    addNotification, markAllNotificationsRead, unreadNotificationsCount,
     getFactFilter, setFactFilter,
     getTheme, setTheme, initTheme,
     getRailMode, setRailMode, initRailMode, applyRailMode,
     // alias rétro-compat (certains appels utilisent initRail)
     initRail: initRailMode,
     getRail, setRail,
-    checkAuth, login, logout, changePassword, forgot, resetPassword,
+    checkAuth, login, logout, changePassword, saveAvatar, forgot, resetPassword,
     loadUsers, createUser, setRole, deleteUser,
     setSelectMode, toggleSelect, clearSelection, selectedIds,
     bulkAction, restoreFact, deleteForever, loadTrash, finishDraft,
