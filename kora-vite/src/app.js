@@ -686,6 +686,7 @@ function viewSettings(s) {
   const advancedItems = isAdvanced ? [
     { id: "personalization", ic: "i-brush", title: "Personnalisation", sub: "Nom, logo, couleurs, libellés" },
     { id: "accounts", ic: "i-users", title: "Comptes & habilitations", sub: "Utilisateurs et rôles" },
+    { id: "agent", ic: "i-spark", title: "Agent", sub: "Prompt système, instructions (zone sensible)" },
   ] : [];
   const adminItems = isAdmin ? [
     { id: "auditlog", ic: "i-shield", title: "Journal d'audit", sub: "Connexions, mots de passe, paramètres" },
@@ -840,6 +841,13 @@ function viewSettings(s) {
           </div>
           <div class="actions"><button class="btn btn-primary" id="setAddUser">Créer le compte</button></div>
         </div>
+      </div>
+    </aside>
+
+    <aside class="settings-panel" id="drawer-agent" hidden>
+      <div class="drawer-head"><button class="drawer-back" type="button" data-setback aria-label="Retour">${icon("i-chevron")}</button><h2>Agent <span class="role-badge role-advanced">Zone sensible</span></h2></div>
+      <div class="drawer-body" id="agentPromptBody">
+        <p class="muted" id="agentPromptLoading">Chargement…</p>
       </div>
     </aside>` : ""}
     ${isAdmin ? `<aside class="settings-panel" id="drawer-auditlog" hidden>
@@ -1156,6 +1164,9 @@ function renderRejectConfirm(s) {
 // un re-render complet qui écrase le panneau d'édition et FAIT PERDRE le
 // brouillon en cours de frappe. Voir le site d'appel gardé plus bas.
 let _editingActive = false;
+// Dernière route effectivement montée dans #view (voir garde settingsAlreadyMounted
+// dans render()) — évite de reconstruire le HTML des Paramètres à chaque poll.
+let _lastRenderedRoute = null;
 
 function renderSheet(s) {
   _editingActive = false;
@@ -1627,6 +1638,7 @@ function bindSettings() {
     account: "drawer-account",
     personalization: "drawer-personalization",
     accounts: "drawer-accounts",
+    agent: "drawer-agent",
     auditlog: "drawer-auditlog",
   };
   const loadAuditLog = async () => {
@@ -1641,10 +1653,79 @@ function bindSettings() {
       body.innerHTML = days.map(dayBlock).join("");
     } catch (e) { body.innerHTML = '<p class="muted">Erreur de chargement du journal (admin requis).</p>'; }
   };
-  const auditNav = view.querySelector('.settings-nav-item[data-setnav="auditlog"]');
-  if (auditNav) auditNav.onclick = () => { openDrawer("auditlog"); loadAuditLog(); };
   const refreshBtn = document.getElementById("auditLogRefresh");
   if (refreshBtn) refreshBtn.onclick = loadAuditLog;
+
+  // ---- Agent : prompt système / add-on éditables (9.5, zone sensible) ----
+  const escta = (t) => esc(t || "");
+  const renderAgentPromptBody = (data) => {
+    const body = document.getElementById("agentPromptBody");
+    if (!body) return;
+    const systemIsDefault = data.system_is_default;
+    const systemVal = systemIsDefault ? data.default_system : data.system;
+    body.innerHTML = `
+      <p class="muted" style="margin:0 0 14px">Personnalise le comportement du rédacteur automatique. Toute modification est tracée dans le journal d'audit.</p>
+      <div class="setting-card">
+        <div class="setting-card-head"><span class="meta-ic">${icon("i-alert")}</span><div class="meta"><div class="name">Prompt système</div><div class="sub">${systemIsDefault ? "Valeur par défaut (jamais modifiée)" : "Personnalisé"}</div></div></div>
+        <p class="muted" style="margin:0 0 10px">⚠️ Ce texte pilote directement la rédaction (structure, ton, garde-fous anti-invention et anti-injection). Le marqueur interne <code>2. LONGUEUR</code> doit rester présent : sa suppression ne provoque aucune erreur, mais modifie légèrement la génération section par section. En cas de doute, utilise « Réinitialiser par défaut ».</p>
+        <textarea class="text-input" id="agentPromptSystem" rows="14" style="font-family:monospace;font-size:12.5px;line-height:1.5;width:100%;resize:vertical">${escta(systemVal)}</textarea>
+        <div class="actions" style="margin-top:10px">
+          <button class="btn btn-primary" id="agentPromptSaveSystem">Enregistrer le prompt système</button>
+          <button class="btn btn-ghost" id="agentPromptResetSystem" ${systemIsDefault ? "disabled" : ""}>Réinitialiser par défaut</button>
+        </div>
+      </div>
+      <div class="setting-card">
+        <div class="setting-card-head"><span class="meta-ic">${icon("i-edit")}</span><div class="meta"><div class="name">Instructions complémentaires (add-on)</div><div class="sub">Ajoutées à la suite du prompt système, sans risque sur sa structure</div></div></div>
+        <textarea class="text-input" id="agentPromptAddon" rows="6" style="width:100%;resize:vertical" placeholder="Ex. : privilégier un ton plus institutionnel sur les sujets diplomatiques…">${escta(data.addon)}</textarea>
+        <div class="actions" style="margin-top:10px">
+          <button class="btn btn-primary" id="agentPromptSaveAddon">Enregistrer l'add-on</button>
+          <button class="btn btn-ghost" id="agentPromptResetAddon" ${data.addon ? "" : "disabled"}>Retirer l'add-on</button>
+        </div>
+      </div>`;
+    const saveSys = document.getElementById("agentPromptSaveSystem");
+    if (saveSys) saveSys.onclick = async () => {
+      const val = document.getElementById("agentPromptSystem")?.value || "";
+      try {
+        const r = await Store.api("/api/agent-prompts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ field: "system", value: val }) });
+        if (r.warning) snack(r.warning); else snack("Prompt système enregistré");
+        await loadAgentPrompts();
+      } catch (e) { snack(e.message || "Erreur"); }
+    };
+    const resetSys = document.getElementById("agentPromptResetSystem");
+    if (resetSys) resetSys.onclick = async () => {
+      if (!confirm("Réinitialiser le prompt système à sa valeur par défaut ?")) return;
+      try {
+        await Store.api("/api/agent-prompts/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ field: "system" }) });
+        snack("Prompt système réinitialisé");
+        await loadAgentPrompts();
+      } catch (e) { snack(e.message || "Erreur"); }
+    };
+    const saveAddon = document.getElementById("agentPromptSaveAddon");
+    if (saveAddon) saveAddon.onclick = async () => {
+      const val = document.getElementById("agentPromptAddon")?.value || "";
+      try {
+        await Store.api("/api/agent-prompts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ field: "addon", value: val }) });
+        snack("Add-on enregistré");
+        await loadAgentPrompts();
+      } catch (e) { snack(e.message || "Erreur"); }
+    };
+    const resetAddon = document.getElementById("agentPromptResetAddon");
+    if (resetAddon) resetAddon.onclick = async () => {
+      try {
+        await Store.api("/api/agent-prompts/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ field: "addon" }) });
+        snack("Add-on retiré");
+        await loadAgentPrompts();
+      } catch (e) { snack(e.message || "Erreur"); }
+    };
+  };
+  const loadAgentPrompts = async () => {
+    const body = document.getElementById("agentPromptBody");
+    if (!body) return;
+    try {
+      const data = await Store.api("/api/agent-prompts");
+      renderAgentPromptBody(data);
+    } catch (e) { body.innerHTML = '<p class="muted">Erreur de chargement (rôle avancé requis).</p>'; }
+  };
   const scrim = document.getElementById("setDrawerScrim");
   const openDrawer = (id) => {
     Object.values(drawers).forEach(did => { const d = document.getElementById(did); if (d) d.hidden = true; });
@@ -1670,6 +1751,14 @@ function bindSettings() {
     view.querySelectorAll(".settings-nav-item").forEach(n => n.classList.remove("active"));
   };
   view.querySelectorAll(".settings-nav-item").forEach(n => n.onclick = () => openDrawer(n.dataset.setnav));
+  // Handlers spécifiques (chargement de données à l'ouverture) : DOIVENT être
+  // assignés APRÈS la boucle générique ci-dessus, sinon celle-ci écrase (onclick
+  // = simple assignation, un seul gagnant) l'ouverture+chargement par un simple
+  // openDrawer() sans chargement — bug constaté en vérifiant §9.5 en preview live.
+  const auditNav = view.querySelector('.settings-nav-item[data-setnav="auditlog"]');
+  if (auditNav) auditNav.onclick = () => { openDrawer("auditlog"); loadAuditLog(); };
+  const agentNav = view.querySelector('.settings-nav-item[data-setnav="agent"]');
+  if (agentNav) agentNav.onclick = () => { openDrawer("agent"); loadAgentPrompts(); };
   if (scrim) scrim.onclick = closeDrawer;
   view.querySelectorAll("[data-setback]").forEach(b => b.onclick = closeDrawer);
   // Escape ferme le tiroir settings (sans fermer la feuille HITL)
@@ -1731,7 +1820,21 @@ function render() {
   // vérification au rendu). ROUTE_ROLE + view403 ferment ce trou.
   const need = ROUTE_ROLE[s.route];
   const blocked = need && (!s.auth || s.auth.role !== need);
-  view.innerHTML = blocked ? view403() : (map[s.route] || viewCockpit)(s);
+  // Paramètres : ne PAS reconstruire la vue si on est déjà sur "settings" (même
+  // route qu'au dernier rendu). Sans ce garde-fou, tout setState — y compris le
+  // poll périodique (stats/hitl) totalement sans rapport — reconstruit tout le
+  // HTML des tiroirs Paramètres, ce qui : (1) ferme le tiroir ouvert par
+  // l'utilisateur (déjà connu — cf. avatar/notifications), et (2) ORPHELINISE
+  // tout appel async en cours dans un tiroir (ex. chargement du prompt agent
+  // §9.5) : la réponse arrive après coup et met à jour un noeud #agentPromptBody
+  // déjà détaché du DOM, pendant que l'écran affiché en a un nouveau, resté sur
+  // "Chargement…". bindSettings() n'est donc PAS ré-appelé non plus dans ce cas
+  // (les handlers déjà attachés restent valides sur les mêmes noeuds DOM).
+  const settingsAlreadyMounted = s.route === "settings" && _lastRenderedRoute === "settings" && !blocked;
+  if (!settingsAlreadyMounted) {
+    view.innerHTML = blocked ? view403() : (map[s.route] || viewCockpit)(s);
+  }
+  _lastRenderedRoute = blocked ? "403" : s.route;
   $$(".navitem, .rail .navitem, .item, .rail .item").forEach(n => {
     const on = n.dataset.route === s.route;
     n.classList.toggle("active", on);
@@ -1811,7 +1914,7 @@ function render() {
     try { renderSheet(s); } catch (e) { console.error("renderSheet", e); }
   }
   try { if (s.route === "audit") bindAudit(); } catch (e) { console.error("bindAudit", e); }
-  try { if (s.route === "settings") bindSettings(); } catch (e) { console.error("bindSettings", e); }
+  try { if (s.route === "settings" && !settingsAlreadyMounted) bindSettings(); } catch (e) { console.error("bindSettings", e); }
   // Barre d'action de sélection multiple
   try {
     const sb = document.getElementById("selectBar");
