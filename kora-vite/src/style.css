@@ -1172,7 +1172,12 @@ html.icons-ready .material-icons { visibility: visible; }
 .stat-card.error { border-color: var(--danger); }
 .stat-icon { width: 20px; height: 20px; color: var(--text-secondary); opacity: .7; margin-bottom: 16px; }
 .stat-value { font-family: var(--font-display); font-size: 30px; font-weight: 700; color: var(--text-primary); line-height: 1; font-variant-numeric: tabular-nums; margin-bottom: 4px; text-align: center; width: 100%; }
-.stat-value .skeleton { display: inline-block; width: 60px; height: 28px; background: linear-gradient(90deg, var(--surface-raised) 25%, var(--border) 50%, var(--surface-raised) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; }
+/* Base générique (13.2) — auparavant scopée uniquement à .stat-value, donc
+   invisible partout ailleurs. Les règles plus spécifiques (ex. .stat-value
+   .skeleton juste en dessous, .skel-thumb/.skel-line dans la section 13.2)
+   surchargent width/height/border-radius par sélecteur plus précis. */
+.skeleton { display: inline-block; background: linear-gradient(90deg, var(--surface-raised) 25%, var(--border) 50%, var(--surface-raised) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; }
+.stat-value .skeleton { width: 60px; height: 28px; }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 .stat-label { font-size: 13px; font-weight: 500; letter-spacing: .2px; color: var(--text-secondary); line-height: 1.2; display: flex; align-items: center; justify-content: center; gap: 4px; }
 .stat-trend { font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: var(--radius-pill); }
@@ -1924,3 +1929,36 @@ html.icons-ready .material-icons { visibility: visible; }
 .avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
 .avatar-preview .ic { width: 28px; height: 28px; }
 .avatar-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+
+/* ============================================================
+   ÉTAT 403 — accès refusé (wireframe 13.3)
+   ============================================================ */
+.state-403 { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 60px 20px; min-height: 320px; }
+.state-403-ic { width: 44px; height: 44px; color: var(--text-secondary); }
+.state-403 h1 { font-size: 20px; margin: 0; }
+.state-403 p { max-width: 380px; }
+
+/* ============================================================
+   BANDEAU D'ERREUR RÉSEAU GLOBAL (wireframe 13.1)
+   ============================================================ */
+.error-banner {
+  display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+  background: var(--danger); color: #fff; font-size: 13px;
+}
+.error-banner .ic { width: 18px; height: 18px; flex: 0 0 auto; }
+.error-banner-msg { flex: 1; }
+.error-banner .btn-tonal { background: rgba(255,255,255,.18); color: #fff; }
+.error-banner .btn-tonal:hover { background: rgba(255,255,255,.28); }
+.error-banner-close { background: none; border: none; color: #fff; cursor: pointer; display: flex; padding: 4px; opacity: .85; }
+.error-banner-close:hover, .error-banner-close:focus-visible { opacity: 1; outline: none; }
+
+/* ============================================================
+   SKELETON — liste d'articles en chargement (wireframe 13.2)
+   ============================================================ */
+.facts-skeleton-wrap { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
+.fact-card-skeleton { display: flex; gap: 12px; padding: 12px; background: var(--surface); border-radius: 12px; }
+.skel-thumb { width: 80px; height: 54px; border-radius: 8px; flex: 0 0 auto; }
+.skel-lines { display: flex; flex-direction: column; gap: 8px; justify-content: center; flex: 1; }
+.skel-line { height: 12px; border-radius: 4px; display: block; }
+.skel-line-title { width: 70%; height: 14px; }
+.skel-line-sub { width: 40%; }

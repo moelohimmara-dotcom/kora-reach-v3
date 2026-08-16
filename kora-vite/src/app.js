@@ -582,6 +582,10 @@ function viewFacts(s) {
     trash: (typeof st.trash === "number") ? st.trash : 0,
   };
   const f = (Store.getFactFilter() || "all").toLowerCase();
+  // Skeleton (13.2) : au tout premier chargement (avant que /api/hitl ait
+  // répondu), sans ça l'état vide "Aucun article" s'affichait un instant à
+  // tort — trompeur, on ne SAIT pas encore s'il y a des articles ou non.
+  if (s.ui.loading && !facts.length) return factsSkeleton();
   if (!facts.length) return (s.lastCycle && s.lastCycle.result && s.lastCycle.result.status === "empty_or_stale") ? staleBox(s) : stateBox("i-check", "Aucun article à afficher", "Lance un cycle ou génère une démo pour générer des articles à valider.", false, "Générer démo", () => Store.seed());
   const filters = [
     ["all", "Tous", counts.all], ["pending", "En attente", counts.pending],
@@ -847,6 +851,52 @@ function viewSettings(s) {
 // rester fidèle : toute dérive du design y est visible avant merge.
 // Accès : rôle advanced (lien discret dans Paramètres). Réf : docs/DESIGN_SYSTEM.md
 // ============================================================================
+// Rôle minimum requis pour accéder à une route (13.3). Routes absentes de
+// cette map = accessibles à tout utilisateur authentifié.
+const ROUTE_ROLE = { styleguide: "advanced" };
+
+// Bandeau d'erreur réseau global (13.1). s.ui.error est déjà peuplé par tous
+// les appels API en échec (~14 sites dans store.js — health, hitl, audit,
+// decide, retract, etc.) mais n'était affiché nulle part avant : une
+// approbation/rejet en échec ne donnait ZÉRO retour visible à l'éditeur.
+function renderErrorBanner(s) {
+  const el = document.getElementById("errorBanner");
+  const msgEl = document.getElementById("errorBannerMsg");
+  if (!el || !msgEl) return;
+  const err = s.ui && s.ui.error;
+  el.hidden = !err;
+  if (err) msgEl.textContent = err;
+  const retryBtn = document.getElementById("errorBannerRetry");
+  const closeBtn = document.getElementById("errorBannerClose");
+  const clearError = () => Store.setState({ ui: { ...Store.state.ui, error: null } });
+  if (retryBtn) retryBtn.onclick = () => { clearError(); Store.loadAll(); };
+  if (closeBtn) closeBtn.onclick = clearError;
+}
+
+// Skeleton de liste d'articles (13.2) — réutilise la même animation .skeleton
+// que les cartes KPI/pastille santé (style.css), généralisée à une carte entière.
+function factsSkeleton() {
+  const card = `
+    <div class="fact-card-skeleton">
+      <span class="skeleton skel-thumb"></span>
+      <div class="skel-lines">
+        <span class="skeleton skel-line skel-line-title"></span>
+        <span class="skeleton skel-line skel-line-sub"></span>
+      </div>
+    </div>`;
+  return `<div class="facts-skeleton-wrap">${card}${card}${card}</div>`;
+}
+
+function view403() {
+  return `
+    <div class="state-403">
+      ${icon("i-lock", "state-403-ic")}
+      <h1>Accès non autorisé</h1>
+      <p class="muted">Cette section nécessite le rôle Administrateur. Contacte un administrateur si tu penses qu'il s'agit d'une erreur.</p>
+      <button class="btn btn-primary" data-403-home="1">${icon("i-dashboard")} Retour au tableau de bord</button>
+    </div>`;
+}
+
 function viewStyleGuide(s) {
   const tok = (name, desc) => `
     <div class="sg-token">
@@ -1651,10 +1701,17 @@ function render() {
   if (agent) agent.innerHTML = s.ui.busy
     ? `<span class="dot dot-busy"></span><span>${s.ui.overlay || "Agent occupé…"}</span>`
     : `<span class="dot dot-ready"></span><span>prêt</span>`;
+  renderErrorBanner(s);
   const view = document.getElementById("view");
   if (!view) return;
   const map = { cockpit: viewCockpit, facts: viewFacts, sources: viewSources, audit: viewAudit, drafts: viewDrafts, settings: viewSettings, trash: viewTrash, styleguide: viewStyleGuide };
-  view.innerHTML = (map[s.route] || viewCockpit)(s);
+  // Garde de rôle au niveau du routage (13.3) : jusqu'ici seul le LIEN vers
+  // /style-guide était masqué pour un rôle non-advanced, mais la route
+  // elle-même restait accessible en tapant #styleguide directement (aucune
+  // vérification au rendu). ROUTE_ROLE + view403 ferment ce trou.
+  const need = ROUTE_ROLE[s.route];
+  const blocked = need && (!s.auth || s.auth.role !== need);
+  view.innerHTML = blocked ? view403() : (map[s.route] || viewCockpit)(s);
   $$(".navitem, .rail .navitem, .item, .rail .item").forEach(n => {
     const on = n.dataset.route === s.route;
     n.classList.toggle("active", on);
@@ -1982,6 +2039,9 @@ function bind() {
   if (trashCancel) trashCancel.onclick = closeTrash;
   const trashDef = document.getElementById("trashDefinitive");
   if (trashDef) trashDef.onchange = () => { document.getElementById("trashDelete").hidden = !trashDef.checked; };
+
+  const btn403 = document.querySelector("[data-403-home]");
+  if (btn403) btn403.onclick = () => navigate("cockpit");
 
   // ---- Centre de notifications (10.2) ----
   renderNotifCenter();
