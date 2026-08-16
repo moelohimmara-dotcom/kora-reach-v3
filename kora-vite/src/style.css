@@ -710,7 +710,11 @@ html.icons-ready .material-icons { visibility: visible; }
    ============================================ */
 .nav-scrim { position: fixed; inset: 0; background: var(--md-sys-color-scrim); z-index: var(--z-scrim); backdrop-filter: blur(5px); animation: fade var(--dur-fast); }
 .overflow-menu {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: calc(var(--z-nav) + 1);
+  /* z-index au-dessus de --z-scrim (pas --z-nav) : le scrim flouté (nav-scrim,
+     z-index 40) doit rester DERRIÈRE ce panneau, sinon son backdrop-filter
+     floute le menu lui-même au lieu du contenu de la page en arrière-plan
+     (bug constaté : tout l'écran, y compris les items du menu, apparaissait flou). */
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: calc(var(--z-scrim) + 1);
   display: flex; flex-direction: column; gap: 4px; padding: 10px 14px calc(14px + env(safe-area-inset-bottom));
   background: var(--neu-base); box-shadow: var(--neu-raised); border-top: 1px solid var(--glass-border-strong);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
