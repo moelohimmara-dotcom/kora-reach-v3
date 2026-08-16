@@ -778,6 +778,60 @@ function viewSettings(s) {
     </aside>` : ""}
     </div>`;
     }
+// ============================================================================
+// STYLE GUIDE (/style-guide) — page vivante du design system (B.1).
+// Réutilise les VRAIS composants (statusBadge, statCard, classes .btn) pour
+// rester fidèle : toute dérive du design y est visible avant merge.
+// Accès : rôle advanced (lien discret dans Paramètres). Réf : docs/DESIGN_SYSTEM.md
+// ============================================================================
+function viewStyleGuide(s) {
+  const tok = (name, desc) => `
+    <div class="sg-token">
+      <span class="sg-swatch" style="background:var(${name})"></span>
+      <div class="sg-token-meta"><code>${name}</code><div class="muted">${esc(desc)}</div></div>
+    </div>`;
+  return `
+  <div class="cockpit kora-wire sg-page">
+    <h1 class="section-title">Style Guide — Design System KORA</h1>
+    <p class="muted">Référence vivante. Toute modification visuelle se vérifie ici avant merge. Source : <code>docs/DESIGN_SYSTEM.md</code>.</p>
+
+    <h2 class="section-title">Couleurs — tokens sémantiques</h2>
+    <div class="sg-grid">
+      ${tok("--bg", "Fond application (#0E1114)")}
+      ${tok("--surface", "Cartes (#171C21)")}
+      ${tok("--coral", "Accent — branding configurable, défaut #E9705D")}
+      ${tok("--success", "Prêt / validé (#3DD68C)")}
+      ${tok("--warning", "Attention (#F5A83C)")}
+      ${tok("--danger", "Rejet / suppression (#E5484D)")}
+    </div>
+
+    <h2 class="section-title">Typographie — Source Sans Pro</h2>
+    <div class="sg-type">
+      <div style="font-size:28px;font-weight:700">Nombre KPI — 28px / 700</div>
+      <div style="font-size:20px;font-weight:700">Titre de section — 20px / 700</div>
+      <div style="font-size:16px">Corps de texte — 16px / 400, interligne 1.5</div>
+      <div class="muted" style="font-size:13px">Label secondaire — 13px / 500</div>
+    </div>
+
+    <h2 class="section-title">Badges de statut <span class="muted" style="font-weight:400">(icône + texte, jamais couleur seule)</span></h2>
+    <div class="sg-row">
+      ${statusBadge("PENDING_REVIEW")} ${statusBadge("APPROVED")} ${statusBadge("REJECTED")} ${statusBadge("TRANSMITTED")} ${statusBadge("EDITED")} ${statusBadge("TRASHED")}
+    </div>
+
+    <h2 class="section-title">Boutons</h2>
+    <div class="sg-row">
+      <button class="btn btn-primary">${icon("i-send")} Primaire</button>
+      <button class="btn btn-tonal">Secondaire</button>
+      <button class="btn" disabled>Désactivé</button>
+    </div>
+
+    <h2 class="section-title">Carte KPI</h2>
+    <div class="cockpit-grid stats-row sg-kpi">
+      ${statCard({ icon: "i-help", value: 12, label: "À décider", variant: "warning" })}
+    </div>
+  </div>`;
+}
+
 function viewAudit(s) {
   const data = s.audit || {};
   const days = data.days || [];
@@ -1389,7 +1443,7 @@ function render() {
     : `<span class="dot dot-ready"></span><span>prêt</span>`;
   const view = document.getElementById("view");
   if (!view) return;
-  const map = { cockpit: viewCockpit, facts: viewFacts, sources: viewSources, audit: viewAudit, drafts: viewDrafts, settings: viewSettings, trash: viewTrash };
+  const map = { cockpit: viewCockpit, facts: viewFacts, sources: viewSources, audit: viewAudit, drafts: viewDrafts, settings: viewSettings, trash: viewTrash, styleguide: viewStyleGuide };
   view.innerHTML = (map[s.route] || viewCockpit)(s);
   $$(".navitem, .rail .navitem, .item, .rail .item").forEach(n => {
     const on = n.dataset.route === s.route;
@@ -1401,6 +1455,8 @@ function render() {
   $$('.navitem[data-route="settings"]').forEach(n => { n.hidden = !isAdvanced; });
   const bnav = document.querySelector('.bottomnav [data-route="settings"]');
   if (bnav) bnav.hidden = !isAdvanced;
+  // Style Guide (/style-guide) : outil dev/design, réservé au rôle advanced.
+  $$('.sg-navlink').forEach(n => { n.hidden = !isAdvanced; });
   // Badges de compteur sur la navigation (Articles / Sources / Brouillons / Corbeille)
   try {
     const facts = s.facts || [];

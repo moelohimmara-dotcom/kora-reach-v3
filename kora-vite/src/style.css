@@ -1897,3 +1897,16 @@ html.icons-ready .material-icons { visibility: visible; }
 .status-chip.ready .dot { width: 8px; height: 8px; border-radius: 50%; background: #4CAF50; display: inline-block; }
 
 
+
+/* ============================================================
+   STYLE GUIDE (/style-guide) — page vivante du design system (B.1)
+   ============================================================ */
+.sg-page { padding: 16px; }
+.sg-page h2.section-title { margin-top: 28px; }
+.sg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.sg-token { display: flex; align-items: center; gap: 12px; padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.sg-swatch { width: 44px; height: 44px; border-radius: 8px; border: 1px solid var(--border); flex: 0 0 auto; }
+.sg-token-meta code { font-size: 13px; color: var(--text-primary); }
+.sg-type > div { margin: 6px 0; }
+.sg-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.sg-kpi { max-width: 260px; }
