@@ -22,6 +22,7 @@ from email.mime.text import MIMEText
 from datetime import datetime, timedelta
 
 import db
+import totp as _totp
 
 RESET_TTL_MIN = int(os.environ.get("KORA_RESET_TTL_MIN", "30"))
 SESSION_TTL_H = int(os.environ.get("KORA_SESSION_TTL_H", "24"))
@@ -45,6 +46,46 @@ def rate_ok(ip, kind):
         hits.append((now, kind))
         _rl_hits[ip] = hits
         return True
+
+
+# ----------------------------------------------------------------------------
+# 2FA (9.3) — jetons MFA en attente : mot de passe déjà validé, code TOTP
+# encore requis avant de créer une VRAIE session. En mémoire (mono-process,
+# même pattern que le rate-limiter ci-dessus) : c'est un état éphémère de
+# quelques minutes, pas une donnée à persister.
+# ----------------------------------------------------------------------------
+MFA_TOKEN_TTL_S = int(os.environ.get("KORA_MFA_TTL_S", "300"))  # 5 min
+MFA_MAX_ATTEMPTS = 8  # code à 6 chiffres : borne les essais par jeton (anti-bruteforce)
+_mfa_lock = threading.Lock()
+_mfa_pending = {}  # mfa_token -> {"user_id":..., "expires_at": epoch, "attempts": int}
+
+
+def _mfa_create_pending(user_id):
+    tok = secrets.token_urlsafe(32)
+    with _mfa_lock:
+        _mfa_pending[tok] = {"user_id": user_id, "expires_at": datetime.now().timestamp() + MFA_TOKEN_TTL_S, "attempts": 0}
+    return tok
+
+
+def _mfa_check_and_consume(token):
+    """Retourne le user_id du jeton s'il est encore valide et n'a pas dépassé
+    son quota d'essais, SANS le supprimer — seul un succès (côté appelant)
+    ou l'épuisement des essais le supprime. Un code faux ne force donc pas à
+    ressaisir le mot de passe pour une simple faute de frappe."""
+    with _mfa_lock:
+        entry = _mfa_pending.get(token)
+        if not entry:
+            return None
+        if entry["expires_at"] < datetime.now().timestamp() or entry["attempts"] >= MFA_MAX_ATTEMPTS:
+            _mfa_pending.pop(token, None)
+            return None
+        entry["attempts"] += 1
+        return entry["user_id"]
+
+
+def _mfa_finalize(token):
+    with _mfa_lock:
+        _mfa_pending.pop(token, None)
 
 
 # Audit des événements d'auth (fichier dédié, fail-open : n'échoue jamais l'action)
@@ -202,6 +243,19 @@ def init():
             con.commit()
         except Exception:
             con.rollback()  # colonne déjà présente
+        # 2FA (9.3) : secret TOTP + statut activé + codes de secours (JSON,
+        # HASHÉS individuellement — jamais en clair, cf. totp.hash_backup_code).
+        # totp_secret peut exister sans totp_enabled=1 : le secret est généré
+        # dès le début du flux de configuration, mais n'active RIEN tant que
+        # l'utilisateur n'a pas prouvé qu'il l'a bien enregistré (saisie d'un
+        # code valide) — évite un verrouillage si l'appli d'auth n'a pas reçu
+        # le bon secret.
+        for col, ctype in (("totp_secret", "TEXT"), ("totp_enabled", "INTEGER DEFAULT 0"), ("totp_backup_codes", "TEXT")):
+            try:
+                cur.execute(f"ALTER TABLE kora_users ADD COLUMN {col} {ctype}")
+                con.commit()
+            except Exception:
+                con.rollback()  # colonne déjà présente
         # S'assure que l'admin défini dans .env est bien 'advanced' (même s'il pré-existait)
         admin_user = os.environ.get("ADMIN_USER", "admin").strip()
         ph = db.placeholder()
@@ -349,6 +403,21 @@ def delete_all_sessions_for_user(user_id):
 # ----------------------------------------------------------------------------
 # Auth actions
 # ----------------------------------------------------------------------------
+def _row_get(row, key, default=None):
+    """Accès par nom de colonne robuste aux deux backends. isinstance(row, dict)
+    est FAUX pour sqlite3.Row (un type distinct, ni dict ni tuple) alors qu'il
+    supporte pourtant l'accès par clé — c'est exactement le bug déjà corrigé
+    dans hitl_store.py cette session (5 occurrences). hasattr(row, "keys")
+    est vrai pour sqlite3.Row ET pour un vrai dict (RealDictCursor Postgres),
+    contrairement à isinstance(row, dict)."""
+    try:
+        if hasattr(row, "keys") and key in row.keys():
+            return row[key]
+    except Exception:
+        pass
+    return default
+
+
 def login(username, password, ip=None):
     # Rate-limit par IP (5 / 10 min)
     if ip and not rate_ok(ip, "login"):
@@ -360,8 +429,139 @@ def login(username, password, ip=None):
     if not _verify_password(password, stored_hash):
         return {"ok": False, "error": "invalid_credentials"}
     uid = u["id"] if isinstance(u, dict) else u[0]
+    # 2FA (9.3) : mot de passe validé, mais si l'utilisateur a activé la double
+    # authentification, PAS de session tout de suite — un jeton temporaire
+    # (5 min) qui ne prouve que "mot de passe correct", le code TOTP restant
+    # à vérifier séparément (voir verify_login_totp) avant toute vraie session.
+    if _row_get(u, "totp_enabled"):
+        mfa_token = _mfa_create_pending(uid)
+        return {"ok": True, "mfa_required": True, "mfa_token": mfa_token}
     sid = create_session(uid)
     return {"ok": True, "session_id": sid}
+
+
+def verify_login_totp(mfa_token, code):
+    uid = _mfa_check_and_consume(mfa_token)
+    if not uid:
+        return {"ok": False, "error": "mfa_expired"}
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        ph = db.placeholder()
+        cur.execute(f"SELECT totp_secret, totp_backup_codes FROM kora_users WHERE id={ph}", (uid,))
+        row = cur.fetchone()
+    finally:
+        con.close()
+    if not row:
+        return {"ok": False, "error": "no_user"}
+    secret = _row_get(row, "totp_secret")
+    if secret and _totp.verify(secret, code):
+        _mfa_finalize(mfa_token)
+        return {"ok": True, "session_id": create_session(uid), "username": username_by_id(uid)}
+    # Repli : un code de secours à usage unique (téléphone perdu/cassé).
+    backup_raw = _row_get(row, "totp_backup_codes")
+    backup_codes = json.loads(backup_raw) if backup_raw else []
+    code_clean = str(code or "").strip().upper()
+    for i, hashed in enumerate(backup_codes):
+        if _totp.verify_backup_code(code_clean, hashed):
+            backup_codes.pop(i)  # usage unique : consommé même en cas de succès
+            con, _ = db.conn()
+            try:
+                cur = con.cursor()
+                ph = db.placeholder()
+                cur.execute(f"UPDATE kora_users SET totp_backup_codes={ph} WHERE id={ph}", (json.dumps(backup_codes), uid))
+                con.commit()
+            finally:
+                con.close()
+            _mfa_finalize(mfa_token)
+            log_auth_event("mfa_backup_code_used", username_by_id(uid) or uid)
+            return {"ok": True, "session_id": create_session(uid), "username": username_by_id(uid), "backup_code_used": True, "backup_codes_left": len(backup_codes)}
+    return {"ok": False, "error": "invalid_code"}
+
+
+def totp_setup_init(user_id):
+    """Démarre (ou redémarre) la configuration 2FA : génère un NOUVEAU secret,
+    le stocke SANS activer (totp_enabled reste 0 tant que confirm() n'a pas
+    prouvé que l'appli d'auth a bien le bon secret)."""
+    secret = _totp.random_base32_secret()
+    ph = db.placeholder()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(f"UPDATE kora_users SET totp_secret={ph}, totp_enabled=0 WHERE id={ph}", (secret, user_id))
+        con.commit()
+    finally:
+        con.close()
+    uname = username_by_id(user_id) or "compte"
+    return {"ok": True, "secret": secret, "otpauth_uri": _totp.provisioning_uri(secret, uname)}
+
+
+def totp_setup_confirm(user_id, code):
+    """Vérifie le code saisi contre le secret en attente ; si valide, ACTIVE
+    la 2FA et génère les codes de secours (affichés une seule fois — seule
+    leur empreinte est conservée)."""
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        ph = db.placeholder()
+        cur.execute(f"SELECT totp_secret FROM kora_users WHERE id={ph}", (user_id,))
+        row = cur.fetchone()
+    finally:
+        con.close()
+    secret = _row_get(row, "totp_secret") if row else None
+    if not secret:
+        return {"ok": False, "error": "no_pending_setup"}
+    if not _totp.verify(secret, code):
+        return {"ok": False, "error": "invalid_code"}
+    backup_codes = _totp.generate_backup_codes()
+    hashed = [_totp.hash_backup_code(c) for c in backup_codes]
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        ph = db.placeholder()
+        cur.execute(f"UPDATE kora_users SET totp_enabled=1, totp_backup_codes={ph} WHERE id={ph}", (json.dumps(hashed), user_id))
+        con.commit()
+    finally:
+        con.close()
+    log_auth_event("mfa_enabled", username_by_id(user_id) or user_id)
+    return {"ok": True, "backup_codes": backup_codes}
+
+
+def totp_disable(user_id, password):
+    """Désactive la 2FA — exige le mot de passe (zone sensible : ne pas
+    laisser un poste déverrouillé désactiver la 2FA d'un simple clic)."""
+    u = _get_user_by_username(username_by_id(user_id))
+    if not u:
+        return {"ok": False, "error": "no_user"}
+    stored_hash = u["password_hash"] if isinstance(u, dict) else u[2]
+    if not _verify_password(password, stored_hash):
+        return {"ok": False, "error": "wrong_password"}
+    ph = db.placeholder()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(f"UPDATE kora_users SET totp_enabled=0, totp_secret=NULL, totp_backup_codes=NULL WHERE id={ph}", (user_id,))
+        con.commit()
+    finally:
+        con.close()
+    log_auth_event("mfa_disabled", username_by_id(user_id) or user_id)
+    return {"ok": True}
+
+
+def totp_status(user_id):
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        ph = db.placeholder()
+        cur.execute(f"SELECT totp_enabled, totp_backup_codes FROM kora_users WHERE id={ph}", (user_id,))
+        row = cur.fetchone()
+    finally:
+        con.close()
+    if not row:
+        return {"enabled": False, "backup_codes_left": 0}
+    backup_raw = _row_get(row, "totp_backup_codes")
+    left = len(json.loads(backup_raw)) if backup_raw else 0
+    return {"enabled": bool(_row_get(row, "totp_enabled")), "backup_codes_left": left}
 
 
 def change_password(user_id, current, new):
