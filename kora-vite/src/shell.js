@@ -7,7 +7,7 @@ export const SHELL = `
       <div class="brand">
         <span class="brand-mark">${ic("i-spark")}</span>
         <span class="brand-name">KORA</span>
-        <span class="brand-sub">Agent</span>
+        <span class="brand-sub">Veille Guinée</span>
       </div>
     </div>
     <div class="topbar-right">
@@ -76,12 +76,17 @@ export const SHELL = `
        Correctifs de la revue conservés (indépendants du choix A/D) :
        - "Sources" masqué pour un rôle non-advanced (data-role, cf. app.js).
        - "Style Guide" retiré du rail (déplacé dans Paramètres > Avancés).
-       - Widget "à décider" = vrai <button> cliquable. -->
+       - Widget "à décider" = vrai <button> cliquable.
+       Marque KORA retirée du rail (critique design) : elle vivait en double
+       ici ET dans le topbar ("KORA Agent" / "KORA Veille Guinée" — deux
+       intitulés différents pour la même marque, affichés à ~9px d'écart).
+       Le topbar est désormais la SEULE ancre de marque, à tous les breakpoints
+       — voir .topbar-left ci-dessus. Le rail-head se réduit au bouton
+       replier/déplier, qui n'était plus qu'un sliver de 19px de large,
+       écrasé par le texte de marque dans le même conteneur flex. -->
   <nav class="rail" id="rail" aria-label="Navigation principale">
     <div class="rail-head">
-      <span class="rail-mark">K</span>
-      <div class="rail-word"><b>KORA</b><span class="rail-word-sub">Veille Guinée</span></div>
-      <button class="rail-toggle" id="railToggle" title="Réduire/Agrandir la barre" aria-label="Réduire la barre">${ic("i-chevron")}</button>
+      <button class="rail-toggle" id="railToggle" title="Réduire la barre" aria-label="Réduire la barre">${ic("i-chevron-left")}</button>
     </div>
 
     <div class="rail-group">Pilotage</div>
