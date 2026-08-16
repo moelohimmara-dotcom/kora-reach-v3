@@ -208,6 +208,13 @@ class Handler(BaseHTTPRequestHandler):
                                         "role": u["role"] if isinstance(u, dict) else (u[5] if len(u) > 5 else "normal"),
                                         "avatar_data": u.get("avatar_data") if isinstance(u, dict) else None})
             return self._send(401, {"error": "unauthorized"})
+        if path == "/api/auth/2fa/status":
+            if not self._require_auth():
+                return
+            sid = auth.read_cookie_sid(self.headers)
+            user = auth.get_session_user(sid)
+            uid = user["id"] if isinstance(user, dict) else user[0]
+            return self._send(200, auth.totp_status(uid))
         if path == "/api/auth/users":
             if not self._require_role("advanced"):
                 return
@@ -310,7 +317,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             payload = {}
         # Routes publiques (aucune session requise) : login, forgot, reset
-        PUBLIC_POST = {"/api/auth/login", "/api/auth/forgot", "/api/auth/reset"}
+        PUBLIC_POST = {"/api/auth/login", "/api/auth/forgot", "/api/auth/reset", "/api/auth/login/verify-2fa"}
         if p.path not in PUBLIC_POST and not self._require_auth():
             return
         if p.path == "/api/cycle":
@@ -492,6 +499,11 @@ class Handler(BaseHTTPRequestHandler):
             u = payload.get("username", "").strip()
             pw = payload.get("password", "")
             r = auth.login(u, pw, self.client_address[0])
+            if r.get("mfa_required"):
+                # 2FA (9.3) : mot de passe correct, mais PAS de cookie de session
+                # tant que le code TOTP n'est pas vérifié (voir /login/verify-2fa).
+                auth.log_auth_event("login_mfa_required", u, self.client_address[0])
+                return self._send(200, {"ok": True, "mfa_required": True, "mfa_token": r["mfa_token"]})
             if r.get("ok"):
                 auth.log_auth_event("login_success", u, self.client_address[0])
                 self.send_response(200)
@@ -505,6 +517,24 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 auth.log_auth_event("login_failure", u, self.client_address[0])
                 self._send(401, {"error": "invalid_credentials"})
+            return
+        if p.path == "/api/auth/login/verify-2fa":
+            mfa_token = payload.get("mfa_token", "")
+            code = payload.get("code", "")
+            r = auth.verify_login_totp(mfa_token, code)
+            if r.get("ok"):
+                auth.log_auth_event("login_success_2fa", r.get("username") or "?", self.client_address[0])
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Set-Cookie", auth.cookie_value(r["session_id"]))
+                self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
+                self.send_header("Access-Control-Allow-Credentials", "true")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": True, "username": r.get("username"), "backup_code_used": r.get("backup_code_used", False), "backup_codes_left": r.get("backup_codes_left")}, ensure_ascii=False).encode("utf-8"))
+            else:
+                auth.log_auth_event("login_failure_2fa", "?", self.client_address[0])
+                self._send(401, {"error": r.get("error", "invalid_code")})
             return
         if p.path == "/api/auth/logout":
             if not self._require_auth():
@@ -542,6 +572,44 @@ class Handler(BaseHTTPRequestHandler):
             r = auth.change_password(uid, payload.get("current", ""), payload.get("new", ""))
             if r.get("ok"):
                 auth.log_auth_event("password_changed", uname, self.client_address[0])
+            self._send(200 if r.get("ok") else 400, r)
+            return
+        if p.path == "/api/auth/2fa/setup":
+            # 9.3 — démarre la configuration : génère un secret (pas encore actif).
+            if not self._require_auth():
+                return
+            sid = auth.read_cookie_sid(self.headers)
+            user = auth.get_session_user(sid)
+            if not user:
+                self._send(401, {"error": "unauthorized"})
+                return
+            uid = user["id"] if isinstance(user, dict) else user[0]
+            r = auth.totp_setup_init(uid)
+            self._send(200, r)
+            return
+        if p.path == "/api/auth/2fa/confirm":
+            if not self._require_auth():
+                return
+            sid = auth.read_cookie_sid(self.headers)
+            user = auth.get_session_user(sid)
+            if not user:
+                self._send(401, {"error": "unauthorized"})
+                return
+            uid = user["id"] if isinstance(user, dict) else user[0]
+            uname = user["username"] if isinstance(user, dict) else user[1]
+            r = auth.totp_setup_confirm(uid, payload.get("code", ""))
+            self._send(200 if r.get("ok") else 400, r)
+            return
+        if p.path == "/api/auth/2fa/disable":
+            if not self._require_auth():
+                return
+            sid = auth.read_cookie_sid(self.headers)
+            user = auth.get_session_user(sid)
+            if not user:
+                self._send(401, {"error": "unauthorized"})
+                return
+            uid = user["id"] if isinstance(user, dict) else user[0]
+            r = auth.totp_disable(uid, payload.get("password", ""))
             self._send(200 if r.get("ok") else 400, r)
             return
         if p.path == "/api/auth/avatar":

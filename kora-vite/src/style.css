@@ -2048,3 +2048,22 @@ html.icons-ready .material-icons { visibility: visible; }
 
 .toggle-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-primary); cursor: pointer; }
 .toggle-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--coral); cursor: pointer; }
+
+/* 2FA (9.3) : clé TOTP à saisir manuellement dans l'appli d'authentification
+   (cliquable pour copier) et grille des codes de secours affichés une seule
+   fois — même famille visuelle que le reste des cartes de Paramètres. */
+.totp-secret {
+  font-family: var(--mono, monospace); font-size: 15px; letter-spacing: 1.5px; text-align: center;
+  padding: 12px 14px; border-radius: var(--radius-md); background: var(--surface-raised, var(--glass-bg-strong));
+  border: 1px dashed var(--border, var(--glass-border-strong)); cursor: pointer; user-select: all;
+  transition: border-color var(--dur-fast) var(--ease);
+}
+.totp-secret:hover { border-color: var(--coral); }
+.backup-codes-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+  font-family: var(--mono, monospace); font-size: 13px;
+}
+.backup-codes-grid code {
+  display: block; text-align: center; padding: 8px 6px; border-radius: var(--radius-sm);
+  background: var(--surface-raised, var(--glass-bg-strong)); letter-spacing: 1px;
+}
