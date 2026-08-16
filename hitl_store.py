@@ -67,6 +67,22 @@ def _init():
                 article TEXT, image TEXT, image_meta TEXT, gen_model TEXT,
                 n_sources INTEGER DEFAULT 1, status TEXT DEFAULT 'PENDING_REVIEW',
                 created_at TEXT, cycle_id TEXT)""")
+            # Table `articles` : en prod PostgreSQL elle est créée par le pipeline
+            # WordPress (schéma complet, colonnes wp_* comprises), donc on NE la crée
+            # PAS ici en postgres (un schéma minimal masquerait un défaut de setup).
+            # En SQLite (dev local) personne ne la crée -> les requêtes de stats
+            # (count_published / get_dashboard_stats : SELECT count(*) FROM articles
+            # WHERE status='published') échouaient en 500. On la crée donc en SQLite,
+            # alignée sur les colonnes réellement écrites par transmit._to_postgres.
+            cur.execute("""CREATE TABLE IF NOT EXISTS articles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fact_id TEXT,
+                titre TEXT, chapeau TEXT, corps TEXT,
+                meta_description TEXT, mots_cles TEXT,
+                source_url TEXT, source_nom TEXT, source_level INTEGER,
+                image_url TEXT, llm_model_used TEXT,
+                status TEXT DEFAULT 'PENDING_REVIEW', origin TEXT,
+                created_at TEXT DEFAULT (datetime('now')))""")
             con.commit()
     finally:
         con.close()
@@ -557,8 +573,8 @@ def count_published() -> int:
         row = cur.fetchone()
         if row is None:
             return 0
-        # sqlite -> tuple ; psycopg (RealDictCursor) -> dict
-        val = row[0] if not isinstance(row, dict) else list(row.values())[0]
+        # sqlite -> sqlite3.Row (indexable) ; psycopg (RealDictCursor) -> dict
+        val = list(row.values())[0] if isinstance(row, dict) else row[0]
         return int(val or 0)
     finally:
         con.close()
@@ -580,7 +596,7 @@ def count_rejected() -> int:
         row = cur.fetchone()
         if row is None:
             return 0
-        val = row[0] if not isinstance(row, dict) else list(row.values())[0]
+        val = list(row.values())[0] if isinstance(row, dict) else row[0]
         return int(val or 0)
     finally:
         con.close()
@@ -598,7 +614,7 @@ def count_deleted() -> int:
         row = cur.fetchone()
         if row is None:
             return 0
-        val = row[0] if not isinstance(row, dict) else list(row.values())[0]
+        val = list(row.values())[0] if isinstance(row, dict) else row[0]
         return int(val or 0)
     finally:
         con.close()
@@ -636,13 +652,13 @@ def get_dashboard_stats() -> dict:
         # 3) Publies (table articles)
         cur.execute("SELECT count(*) FROM articles WHERE status = 'published'")
         row = cur.fetchone()
-        published = int((row[0] if not isinstance(row, dict) else list(row.values())[0]) or 0)
+        published = int((list(row.values())[0] if isinstance(row, dict) else row[0]) or 0)
         # 4) Rejetes — on delegate a count_rejected() (definition unique / SSOT)
         rejected = count_rejected()
         # 5) Supprimes (audit)
         cur.execute("SELECT count(*) FROM audit_events WHERE action IN ('SUPPRIME', 'PURGE')")
         row = cur.fetchone()
-        deleted = int((row[0] if not isinstance(row, dict) else list(row.values())[0]) or 0)
+        deleted = int((list(row.values())[0] if isinstance(row, dict) else row[0]) or 0)
         return {
             "total_facts": total_facts,        # tous les faits (sidebar)
             "articles": in_circulation,        # dashboard "Articles" (en circulation)
