@@ -27,30 +27,16 @@
   --md-sys-color-on-primary: #2A1206;
   --md-sys-color-primary-container: rgba(242,169,140,0.14);
   --md-sys-color-on-primary-container: #F8DCCB;
-  --md-sys-color-primary-fixed: rgba(242,169,140,0.20);
-  --md-sys-color-primary-fixed-dim: rgba(242,169,140,0.12);
-  --md-sys-color-on-primary-fixed: #2A1206;
-  --md-sys-color-on-primary-fixed-variant: #5E2A18;
 
   /* Secondary */
   --md-sys-color-secondary: var(--bordeaux);
-  --md-sys-color-on-secondary: #2A0E0C;
   --md-sys-color-secondary-container: rgba(224,138,132,0.16);
   --md-sys-color-on-secondary-container: #F6D6D2;
-  --md-sys-color-secondary-fixed: rgba(224,138,132,0.20);
-  --md-sys-color-secondary-fixed-dim: rgba(224,138,132,0.12);
-  --md-sys-color-on-secondary-fixed: #2A0E0C;
-  --md-sys-color-on-secondary-fixed-variant: #51211E;
 
   /* Tertiary */
   --md-sys-color-tertiary: var(--sauge);
-  --md-sys-color-on-tertiary: #08201A;
   --md-sys-color-tertiary-container: rgba(155,196,184,0.14);
   --md-sys-color-on-tertiary-container: #D6EBE4;
-  --md-sys-color-tertiary-fixed: rgba(155,196,184,0.20);
-  --md-sys-color-tertiary-fixed-dim: rgba(155,196,184,0.12);
-  --md-sys-color-on-tertiary-fixed: #08201A;
-  --md-sys-color-on-tertiary-fixed-variant: #173B34;
 
   /* Error */
   --md-sys-color-error: #F2A199;
@@ -59,8 +45,6 @@
   --md-sys-color-on-error-container: #FFDAD6;
 
   /* Warning (M3 extension) */
-  --md-sys-color-warning: var(--ambre);
-  --md-sys-color-on-warning: #2A1C00;
   --md-sys-color-warning-container: rgba(234,182,100,0.16);
   --md-sys-color-on-warning-container: #FFE9C2;
 
@@ -70,19 +54,14 @@
   --neu-dark: #0E1014;                                   /* ombre (bas-droite) */
   --md-sys-color-surface: var(--neu-base);
   --md-sys-color-on-surface: #E8EAED;
-  --md-sys-color-surface-dim: #16191F;
-  --md-sys-color-surface-bright: #262A33;
-  --md-sys-color-surface-container-low: var(--neu-base);
   --md-sys-color-surface-container: var(--neu-base);
   --md-sys-color-surface-container-high: var(--neu-light);
-  --md-sys-color-surface-container-highest: #2B303A;
   --md-sys-color-on-surface-variant: #A9B0BC;
   --md-sys-color-surface-variant: var(--neu-base);
   --on-surface-soft: #C5CAD3;
 
   /* Outline */
   --md-sys-color-outline: rgba(255,255,255,0.10);
-  --md-sys-color-outline-variant: rgba(255,255,255,0.05);
 
   /* ---- ICON COLOR MATRIX (réactivité chromatique des boutons-icônes par état) ---- */
   --icon-color: var(--md-sys-color-on-surface-variant);   /* repos */
@@ -92,9 +71,6 @@
   --icon-on-accent: var(--md-sys-color-on-primary);       /* sur fond coral */
 
   /* Inverse */
-  --md-sys-color-inverse-surface: #E8EAED;
-  --md-sys-color-inverse-on-surface: #16191F;
-  --md-sys-color-inverse-primary: #C2542F;
 
   /* Scrim */
   --md-sys-color-scrim: rgba(8,9,12,0.55);
@@ -268,47 +244,27 @@
   --md-sys-color-on-primary: #FFF7F2;
   --md-sys-color-primary-container: rgba(181,87,58,0.14);
   --md-sys-color-on-primary-container: #5E2A18;
-  --md-sys-color-primary-fixed: rgba(181,87,58,0.20);
-  --md-sys-color-primary-fixed-dim: rgba(181,87,58,0.12);
-  --md-sys-color-on-primary-fixed: #2A1206;
-  --md-sys-color-on-primary-fixed-variant: #5E2A18;
 
   --md-sys-color-secondary: #9E4A45;
-  --md-sys-color-on-secondary: #FFF7F2;
   --md-sys-color-secondary-container: rgba(158,74,69,0.13);
   --md-sys-color-on-secondary-container: #51211E;
-  --md-sys-color-secondary-fixed: rgba(158,74,69,0.20);
-  --md-sys-color-secondary-fixed-dim: rgba(158,74,69,0.12);
-  --md-sys-color-on-secondary-fixed: #2A0E0C;
-  --md-sys-color-on-secondary-fixed-variant: #51211E;
 
   --md-sys-color-tertiary: #2F6F63;
-  --md-sys-color-on-tertiary: #F2FBF8;
   --md-sys-color-tertiary-container: rgba(47,111,99,0.13);
   --md-sys-color-on-tertiary-container: #173B34;
-  --md-sys-color-tertiary-fixed: rgba(47,111,99,0.20);
-  --md-sys-color-tertiary-fixed-dim: rgba(47,111,99,0.12);
-  --md-sys-color-on-tertiary-fixed: #08201A;
-  --md-sys-color-on-tertiary-fixed-variant: #173B34;
 
   --md-sys-color-error: #B23A30;
   --md-sys-color-on-error: #FFF7F2;
   --md-sys-color-error-container: rgba(178,58,48,0.12);
   --md-sys-color-on-error-container: #5E1B14;
 
-  --md-sys-color-warning: #8A5A12;
-  --md-sys-color-on-warning: #FFF7F2;
   --md-sys-color-warning-container: #FCE3B8;
   --md-sys-color-on-warning-container: #4A3005;
 
   --md-sys-color-surface: #F4F1EC;
   --md-sys-color-on-surface: #2A201B;
-  --md-sys-color-surface-dim: #ECE7DF;
-  --md-sys-color-surface-bright: #FDF8F5;
-  --md-sys-color-surface-container-low: rgba(40,28,22,0.02);
   --md-sys-color-surface-container: rgba(40,28,22,0.04);
   --md-sys-color-surface-container-high: rgba(40,28,22,0.07);
-  --md-sys-color-surface-container-highest: rgba(40,28,22,0.10);
   --md-sys-color-on-surface-variant: #6B5C52;
   --md-sys-color-surface-variant: rgba(40,28,22,0.05);
   --on-surface-soft: #4A3E36;
@@ -319,11 +275,7 @@
   --icon-color-hover: #2A2E35;
 
   --md-sys-color-outline: rgba(40,28,22,0.16);
-  --md-sys-color-outline-variant: rgba(40,28,22,0.10);
 
-  --md-sys-color-inverse-surface: #2A201B;
-  --md-sys-color-inverse-on-surface: #F4F1EC;
-  --md-sys-color-inverse-primary: #F2A98C;
 
   --md-sys-color-scrim: rgba(40,28,22,0.38);
   /* ---- NEUMORPHISM LIGHT (pastel clair) ---- */
@@ -332,21 +284,13 @@
   --neu-dark: #B8BEC8;
   --md-sys-color-surface: var(--neu-base);
   --md-sys-color-on-surface: #2A2E35;
-  --md-sys-color-surface-dim: #D3D9E0;
-  --md-sys-color-surface-bright: #F2F5F9;
-  --md-sys-color-surface-container-low: var(--neu-base);
   --md-sys-color-surface-container: var(--neu-base);
   --md-sys-color-surface-container-high: var(--neu-light);
-  --md-sys-color-surface-container-highest: #F4F7FB;
   --md-sys-color-on-surface-variant: #5A626E;
   --md-sys-color-surface-variant: var(--neu-base);
   --on-surface-soft: #424A56;
 
   --md-sys-color-outline: rgba(42,46,53,0.10);
-  --md-sys-color-outline-variant: rgba(42,46,53,0.05);
-  --md-sys-color-inverse-surface: #2A2E35;
-  --md-sys-color-inverse-on-surface: #E0E5EC;
-  --md-sys-color-inverse-primary: #FF6B4A;
   --md-sys-color-scrim: rgba(120,128,140,0.40);
   --sheet-action-bg: var(--neu-base);
 
@@ -386,12 +330,8 @@
   --neu-dark: #120A06;
   --md-sys-color-surface: var(--neu-base);
   --md-sys-color-on-surface: #F4E9DF;
-  --md-sys-color-surface-dim: #1A1009;
-  --md-sys-color-surface-bright: #3A2418;
-  --md-sys-color-surface-container-low: var(--neu-base);
   --md-sys-color-surface-container: var(--neu-base);
   --md-sys-color-surface-container-high: var(--neu-light);
-  --md-sys-color-surface-container-highest: #4A3020;
   --md-sys-color-on-surface-variant: #C9B5A6;
   --md-sys-color-surface-variant: var(--neu-base);
   --on-surface-soft: #DEC9B9;
@@ -401,10 +341,6 @@
   --icon-color-hover: #F4E9DF;
 
   --md-sys-color-outline: rgba(255,236,220,0.10);
-  --md-sys-color-outline-variant: rgba(255,236,220,0.05);
-  --md-sys-color-inverse-surface: #F4E9DF;
-  --md-sys-color-inverse-on-surface: #241712;
-  --md-sys-color-inverse-primary: #FF6B4A;
   --md-sys-color-scrim: rgba(20,10,6,0.55);
   --sheet-action-bg: var(--neu-base);
 

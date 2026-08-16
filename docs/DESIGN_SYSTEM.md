@@ -51,9 +51,15 @@ Un déploiement ayant stocké son propre `accent_coral` en base garde le sien (w
 **Règle** : tout est en token sémantique (shadcn principe #4). Pas de `bg-blue-500` ni hex en dur.
 
 > **⚠️ Couche Material Design 3 dépréciée.** `style.css` porte une couche parallèle de tokens
-> `--md-sys-color-*` (héritage), dont ~24 sont **morts** (variantes `-fixed`, `-fixed-dim`,
-> `inverse-*` non consommées). Elle est **en cours de retrait** : ne pas l'étendre, ne pas y
-> brancher de nouveau composant. Les composants KORA consomment la couche sémantique ci-dessus.
+> `--md-sys-color-*` (héritage). Les **24 tokens morts** (`-fixed`, `-fixed-dim`, `inverse-*`,
+> `on-*` non consommés) ont été **retirés** (Lot 5b, 2026-08-16 : 64 lignes de définition
+> supprimées, 24 tokens vivants conservés). Cette couche reste **en cours de retrait** : ne pas
+> l'étendre, ne pas y brancher de nouveau composant. Les composants KORA consomment la couche
+> sémantique ci-dessus.
+>
+> *Dette connue (hors B.1)* : `.auth-screen` (L~1570) référence `var(--md-sys-color-background)`,
+> un token **jamais défini** (dangling préexistant, sans fallback → fond transparent qui retombe
+> sur `--bg`). À rebrancher sur `--bg` lors d'un passage sur l'écran de login.
 
 ## 2. Typographie
 
