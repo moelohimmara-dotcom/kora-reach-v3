@@ -1877,7 +1877,6 @@ function render() {
   // Badges de compteur sur la navigation (Articles / Sources / Brouillons / Corbeille)
   try {
     const facts = s.facts || [];
-    let pending = 0; for (const ft of facts) if (factCategory(s, ft) === "pending") pending++;
     // SSOT : badges de navigation tires de s.stats (calcules une seule fois par le backend)
     const stats = s.stats || {};
     const badges = {
@@ -1891,11 +1890,6 @@ function render() {
       const v = badges[key] || 0;
       el.textContent = v > 0 ? String(v) : "";
       el.classList.toggle("show", v > 0);
-    });
-    // Bandeau de décision (rail desktop) — nombre à décider
-    document.querySelectorAll("[data-decision]").forEach(el => {
-      const key = el.getAttribute("data-decision");
-      el.textContent = String((key === "pending" ? pending : (badges[key] || 0)));
     });
   } catch (e) { console.error("badges", e); }
   const curTheme = Store.getTheme();
@@ -2445,11 +2439,9 @@ function bind() {
   // Clic sur le scrim = ferme le drawer mobile (corrige l'impossibilité de refermer)
   const rsc = document.getElementById("railScrim");
   if (rsc) rsc.onclick = closeRailDrawer;
-  // Widget "à décider" (bas du rail) : rendu cliquable (piste D) — avant, il
-  // avait l'apparence d'un CTA (dégradé, pouls animé) mais aucun handler
-  // n'était attaché (constaté en revue). Renvoie vers Articles filtré "En attente".
-  const df = document.getElementById("decisionFoot");
-  if (df) df.onclick = () => { navigate("facts"); Store.setFactFilter("pending"); };
+  // Widget "à décider" du rail retiré (redondant avec la carte KPI "À décider"
+  // du Cockpit, qui fait déjà la même chose et est déjà enseignée dans le
+  // tour guidé — cf. shell.js).
 
   // =========================================================
   // RIGHT DRAWER OVERLAY — Desktop/Tablet (≥820px) : "Plus" menu

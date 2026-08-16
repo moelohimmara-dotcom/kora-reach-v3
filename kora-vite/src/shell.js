@@ -102,11 +102,6 @@ export const SHELL = `
     <button class="item" data-route="sources" data-role="advanced"><span class="ico">${ic("i-sources")}</span><span class="lbl">Sources</span><span class="ct" data-badge="sources"></span></button>
     <button class="item" data-route="settings"><span class="ico">${ic("i-settings")}</span><span class="lbl">Paramètres</span></button>
 
-    <div class="rail-spacer"></div>
-    <button class="decision-foot" id="decisionFoot" type="button" aria-live="polite" title="Voir les articles en attente">
-      <span class="decision-pulse" aria-hidden="true"></span>
-      <div class="decision-meta"><span class="decision-n" data-decision="pending">0</span><span class="decision-l">à décider</span></div>
-    </button>
   </nav>
 
   <!-- RIGHT DRAWER OVERLAY — Desktop/Tablet (≥820px) : "Plus" menu -->
