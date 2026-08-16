@@ -41,6 +41,14 @@ export const SHELL = `
     <button class="error-banner-close" id="errorBannerClose" aria-label="Fermer">${ic("i-close")}</button>
   </div>
 
+  <!-- Bandeau "vous semblez perdu" (wireframe 11.3) — après inactivité, une fois par session -->
+  <div class="idle-banner" id="idleBanner" hidden>
+    ${ic("i-help")}
+    <span>Besoin d'aide pour te repérer ?</span>
+    <button class="btn btn-tonal btn-sm" id="idleBannerRelaunch">Relancer le guide</button>
+    <button class="idle-banner-close" id="idleBannerClose" aria-label="Fermer">${ic("i-close")}</button>
+  </div>
+
   <!-- LEFT DRAWER — Mobile (≤819px) : hamburger → 248px slide-in -->
   <nav class="left-drawer" id="leftDrawer" hidden>
     <div class="left-drawer-header">

@@ -363,6 +363,22 @@ export const Store = (() => {
   // re-render complet à chaque snack(), qui referme tout tiroir ouvert
   // ailleurs dans l'app (bug constaté : sauvegarde d'avatar refermant le
   // panneau Paramètres > Compte qu'elle venait elle-même de rouvrir).
+  // ---- Guide utilisateur / onboarding contextuel (11.1-11.3) ----
+  // Préférence client-only (localStorage), même convention que kora-theme /
+  // kora-rail-mode — pas de backend, c'est un réglage de confort d'affichage.
+  function getGuidesEnabled() {
+    try { const v = localStorage.getItem("kora-guides-enabled"); return v === null ? true : v === "1"; }
+    catch (e) { return true; }
+  }
+  function setGuidesEnabled(on) {
+    try { localStorage.setItem("kora-guides-enabled", on ? "1" : "0"); } catch (e) {}
+  }
+  function hasSeenTour() {
+    try { return localStorage.getItem("kora-tour-seen") === "1"; } catch (e) { return false; }
+  }
+  function markTourSeen() {
+    try { localStorage.setItem("kora-tour-seen", "1"); } catch (e) {}
+  }
   function getFactFilter() { return state.ui.factFilter || "all"; }
   function setFactFilter(f) { setState({ ui: { ...state.ui, factFilter: f } }); }
   function wait(ms) { return new Promise((r) => setTimeout(r, ms)); }
@@ -636,6 +652,7 @@ export const Store = (() => {
     setSelectMode, toggleSelect, clearSelection, selectedIds,
     bulkAction, restoreFact, deleteForever, loadTrash, finishDraft,
     regenerate,
+    getGuidesEnabled, setGuidesEnabled, hasSeenTour, markTourSeen,
     // Cockpit
     loadAll, startAutoRefresh, stopAutoRefresh
   };
