@@ -1736,29 +1736,6 @@ html.icons-ready .material-icons { visibility: visible; }
 .item.active .ico { color: var(--icon-color-active); }
 .item.active .ct { background: var(--md-sys-color-primary-container); color: var(--icon-color-active); }
 
-.rail-spacer { flex: 1; min-height: 8px; }
-
-/* Bandeau de décision (SIGNATURE corail — seul élément plein). C'est un
-   <button> (rendu cliquable — il n'affichait avant qu'une apparence de CTA
-   sans handler, constaté en revue) : reset des styles UA de bouton
-   (couleur/police héritées par défaut, curseur explicite). */
-/* Fond en teinte corail douce (BUG CORRIGÉ, audit thèmes : le dégradé était
-   codé en rgba() fixes — deux nuances de rouge/corail qui n'existent dans
-   AUCUN thème, en plus d'être figées quel que soit le thème actif). Le
-   token M3 primary-container est déjà pensé pour ce rôle et varie par thème. */
-.decision-foot { margin-top: 10px; padding: 12px 14px; border-radius: 12px; display: flex; align-items: center; gap: 11px;
-  background: var(--md-sys-color-primary-container); border: 1px solid rgba(233,112,93,.28);
-  width: 100%; font: inherit; color: inherit; cursor: pointer; text-align: left;
-  transition: border-color var(--dur-fast) var(--ease); }
-.decision-foot:hover { border-color: rgba(233,112,93,.5); }
-.decision-foot:focus-visible { outline: 2px solid var(--coral); outline-offset: 2px; }
-.decision-pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--coral);
-  box-shadow: 0 0 0 0 rgba(233,112,93,.5); animation: koraPulseRail 2.4s ease-in-out infinite; flex: 0 0 auto; }
-@keyframes koraPulseRail { 0%,100% { box-shadow: 0 0 0 0 rgba(233,112,93,.5); } 50% { box-shadow: 0 0 0 7px rgba(233,112,93,0); } }
-.decision-meta { display: flex; flex-direction: column; line-height: 1.15; }
-.decision-n { font-family: var(--mono, monospace); font-size: 19px; font-weight: 500; color: var(--icon-color-active); font-variant-numeric: tabular-nums; }
-.decision-l { font-size: 11.5px; color: var(--on-surface-soft); margin-top: 2px; }
-
 /* LARGEUR DU RAIL — seule source de vérité (voir bloc @media 768px plus haut,
    dont les marges .view sont calculées sur ces mêmes valeurs 76px/260px).
    data-rail est toujours explicite dès 768px (store.js applyRailMode), donc
@@ -1767,12 +1744,10 @@ html.icons-ready .material-icons { visibility: visible; }
 :root[data-rail="expanded"] .rail { width: 260px; }
 :root[data-rail="collapsed"] .rail { width: 76px; }
 :root[data-rail="collapsed"] .rail-head { justify-content: center; padding: 0 0 8px; }
-:root[data-rail="collapsed"] .rail-group, :root[data-rail="collapsed"] .lbl, :root[data-rail="collapsed"] .ct,
-:root[data-rail="collapsed"] .decision-l { display: none; }
+:root[data-rail="collapsed"] .rail-group, :root[data-rail="collapsed"] .lbl, :root[data-rail="collapsed"] .ct { display: none; }
 :root[data-rail="collapsed"] .item { justify-content: center; padding: 10px 0; }
-:root[data-rail="collapsed"] .decision-foot { justify-content: center; padding: 12px 0; }
 
-@media (prefers-reduced-motion: reduce) { .decision-pulse { animation: none; } .rail { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .rail { transition: none; } }
 
 /* Bottom-nav : Brouillons/Corbeille visibles + active coral (cohérence rail) */
 .bottomnav .navitem { position: relative; }
