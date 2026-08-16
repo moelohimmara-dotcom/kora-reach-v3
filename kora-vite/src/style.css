@@ -1458,9 +1458,14 @@ html.icons-ready .material-icons { visibility: visible; }
 .force-mobile .stat-row { grid-template-columns: repeat(2, 1fr) !important; }
 .force-mobile .stat-card:last-child { grid-column: 1 / -1; }
 
-/* Cibles tactiles MD3 ≥48px sur smartphone (règle 8) */
+/* Cibles tactiles MD3 ≥48px sur smartphone (règle 8) — sur le CONTENEUR
+   cliquable (bouton/pastille), pas sur le glyphe SVG lui-même. Une ancienne
+   règle `.ic { width: 44px; height: 44px; }` ici confondait les deux et
+   faisait gonfler TOUTES les icônes de l'app à 44px sur mobile (ex. glyphes
+   des cartes KPI disproportionnés par rapport au chiffre/libellé). Les
+   boutons icône ont déjà leur propre taille de cible (.icon-btn = 44x44px
+   sur le bouton), donc rien ne dépendait de cette règle. */
 @media (max-width: 600px) {
-  .ic { width: 44px; height: 44px; }
   .btn-sm { min-height: 44px; padding: 11px 16px; }
   .filter-pill { min-height: 44px; padding: 11px 16px; }
   .bottomnav .navitem { min-height: 56px; padding: 8px 2px; }
