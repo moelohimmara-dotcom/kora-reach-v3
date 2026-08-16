@@ -1322,6 +1322,19 @@ html.icons-ready .material-icons { visibility: visible; }
   .fab { bottom: 30px; right: 30px; }
   .fab-menu { bottom: 104px; right: 30px; }
   .rail { position: fixed; left: 0; top: 64px; bottom: 0; z-index: 21; padding: var(--space-3) var(--space-2) var(--space-4); gap: 2px; display: flex; flex-direction: column; background: var(--md-sys-color-surface); border-right: 1px solid var(--glass-border-strong); box-shadow: var(--shadow-rail); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+  /* Marque du topbar (.topbar-left > .brand) masquée dès que le rail persistant
+     apparaît : le rail affiche déjà sa propre marque (.rail-head, K + KORA +
+     "Veille Guinée") en tête de la navigation. Sans ce masquage, l'identité
+     KORA s'affichait DEUX FOIS à l'écran (topbar ET rail) — oubli d'une
+     refonte antérieure du rail qui n'avait jamais retiré l'ancienne ancre de
+     marque pensée pour le mobile (seul contexte où le rail n'existe pas et
+     où .brand reste la seule identité visible). Repéré via l'inspecteur. */
+  .topbar-left { display: none; }
+  /* .topbar utilise justify-content:space-between (2 enfants) : masquer
+     .topbar-left laisse .topbar-right seul dans le flex, qui se recale alors
+     à GAUCHE (plus de second élément avec qui se répartir l'espace) — margin
+     auto le renvoie explicitement à droite, indépendamment du nombre d'enfants. */
+  .topbar-right { margin-left: auto; }
   .stat-row { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .fact-grid { grid-template-columns: repeat(2, 1fr); }
 }
