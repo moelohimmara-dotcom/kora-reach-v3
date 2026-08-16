@@ -74,7 +74,7 @@ def db_expected(e):
     by = {}
     for st, n in cur.fetchall():
         by[st] = int(n)
-    cur.execute("SELECT count(*) FROM articles WHERE status = 'published'")
+    cur.execute("SELECT count(*) FROM articles WHERE lower(status) = 'published'")
     published = int(cur.fetchone()[0])
     cur.execute(
         "SELECT count(*) FROM hitl_facts f "
