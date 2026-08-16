@@ -548,12 +548,15 @@ def purge_trashed(days: int = TRASH_RETENTION_DAYS) -> int:
 
 def count_published() -> int:
     """Compte les articles RÉELLEMENT publiés (table `articles`, status='published').
-    Sert à réconcilier le compteur 'Publiés' du dashboard avec la réalité."""
+    Sert à réconcilier le compteur 'Publiés' du dashboard avec la réalité.
+    Comparaison via lower(status) : l'agent écrit 'PENDING_REVIEW' (majuscules)
+    tandis que le passage à 'published' est fait par le pipeline WordPress, dont
+    la casse n'est pas garantie -> on normalise pour ne pas rater de publiés."""
     _init()
     con, _ = db.conn()
     try:
         cur = con.cursor()
-        cur.execute("SELECT count(*) FROM articles WHERE status = 'published'")
+        cur.execute("SELECT count(*) FROM articles WHERE lower(status) = 'published'")
         row = cur.fetchone()
         if row is None:
             return 0
@@ -634,7 +637,7 @@ def get_dashboard_stats() -> dict:
         # 2) Articles reellement en circulation (hors corbeille/rejetes) - Option C
         in_circulation = pending + transmitted + edited
         # 3) Publies (table articles)
-        cur.execute("SELECT count(*) FROM articles WHERE status = 'published'")
+        cur.execute("SELECT count(*) FROM articles WHERE lower(status) = 'published'")
         row = cur.fetchone()
         published = int((row[0] if isinstance(row, (tuple, list)) else list(row.values())[0]) or 0)
         # 4) Rejetes — on delegate a count_rejected() (definition unique / SSOT)
