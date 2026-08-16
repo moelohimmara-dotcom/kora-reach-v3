@@ -21,6 +21,58 @@ const _render = (s) => {
 };
 const mdToHtml = (s) => _render(s);
 const mdToHtmlInline = (s) => _render(s);
+
+// ============================================================================
+// ÉDITEUR ENRICHI (wireframe 4.4) — helpers de manipulation Markdown.
+// L'article reste stocké en Markdown (compatible backend/writer.py) ; la barre
+// d'outils insère/enlève la syntaxe Markdown autour de la sélection du
+// <textarea>, façon éditeur riche, sans dépendance externe.
+// ============================================================================
+function rteWrapSelection(ta, before, after = before) {
+  const { selectionStart: s, selectionEnd: e, value } = ta;
+  const selected = value.slice(s, e);
+  ta.value = value.slice(0, s) + before + selected + after + value.slice(e);
+  ta.selectionStart = s + before.length;
+  ta.selectionEnd = s + before.length + selected.length;
+  ta.focus();
+  ta.dispatchEvent(new Event("input", { bubbles: true }));
+}
+function rtePrefixLines(ta, prefix) {
+  const { selectionStart: s, selectionEnd: e, value } = ta;
+  // Étend la sélection aux débuts/fins de ligne complètes.
+  const lineStart = value.lastIndexOf("\n", s - 1) + 1;
+  let lineEnd = value.indexOf("\n", e);
+  if (lineEnd === -1) lineEnd = value.length;
+  const block = value.slice(lineStart, lineEnd);
+  const lines = block.split("\n").map(l => l.startsWith(prefix) ? l : prefix + l);
+  const newBlock = lines.join("\n");
+  ta.value = value.slice(0, lineStart) + newBlock + value.slice(lineEnd);
+  ta.selectionStart = lineStart;
+  ta.selectionEnd = lineStart + newBlock.length;
+  ta.focus();
+  ta.dispatchEvent(new Event("input", { bubbles: true }));
+}
+function rteHeading(ta, level) {
+  const { selectionStart: s, value } = ta;
+  const lineStart = value.lastIndexOf("\n", s - 1) + 1;
+  let lineEnd = value.indexOf("\n", s);
+  if (lineEnd === -1) lineEnd = value.length;
+  const line = value.slice(lineStart, lineEnd).replace(/^#{1,6}\s*/, "");
+  const prefix = level ? "#".repeat(level) + " " : "";
+  ta.value = value.slice(0, lineStart) + prefix + line + value.slice(lineEnd);
+  ta.focus();
+  ta.dispatchEvent(new Event("input", { bubbles: true }));
+}
+function rteLink(ta) {
+  const { selectionStart: s, selectionEnd: e, value } = ta;
+  const selected = value.slice(s, e) || "texte du lien";
+  const url = window.prompt("URL du lien :", "https://");
+  if (!url) return;
+  const md = `[${selected}](${url})`;
+  ta.value = value.slice(0, s) + md + value.slice(e);
+  ta.focus();
+  ta.dispatchEvent(new Event("input", { bubbles: true }));
+}
 // Icônes : on utilise le SPRITE SVG inline (injecté dans le <body> par le
 // build, voir postbuild.mjs + icons.js) plutôt que la police Material Icons.
 // Avantage : aucun flash de texte (ex: "visibility" sur l'œil du mot de passe)
@@ -1030,7 +1082,15 @@ function renderRejectConfirm(s) {
   if (firstBtn) firstBtn.focus();
 }
 
+// Vrai le temps que l'éditeur enrichi (4.4) est ouvert. Le mode édition n'est
+// que de la manipulation DOM directe (pas un état du Store) ; sans ce garde,
+// le poll périodique (store.js startAutoRefresh, toutes les 30s) redéclenche
+// un re-render complet qui écrase le panneau d'édition et FAIT PERDRE le
+// brouillon en cours de frappe. Voir le site d'appel gardé plus bas.
+let _editingActive = false;
+
 function renderSheet(s) {
+  _editingActive = false;
   const sh = s.sheet;
   const body = document.getElementById("sheetBody");
   const sheet = document.getElementById("sheet");
@@ -1120,26 +1180,75 @@ function renderSheet(s) {
           <div class="sheet-eyebrow">Correction avant validation</div>
           <h2 class="sheet-title">${esc(c.title)}</h2>
         </div>
+        <span class="rte-status" id="rteStatus">Brouillon local</span>
         <button class="sheet-close" data-close="1" title="Fermer" aria-label="Fermer">${icon("i-close")}</button>
       </div>
       <p class="muted" style="margin:10px 0 12px">Corrige le titre et le corps avant validation. La version éditée remplace l'original.</p>
       <input id="edTitle" class="edit-input" value="${esc(c.title)}">
+      <div class="rte-toolbar" role="toolbar" aria-label="Mise en forme">
+        <select id="rteHeading" class="rte-select" aria-label="Style de paragraphe">
+          <option value="0">Paragraphe</option>
+          <option value="2">Titre 2</option>
+          <option value="3">Titre 3</option>
+        </select>
+        <span class="rte-sep" aria-hidden="true"></span>
+        <button type="button" class="rte-btn" id="rteBold" title="Gras" aria-label="Gras"><strong>G</strong></button>
+        <button type="button" class="rte-btn" id="rteItalic" title="Italique" aria-label="Italique"><em>I</em></button>
+        <button type="button" class="rte-btn" id="rteUnderline" title="Souligné" aria-label="Souligné"><u>S</u></button>
+        <span class="rte-sep" aria-hidden="true"></span>
+        <button type="button" class="rte-btn" id="rteList" title="Liste à puces" aria-label="Liste à puces">${icon("i-more")}</button>
+        <button type="button" class="rte-btn" id="rteLink" title="Insérer un lien" aria-label="Insérer un lien">${icon("i-source")}</button>
+        <span class="rte-sep" aria-hidden="true"></span>
+        <button type="button" class="rte-btn" id="rteUndo" title="Annuler (Ctrl+Z)" aria-label="Annuler">${icon("i-undo")}</button>
+        <button type="button" class="rte-btn" id="rteRedo" title="Rétablir (Ctrl+Y)" aria-label="Rétablir">${icon("i-refresh")}</button>
+      </div>
       <textarea id="edText" class="edit-area">${esc(text)}</textarea>
       <div class="sheet-actions">
-        <button class="btn btn-primary btn-block" id="edSave">${icon("i-check")} Valider la correction</button>
-        <button class="btn btn-tonal btn-block" id="edCancel">Annuler</button>
+        <button class="btn btn-tonal" id="edCancel">Annuler</button>
+        <div class="sheet-actions-row">
+          <button class="btn btn-tonal" id="edSaveDraft">${icon("i-edit")} Enregistrer le brouillon</button>
+          <button class="btn btn-primary" id="edApprove">${icon("i-check")} Approuver</button>
+        </div>
       </div>`;
     const close2 = body.querySelector("[data-close]");
     if (close2) close2.onclick = () => Store.closeSheet();
-    const edSave = document.getElementById("edSave");
-    if (edSave) edSave.onclick = () => {
-      const t = document.getElementById("edTitle").value, x = document.getElementById("edText").value;
+    const ta = document.getElementById("edText");
+    const status = document.getElementById("rteStatus");
+    const markDirty = () => { status.textContent = "Modifications non enregistrées"; status.classList.remove("rte-status-saved"); };
+    ta.addEventListener("input", markDirty);
+    document.getElementById("edTitle").addEventListener("input", markDirty);
+    document.getElementById("rteHeading").onchange = (ev) => { rteHeading(ta, Number(ev.target.value) || 0); };
+    document.getElementById("rteBold").onclick = () => rteWrapSelection(ta, "**");
+    document.getElementById("rteItalic").onclick = () => rteWrapSelection(ta, "*");
+    document.getElementById("rteUnderline").onclick = () => rteWrapSelection(ta, "<u>", "</u>");
+    document.getElementById("rteList").onclick = () => rtePrefixLines(ta, "- ");
+    document.getElementById("rteLink").onclick = () => rteLink(ta);
+    // execCommand undo/redo est dépréciée mais reste fonctionnelle sur les
+    // <textarea> dans les navigateurs Chromium/Firefox actuels ; Ctrl+Z natif
+    // marche de toute façon sans ce bouton (fallback silencieux sinon).
+    document.getElementById("rteUndo").onclick = () => { ta.focus(); try { document.execCommand("undo"); } catch (_) {} };
+    document.getElementById("rteRedo").onclick = () => { ta.focus(); try { document.execCommand("redo"); } catch (_) {} };
+    const getEdited = () => ({ t: document.getElementById("edTitle").value, x: ta.value });
+    const edSaveDraft = document.getElementById("edSaveDraft");
+    if (edSaveDraft) edSaveDraft.onclick = () => {
+      const { t, x } = getEdited();
       f._edited = { title: t, text: x };
       Store.decide(f.fact_id, "EDITED", x);
+      Store.closeSheet();
+      snack("Brouillon enregistré");
+    };
+    const edApprove = document.getElementById("edApprove");
+    if (edApprove) edApprove.onclick = () => {
+      const { t, x } = getEdited();
+      f._edited = { title: t, text: x };
+      Store.decide(f.fact_id, "APPROVED", x);
       Store.closeSheet();
     };
     const edCancel = document.getElementById("edCancel");
     if (edCancel) edCancel.onclick = () => renderSheet(s);
+    // Fige le panneau : le poll périodique ne doit plus l'écraser tant que
+    // l'éditeur est ouvert (voir _editingActive en tête de fichier).
+    _editingActive = true;
   };
   // ---- Régénération (sans re-scrape) : bouton + panneau de suggestions ----
   const regenBtn = body.querySelector("[data-regen]");
@@ -1575,7 +1684,12 @@ function render() {
     const t = document.getElementById("globalLoaderText");
     if (t) t.textContent = s.ui.overlay || "Agent en cours…";
   }
-  try { renderSheet(s); } catch (e) { console.error("renderSheet", e); }
+  // Ne pas ré-exécuter renderSheet pendant l'édition (sinon le poll périodique
+  // écrase le brouillon en cours) — sauf si le panneau a été fermé entre-temps
+  // (ex. Échap), auquel cas il faut bien le masquer.
+  if (!_editingActive || !s.sheet) {
+    try { renderSheet(s); } catch (e) { console.error("renderSheet", e); }
+  }
   try { if (s.route === "audit") bindAudit(); } catch (e) { console.error("bindAudit", e); }
   try { if (s.route === "settings") bindSettings(); } catch (e) { console.error("bindSettings", e); }
   // Barre d'action de sélection multiple
