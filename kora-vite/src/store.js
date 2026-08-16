@@ -258,16 +258,19 @@ export const Store = (() => {
       if (subEl) subEl.textContent = parts[1] || "";
     }
     if (markEl) {
+      // BUG CORRIGÉ (critique design 2026-08-16) : les deux branches ci-dessous
+      // réécrivaient .brand-name/.brand-sub avec un texte dérivé (ou carrément
+      // codé en dur : "Agent") EN PLUS du bloc juste au-dessus qui le fait déjà
+      // correctement à partir de s.app_name — la 2e écriture, plus tardive,
+      // gagnait toujours et effaçait silencieusement toute mise à jour du nom/
+      // sous-titre (ex. changer app_name en "KORA Veille Guinée" restait sans
+      // effet visible, réécrasé par le "Agent" figé ici). Ce bloc ne touche
+      // plus QUE l'icône/logo, jamais le texte — déjà géré plus haut, une
+      // seule fois.
       const fav = s.favicon_data || s.logo_data;
       if (fav) {
         markEl.style.display = "";
         markEl.innerHTML = `<img src="${fav}" alt="" class="brand-fav-img">`;
-        // .brand-name reste le TEXTE du nom (pas le logo complet) -> evite la
-        // duplication du logo dans le header sur mobile (icone + logo complet).
-        const nm = document.querySelector(".brand-name");
-        const sb = document.querySelector(".brand-sub");
-        if (nm) nm.textContent = (s.app_name || "KORA").split(" ")[0];
-        if (sb) sb.textContent = (s.app_name || "KORA").split(" ").slice(1).join(" ");
         // favicon de l'onglet navigateur = icone kora seule
         try {
           let l = document.querySelector('link[rel="icon"]');
@@ -277,8 +280,6 @@ export const Store = (() => {
       } else {
         markEl.style.display = "";
         markEl.innerHTML = `<svg class="ic"><use href="#i-spark"/></svg>`;
-        const nm = document.querySelector(".brand-name"); if (nm) nm.innerHTML = "KORA";
-        const sb = document.querySelector(".brand-sub"); if (sb) { sb.style.display = ""; sb.textContent = "Agent"; }
       }
     }
     // Libellés d'interface (white-label) : navitems par data-route + tagline
