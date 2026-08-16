@@ -21,6 +21,11 @@ export const Store = (() => {
     selection: {},        // { fact_id: true } — sélection multiple
     selectMode: false,    // mode sélection activé
     auth: { loggedIn: false, username: null, email: null, pending: true },
+    // Centre de notifications (wireframe 10.2) : historique des toasts
+    // (snack()), côté client uniquement (pas de persistance backend —
+    // volatile comme les toasts eux-mêmes, juste conservés le temps de
+    // la session pour qu'on puisse les relire).
+    notifications: [],
   };
 
   const subs = new Set();
@@ -349,6 +354,20 @@ export const Store = (() => {
   function setRoute(r) { setState({ route: r }); }
   function openSheet(s) { setState({ sheet: s }); }
   function closeSheet() { setState({ sheet: null }); }
+
+  // ---- Centre de notifications (10.2) : historique des toasts ----
+  const NOTIF_MAX = 30; // borne mémoire, les plus anciennes sont évincées
+  function addNotification(type, message) {
+    const n = { id: "n" + Date.now() + Math.random().toString(36).slice(2, 6), type, message, ts: Date.now(), read: false };
+    const list = [n, ...(state.notifications || [])].slice(0, NOTIF_MAX);
+    setState({ notifications: list });
+  }
+  function markAllNotificationsRead() {
+    setState({ notifications: (state.notifications || []).map(n => ({ ...n, read: true })) });
+  }
+  function unreadNotificationsCount() {
+    return (state.notifications || []).filter(n => !n.read).length;
+  }
   function getFactFilter() { return state.ui.factFilter || "all"; }
   function setFactFilter(f) { setState({ ui: { ...state.ui, factFilter: f } }); }
   function wait(ms) { return new Promise((r) => setTimeout(r, ms)); }
@@ -611,6 +630,7 @@ export const Store = (() => {
     state, setState, subscribe, api,
     loadHealth, loadLast, loadHITL, loadAudit, loadSources, loadSettings, applySettings,
     startCycle, seed, decide, retract, setRoute, openSheet, closeSheet, wait,
+    addNotification, markAllNotificationsRead, unreadNotificationsCount,
     getFactFilter, setFactFilter,
     getTheme, setTheme, initTheme,
     getRailMode, setRailMode, initRailMode, applyRailMode,

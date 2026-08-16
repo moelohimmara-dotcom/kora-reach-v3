@@ -14,6 +14,18 @@ export const SHELL = `
       <div class="topbar-status" id="agentStatus" role="status" aria-live="polite">
         <span class="dot dot-ready"></span><span id="agentMode">prêt</span>
       </div>
+      <div class="notif-wrap">
+        <button class="notif-bell" id="notifBell" title="Notifications" aria-label="Notifications" aria-haspopup="true" aria-expanded="false">
+          ${ic("i-bell")}<span class="notif-count" id="notifCount" hidden>0</span>
+        </button>
+        <div class="notif-panel" id="notifPanel" hidden role="menu" aria-label="Centre de notifications">
+          <div class="notif-panel-head">
+            <strong>Notifications</strong>
+            <button class="link-btn" id="notifMarkAll">Tout marquer comme lu</button>
+          </div>
+          <div class="notif-panel-body" id="notifBody"></div>
+        </div>
+      </div>
       <button class="btn btn-primary topbar-cta" id="topbarCycle" data-action="cycle-normal" title="Lancer un cycle" aria-label="Lancer un cycle">
         ${ic("i-refresh")}<span class="topbar-cta-label">Lancer un cycle</span>
       </button>
