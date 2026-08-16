@@ -32,6 +32,15 @@ export const SHELL = `
     </div>
   </header>
 
+  <!-- Bandeau d'erreur réseau global (wireframe 13.1) — reflète s.ui.error,
+       déjà peuplé par tous les appels API en échec mais jamais affiché avant. -->
+  <div class="error-banner" id="errorBanner" role="alert" hidden>
+    ${ic("i-info")}
+    <span class="error-banner-msg" id="errorBannerMsg"></span>
+    <button class="btn btn-tonal btn-sm" id="errorBannerRetry">${ic("i-refresh")} Réessayer</button>
+    <button class="error-banner-close" id="errorBannerClose" aria-label="Fermer">${ic("i-close")}</button>
+  </div>
+
   <!-- LEFT DRAWER — Mobile (≤819px) : hamburger → 248px slide-in -->
   <nav class="left-drawer" id="leftDrawer" hidden>
     <div class="left-drawer-header">
