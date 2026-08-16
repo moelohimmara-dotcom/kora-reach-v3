@@ -29,10 +29,10 @@ const mdToHtmlInline = (s) => _render(s);
 const icon = (id, cls = "") => `<svg class="ic ${cls}" aria-hidden="true"><use href="#${id}"></use></svg>`;
 function placeholderSvg(theme) {
   const pal = {
-    dark:  ["#241C18", "#15110F", "#F2A98C"],
-    cacao: ["#3A2418", "#241712", "#F2A98C"],
+    dark:  ["#241C18", "#15110F", "#E9705D"],
+    cacao: ["#3A2418", "#241712", "#E9705D"],
     light: ["#ECE7DF", "#F4F1EC", "#B5573A"],
-  }[theme] || ["#241C18", "#15110F", "#F2A98C"];
+  }[theme] || ["#241C18", "#15110F", "#E9705D"];
   return "data:image/svg+xml;utf8," + encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="'+pal[0]+'"/><stop offset="1" stop-color="'+pal[1]+'"/></linearGradient></defs><rect width="320" height="180" fill="url(#g)"/><g fill="none" stroke="'+pal[2]+'" stroke-width="3" opacity=".7"><rect x="118" y="64" width="84" height="60" rx="10"/><circle cx="142" cy="86" r="9"/><path d="M124 118l24-26 18 18 14-12 20 22"/></g></svg>'
   );
@@ -715,9 +715,9 @@ function viewSettings(s) {
         <div class="setting-card">
           <div class="setting-card-head"><span class="meta-ic">${icon("i-palette")}</span><div class="meta"><div class="name">Couleurs d'accent</div><div class="sub">Coral (principal) et Bordeaux (secondaire). Aperçu en direct.</div></div></div>
           <div class="color-edit">
-            <label class="color-field">Coral <input type="color" id="setCoral" value="${esc(s.settings?.accent_coral || "#F2A98C")}"></label>
+            <label class="color-field">Coral <input type="color" id="setCoral" value="${esc(s.settings?.accent_coral || "#E9705D")}"></label>
             <label class="color-field">Bordeaux <input type="color" id="setBordeaux" value="${esc(s.settings?.accent_bordeaux || "#E08A84")}"></label>
-            <span class="color-swatch" id="setSwatch" style="background:linear-gradient(135deg, ${esc(s.settings?.accent_coral || "#F2A98C")}, ${esc(s.settings?.accent_bordeaux || "#E08A84")})"></span>
+            <span class="color-swatch" id="setSwatch" style="background:linear-gradient(135deg, ${esc(s.settings?.accent_coral || "#E9705D")}, ${esc(s.settings?.accent_bordeaux || "#E08A84")})"></span>
           </div>
         </div>
         <div class="setting-card">
@@ -1158,7 +1158,7 @@ function bindSettings() {
   const bordeaux = document.getElementById("setBordeaux");
   const swatch = document.getElementById("setSwatch");
   const preview = () => {
-    const c = coral ? coral.value : "#F2A98C";
+    const c = coral ? coral.value : "#E9705D";
     const b = bordeaux ? bordeaux.value : "#E08A84";
     if (swatch) swatch.style.background = `linear-gradient(135deg, ${c}, ${b})`;
     if (c) root.style.setProperty("--coral", c);
