@@ -70,11 +70,13 @@ export const SHELL = `
   <!-- LEFT DRAWER SCRIM -->
   <div class="left-drawer-scrim" id="leftDrawerScrim" hidden></div>
 
-  <!-- RAIL — Desktop/Tablet persistent (refonte v3 : sections repliables + épinglés,
-       piste "D" choisie parmi 4 propositions comparées en amont. Le corps (pins +
-       accordéons) est construit dynamiquement par renderRailBody() dans app.js à
-       partir des préférences utilisateur (kora-rail-pins / kora-rail-collapsed en
-       localStorage) — #railBody démarre vide ici. -->
+  <!-- RAIL — Desktop/Tablet persistent (piste "A" — sobre corrigée, retenue après
+       essai de la piste "D" jugée pas à la hauteur). Structure statique, fidèle à
+       la hiérarchie validée du wireframe Whimsical (3 groupes, même ordre).
+       Correctifs de la revue conservés (indépendants du choix A/D) :
+       - "Sources" masqué pour un rôle non-advanced (data-role, cf. app.js).
+       - "Style Guide" retiré du rail (déplacé dans Paramètres > Avancés).
+       - Widget "à décider" = vrai <button> cliquable. -->
   <nav class="rail" id="rail" aria-label="Navigation principale">
     <div class="rail-head">
       <span class="rail-mark">K</span>
@@ -82,7 +84,18 @@ export const SHELL = `
       <button class="rail-toggle" id="railToggle" title="Réduire/Agrandir la barre" aria-label="Réduire la barre">${ic("i-chevron")}</button>
     </div>
 
-    <div class="rail-body" id="railBody"></div>
+    <div class="rail-group">Pilotage</div>
+    <button class="item" data-route="cockpit"><span class="ico">${ic("i-dashboard")}</span><span class="lbl">Tableau de bord</span></button>
+    <button class="item" data-route="audit"><span class="ico">${ic("i-check")}</span><span class="lbl">Historique</span></button>
+
+    <div class="rail-group">Contenu</div>
+    <button class="item" data-route="facts"><span class="ico">${ic("i-facts")}</span><span class="lbl">Total</span><span class="ct" data-badge="facts"></span></button>
+    <button class="item" data-route="drafts"><span class="ico">${ic("i-edit")}</span><span class="lbl">Brouillons</span><span class="ct" data-badge="drafts"></span></button>
+    <button class="item" data-route="trash"><span class="ico">${ic("i-trash")}</span><span class="lbl">Corbeille</span><span class="ct" data-badge="trash"></span></button>
+
+    <div class="rail-group">Système</div>
+    <button class="item" data-route="sources" data-role="advanced"><span class="ico">${ic("i-sources")}</span><span class="lbl">Sources</span><span class="ct" data-badge="sources"></span></button>
+    <button class="item" data-route="settings"><span class="ico">${ic("i-settings")}</span><span class="lbl">Paramètres</span></button>
 
     <div class="rail-spacer"></div>
     <button class="decision-foot" id="decisionFoot" type="button" aria-live="polite" title="Voir les articles en attente">
