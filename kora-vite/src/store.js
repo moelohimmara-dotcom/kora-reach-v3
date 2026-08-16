@@ -120,10 +120,45 @@ export const Store = (() => {
       if (r.error === "invalid_credentials") throw new Error("Identifiants invalides");
       throw new Error("Erreur de connexion");
     }
+    // 2FA (9.3) : mot de passe correct mais AUCUN cookie de session n'a été
+    // posé par le backend tant que le code TOTP n'est pas vérifié (voir
+    // verifyLoginTotp ci-dessous). On renvoie l'info telle quelle à l'appelant
+    // (app.js bindAuth) plutôt que d'appeler checkAuth() ici — il n'y a pas
+    // encore de session à vérifier.
+    if (r.mfa_required) return { mfaRequired: true, mfaToken: r.mfa_token };
     // NE PAS setState loggedIn ici — attendre checkAuth()
     const ok = await checkAuth();   // valide la session côté serveur
     if (ok) await loadAll();        // charge facts/health/sources dès la connexion
-    return ok;
+    return { mfaRequired: false, ok };
+  }
+  async function verifyLoginTotp(mfaToken, code) {
+    const r = await api("/api/auth/login/verify-2fa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mfa_token: mfaToken, code }) });
+    if (!r.ok) {
+      const messages = { mfa_expired: "Session de connexion expirée, recommence.", invalid_code: "Code invalide." };
+      throw new Error(messages[r.error] || "Erreur de vérification");
+    }
+    const ok = await checkAuth();
+    if (ok) await loadAll();
+    return { ok, backupCodeUsed: !!r.backup_code_used, backupCodesLeft: r.backup_codes_left };
+  }
+  // ---- 2FA (9.3) : gestion depuis Paramètres > Compte (compte déjà connecté) ----
+  async function get2FAStatus() {
+    return api("/api/auth/2fa/status");
+  }
+  async function setup2FA() {
+    const r = await api("/api/auth/2fa/setup", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    if (!r.ok) throw new Error(r.error || "Erreur");
+    return r; // { secret, otpauth_uri }
+  }
+  async function confirm2FA(code) {
+    const r = await api("/api/auth/2fa/confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
+    if (!r.ok) throw new Error(r.error === "invalid_code" ? "Code invalide" : (r.error || "Erreur"));
+    return r; // { backup_codes: [...] }
+  }
+  async function disable2FA(password) {
+    const r = await api("/api/auth/2fa/disable", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password }) });
+    if (!r.ok) throw new Error(r.error === "wrong_password" ? "Mot de passe incorrect" : (r.error || "Erreur"));
+    return r;
   }
   async function logout() {
     // On ferme la session CÔTÉ UI IMMÉDIATEMENT (setState synchrone) pour ne
@@ -683,6 +718,7 @@ export const Store = (() => {
     initRail: initRailMode,
     getRail, setRail,
     checkAuth, login, logout, changePassword, saveAvatar, forgot, resetPassword,
+    verifyLoginTotp, get2FAStatus, setup2FA, confirm2FA, disable2FA,
     loadUsers, createUser, setRole, deleteUser,
     setSelectMode, toggleSelect, clearSelection, selectedIds,
     bulkAction, restoreFact, deleteForever, loadTrash, finishDraft,

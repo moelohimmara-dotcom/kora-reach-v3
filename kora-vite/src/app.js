@@ -762,6 +762,10 @@ function viewSettings(s) {
           </div>
           <div class="actions"><button class="btn btn-primary" id="setChangePw">Mettre à jour le mot de passe</button></div>
         </div>
+        <div class="setting-card" id="sec2FACard">
+          <div class="setting-card-head"><span class="meta-ic">${icon("i-shield")}</span><div class="meta"><div class="name">Double authentification (2FA)</div><div class="sub">Un code temporaire à 6 chiffres en plus du mot de passe, généré par une application comme Google Authenticator.</div></div></div>
+          <div id="sec2FABody"><p class="muted">Chargement…</p></div>
+        </div>
         <div class="setting-card">
           <div class="setting-card-head"><span class="meta-ic">${icon("i-user")}</span><div class="meta"><div class="name">Session</div><div class="sub">Connecté en tant que ${esc(Store.state.auth.username || "—")}</div></div></div>
           <div class="actions"><button class="btn btn-ghost" id="setLogout">Se déconnecter</button></div>
@@ -1748,6 +1752,90 @@ function bindSettings() {
       renderAgentPromptBody(data);
     } catch (e) { body.innerHTML = '<p class="muted">Erreur de chargement (rôle avancé requis).</p>'; }
   };
+
+  // ---- 2FA (9.3) : activation depuis Paramètres > Compte ----
+  // États successifs dans #sec2FABody : "off" -> "setup" (secret + code à
+  // confirmer) -> "backup" (codes de secours affichés UNE SEULE FOIS) ->
+  // "on" (statut). "on" -> "disable" (mot de passe requis) -> "off".
+  let _sec2faSetup = null; // { secret, otpauth_uri } — le temps de la confirmation
+  const renderSec2FA = (state, data) => {
+    const body = document.getElementById("sec2FABody");
+    if (!body) return;
+    if (state === "off") {
+      body.innerHTML = `
+        <p class="muted" style="margin:0 0 12px">Non activée — n'importe qui connaissant ton mot de passe peut se connecter.</p>
+        <div class="actions"><button class="btn btn-primary" id="sec2FAEnableBtn">${icon("i-shield")} Activer la 2FA</button></div>`;
+      const btn = document.getElementById("sec2FAEnableBtn");
+      if (btn) btn.onclick = async () => {
+        try { _sec2faSetup = await Store.setup2FA(); renderSec2FA("setup"); }
+        catch (e) { snack(e.message || "Erreur"); }
+      };
+    } else if (state === "setup") {
+      const secret = _sec2faSetup?.secret || "";
+      const grouped = secret.replace(/(.{4})/g, "$1 ").trim();
+      body.innerHTML = `
+        <p class="muted" style="margin:0 0 10px">Dans ton application d'authentification (Google Authenticator, Authy, 1Password…), ajoute un compte manuellement avec cette clé, puis saisis le code à 6 chiffres généré pour confirmer.</p>
+        <div class="totp-secret" id="sec2FASecret" title="Cliquer pour copier">${esc(grouped)}</div>
+        <div class="field" style="margin-top:10px"><span>Code de vérification</span><input class="text-input" id="sec2FAConfirmCode" type="text" inputmode="numeric" maxlength="6" placeholder="123456"></div>
+        <div class="actions">
+          <button class="btn btn-primary" id="sec2FAConfirmBtn">Confirmer et activer</button>
+          <button class="btn btn-ghost" id="sec2FACancelSetup">Annuler</button>
+        </div>`;
+      const secretEl = document.getElementById("sec2FASecret");
+      if (secretEl) secretEl.onclick = () => {
+        navigator.clipboard?.writeText(secret).then(() => snack("Clé copiée")).catch(() => {});
+      };
+      const confirmBtn = document.getElementById("sec2FAConfirmBtn");
+      if (confirmBtn) confirmBtn.onclick = async () => {
+        const code = document.getElementById("sec2FAConfirmCode")?.value.trim();
+        try {
+          const r = await Store.confirm2FA(code);
+          renderSec2FA("backup", r.backup_codes);
+        } catch (e) { snack(e.message || "Erreur"); }
+      };
+      const cancelBtn = document.getElementById("sec2FACancelSetup");
+      if (cancelBtn) cancelBtn.onclick = () => { _sec2faSetup = null; renderSec2FA("off"); };
+    } else if (state === "backup") {
+      body.innerHTML = `
+        <p class="muted" style="margin:0 0 10px"><strong>Note bien ces codes</strong> — ils ne seront plus jamais affichés. Chacun ne fonctionne qu'une seule fois, si tu perds l'accès à ton application d'authentification.</p>
+        <div class="backup-codes-grid">${data.map(c => `<code>${esc(c)}</code>`).join("")}</div>
+        <div class="actions"><button class="btn btn-primary" id="sec2FAAckBackup">J'ai noté mes codes</button></div>`;
+      const ack = document.getElementById("sec2FAAckBackup");
+      if (ack) ack.onclick = () => { _sec2faSetup = null; snack("Double authentification activée"); loadSecurity2FA(); };
+    } else if (state === "on") {
+      body.innerHTML = `
+        <span class="status-chip ready">${icon("i-check")} Activée</span>
+        <p class="muted" style="margin:8px 0 0">${data.backup_codes_left} code(s) de secours restant(s).</p>
+        <div class="actions" style="margin-top:10px"><button class="btn btn-ghost" id="sec2FADisableBtn">Désactiver</button></div>`;
+      const dis = document.getElementById("sec2FADisableBtn");
+      if (dis) dis.onclick = () => renderSec2FA("disable");
+    } else if (state === "disable") {
+      body.innerHTML = `
+        <p class="muted" style="margin:0 0 10px">Confirme ton mot de passe pour désactiver la double authentification.</p>
+        <div class="field"><span>Mot de passe</span><input class="text-input" id="sec2FADisablePw" type="password" autocomplete="current-password"></div>
+        <div class="actions">
+          <button class="btn btn-danger" id="sec2FADisableConfirmBtn">Désactiver</button>
+          <button class="btn btn-ghost" id="sec2FADisableCancelBtn">Annuler</button>
+        </div>`;
+      const confirmDis = document.getElementById("sec2FADisableConfirmBtn");
+      if (confirmDis) confirmDis.onclick = async () => {
+        const pw = document.getElementById("sec2FADisablePw")?.value || "";
+        try { await Store.disable2FA(pw); snack("Double authentification désactivée"); loadSecurity2FA(); }
+        catch (e) { snack(e.message || "Erreur"); }
+      };
+      const cancelDis = document.getElementById("sec2FADisableCancelBtn");
+      if (cancelDis) cancelDis.onclick = () => loadSecurity2FA();
+    }
+  };
+  const loadSecurity2FA = async () => {
+    const body = document.getElementById("sec2FABody");
+    if (!body) return;
+    try {
+      const st = await Store.get2FAStatus();
+      renderSec2FA(st.enabled ? "on" : "off", st);
+    } catch (e) { body.innerHTML = '<p class="muted">Erreur de chargement.</p>'; }
+  };
+
   const scrim = document.getElementById("setDrawerScrim");
   const openDrawer = (id) => {
     Object.values(drawers).forEach(did => { const d = document.getElementById(did); if (d) d.hidden = true; });
@@ -1777,6 +1865,8 @@ function bindSettings() {
   // assignés APRÈS la boucle générique ci-dessus, sinon celle-ci écrase (onclick
   // = simple assignation, un seul gagnant) l'ouverture+chargement par un simple
   // openDrawer() sans chargement — bug constaté en vérifiant §9.5 en preview live.
+  const accountNav = view.querySelector('.settings-nav-item[data-setnav="account"]');
+  if (accountNav) accountNav.onclick = () => { openDrawer("account"); loadSecurity2FA(); };
   const auditNav = view.querySelector('.settings-nav-item[data-setnav="auditlog"]');
   if (auditNav) auditNav.onclick = () => { openDrawer("auditlog"); loadAuditLog(); };
   const agentNav = view.querySelector('.settings-nav-item[data-setnav="agent"]');
@@ -2717,6 +2807,7 @@ function renderAuth(mode, token, force = false) {
   // For auto-render via render(), only build once.
   if (!_authRendered || force) {
     if (mode === "login") overlay.innerHTML = viewLogin();
+    else if (mode === "mfa") overlay.innerHTML = viewMfa();
     else if (mode === "forgot") overlay.innerHTML = viewForgot();
     else if (mode === "reset") overlay.innerHTML = viewReset(token);
     overlay.hidden = false;
@@ -2775,6 +2866,28 @@ function viewLogin() {
         <button class="btn btn-primary btn-block" id="authSubmit" type="submit">Se connecter</button>
       </form>
       <button class="auth-link" id="authForgot">Mot de passe oublié ?</button>
+      <div class="auth-err" id="authErr"></div>
+    </div>
+  </div>`;
+}
+
+// 9.3 — étape 2 de la connexion : code TOTP (mot de passe déjà validé,
+// pas encore de session). Accepte aussi un code de secours à usage unique
+// (mêmes 10 caractères alphanumériques, distingués du code à 6 chiffres
+// uniquement côté serveur — l'input reste unique côté écran, plus simple).
+function viewMfa() {
+  return `<div class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-mark">${icon("i-lock")}</div>
+      <h1 class="auth-title">Vérification en 2 étapes</h1>
+      <p class="auth-sub">Saisis le code à 6 chiffres de ton application d'authentification (ou l'un de tes codes de secours).</p>
+      <form id="authForm" autocomplete="off">
+        <label class="auth-field">Code
+          <input class="text-input" id="authMfaCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="10" autofocus>
+        </label>
+        <button class="btn btn-primary btn-block" id="authSubmit" type="submit">Vérifier</button>
+      </form>
+      <button class="auth-link" id="authMfaBack">Retour à la connexion</button>
       <div class="auth-err" id="authErr"></div>
     </div>
   </div>`;
@@ -2862,8 +2975,15 @@ function bindAuth(mode, token) {
       }, 16000);
       try {
         if (btn) { btn.disabled = true; btn.textContent = "Connexion…"; }
-        await Store.login(u, p);
+        const result = await Store.login(u, p);
         clearTimeout(safety);
+        if (result.mfaRequired) {
+          // 2FA (9.3) : mot de passe correct, code TOTP encore requis —
+          // bascule vers l'écran de code au lieu de fermer l'overlay
+          // (aucune session n'a encore été créée côté serveur).
+          renderAuth("mfa", result.mfaToken, true);
+          return;
+        }
         overlay.hidden = true;
         document.getElementById("app").style.display = "";
         Store.loadUsers().catch(() => {});
@@ -2872,6 +2992,28 @@ function bindAuth(mode, token) {
         snack("Connecté");
       } catch (ex) { setErr(ex.message || "Erreur de connexion"); }
       finally { clearTimeout(safety); if (btn) { btn.disabled = false; btn.textContent = orig; } }
+    };
+  } else if (mode === "mfa") {
+    const back = overlay.querySelector("#authMfaBack");
+    if (back) back.onclick = () => renderAuth("login", null, true);
+    if (form) form.onsubmit = async (e) => {
+      e.preventDefault();
+      setErr("");
+      const codeInput = overlay.querySelector("#authMfaCode");
+      const code = (codeInput?.value || "").trim();
+      const btn = overlay.querySelector("#authSubmit");
+      const orig = btn ? btn.textContent : "";
+      try {
+        if (btn) { btn.disabled = true; btn.textContent = "Vérification…"; }
+        const r = await Store.verifyLoginTotp(token, code);
+        overlay.hidden = true;
+        document.getElementById("app").style.display = "";
+        Store.loadUsers().catch(() => {});
+        Store.loadSettings();
+        render();
+        snack(r.backupCodeUsed ? `Connecté (code de secours — ${r.backupCodesLeft} restant(s))` : "Connecté");
+      } catch (ex) { setErr(ex.message || "Erreur de vérification"); }
+      finally { if (btn) { btn.disabled = false; btn.textContent = orig; } }
     };
   } else if (mode === "forgot") {
     const back = overlay.querySelector("#authBack");
