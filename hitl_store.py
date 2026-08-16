@@ -558,7 +558,7 @@ def count_published() -> int:
         if row is None:
             return 0
         # sqlite -> tuple ; psycopg (RealDictCursor) -> dict
-        val = row[0] if isinstance(row, (tuple, list)) else list(row.values())[0]
+        val = row[0] if not isinstance(row, dict) else list(row.values())[0]
         return int(val or 0)
     finally:
         con.close()
@@ -580,7 +580,7 @@ def count_rejected() -> int:
         row = cur.fetchone()
         if row is None:
             return 0
-        val = row[0] if isinstance(row, (tuple, list)) else list(row.values())[0]
+        val = row[0] if not isinstance(row, dict) else list(row.values())[0]
         return int(val or 0)
     finally:
         con.close()
@@ -598,7 +598,7 @@ def count_deleted() -> int:
         row = cur.fetchone()
         if row is None:
             return 0
-        val = row[0] if isinstance(row, (tuple, list)) else list(row.values())[0]
+        val = row[0] if not isinstance(row, dict) else list(row.values())[0]
         return int(val or 0)
     finally:
         con.close()
@@ -636,13 +636,13 @@ def get_dashboard_stats() -> dict:
         # 3) Publies (table articles)
         cur.execute("SELECT count(*) FROM articles WHERE status = 'published'")
         row = cur.fetchone()
-        published = int((row[0] if isinstance(row, (tuple, list)) else list(row.values())[0]) or 0)
+        published = int((row[0] if not isinstance(row, dict) else list(row.values())[0]) or 0)
         # 4) Rejetes — on delegate a count_rejected() (definition unique / SSOT)
         rejected = count_rejected()
         # 5) Supprimes (audit)
         cur.execute("SELECT count(*) FROM audit_events WHERE action IN ('SUPPRIME', 'PURGE')")
         row = cur.fetchone()
-        deleted = int((row[0] if isinstance(row, (tuple, list)) else list(row.values())[0]) or 0)
+        deleted = int((row[0] if not isinstance(row, dict) else list(row.values())[0]) or 0)
         return {
             "total_facts": total_facts,        # tous les faits (sidebar)
             "articles": in_circulation,        # dashboard "Articles" (en circulation)

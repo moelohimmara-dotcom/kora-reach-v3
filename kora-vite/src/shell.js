@@ -61,6 +61,7 @@ export const SHELL = `
     <div class="rail-group">Système</div>
     <button class="item" data-route="sources"><span class="ico">${ic("i-sources")}</span><span class="lbl">Sources</span><span class="ct" data-badge="sources"></span></button>
     <button class="item" data-route="settings"><span class="ico">${ic("i-settings")}</span><span class="lbl">Paramètres</span></button>
+    <button class="item sg-navlink" data-route="styleguide" hidden><span class="ico">${ic("i-palette")}</span><span class="lbl">Style Guide</span></button>
 
     <div class="rail-spacer"></div>
     <div class="decision-foot" aria-live="polite">

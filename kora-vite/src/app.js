@@ -29,10 +29,10 @@ const mdToHtmlInline = (s) => _render(s);
 const icon = (id, cls = "") => `<svg class="ic ${cls}" aria-hidden="true"><use href="#${id}"></use></svg>`;
 function placeholderSvg(theme) {
   const pal = {
-    dark:  ["#241C18", "#15110F", "#F2A98C"],
-    cacao: ["#3A2418", "#241712", "#F2A98C"],
+    dark:  ["#241C18", "#15110F", "#E9705D"],
+    cacao: ["#3A2418", "#241712", "#E9705D"],
     light: ["#ECE7DF", "#F4F1EC", "#B5573A"],
-  }[theme] || ["#241C18", "#15110F", "#F2A98C"];
+  }[theme] || ["#241C18", "#15110F", "#E9705D"];
   return "data:image/svg+xml;utf8," + encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="'+pal[0]+'"/><stop offset="1" stop-color="'+pal[1]+'"/></linearGradient></defs><rect width="320" height="180" fill="url(#g)"/><g fill="none" stroke="'+pal[2]+'" stroke-width="3" opacity=".7"><rect x="118" y="64" width="84" height="60" rx="10"/><circle cx="142" cy="86" r="9"/><path d="M124 118l24-26 18 18 14-12 20 22"/></g></svg>'
   );
@@ -715,9 +715,9 @@ function viewSettings(s) {
         <div class="setting-card">
           <div class="setting-card-head"><span class="meta-ic">${icon("i-palette")}</span><div class="meta"><div class="name">Couleurs d'accent</div><div class="sub">Coral (principal) et Bordeaux (secondaire). Aperçu en direct.</div></div></div>
           <div class="color-edit">
-            <label class="color-field">Coral <input type="color" id="setCoral" value="${esc(s.settings?.accent_coral || "#F2A98C")}"></label>
+            <label class="color-field">Coral <input type="color" id="setCoral" value="${esc(s.settings?.accent_coral || "#E9705D")}"></label>
             <label class="color-field">Bordeaux <input type="color" id="setBordeaux" value="${esc(s.settings?.accent_bordeaux || "#E08A84")}"></label>
-            <span class="color-swatch" id="setSwatch" style="background:linear-gradient(135deg, ${esc(s.settings?.accent_coral || "#F2A98C")}, ${esc(s.settings?.accent_bordeaux || "#E08A84")})"></span>
+            <span class="color-swatch" id="setSwatch" style="background:linear-gradient(135deg, ${esc(s.settings?.accent_coral || "#E9705D")}, ${esc(s.settings?.accent_bordeaux || "#E08A84")})"></span>
           </div>
         </div>
         <div class="setting-card">
@@ -778,6 +778,60 @@ function viewSettings(s) {
     </aside>` : ""}
     </div>`;
     }
+// ============================================================================
+// STYLE GUIDE (/style-guide) — page vivante du design system (B.1).
+// Réutilise les VRAIS composants (statusBadge, statCard, classes .btn) pour
+// rester fidèle : toute dérive du design y est visible avant merge.
+// Accès : rôle advanced (lien discret dans Paramètres). Réf : docs/DESIGN_SYSTEM.md
+// ============================================================================
+function viewStyleGuide(s) {
+  const tok = (name, desc) => `
+    <div class="sg-token">
+      <span class="sg-swatch" style="background:var(${name})"></span>
+      <div class="sg-token-meta"><code>${name}</code><div class="muted">${esc(desc)}</div></div>
+    </div>`;
+  return `
+  <div class="cockpit kora-wire sg-page">
+    <h1 class="section-title">Style Guide — Design System KORA</h1>
+    <p class="muted">Référence vivante. Toute modification visuelle se vérifie ici avant merge. Source : <code>docs/DESIGN_SYSTEM.md</code>.</p>
+
+    <h2 class="section-title">Couleurs — tokens sémantiques</h2>
+    <div class="sg-grid">
+      ${tok("--bg", "Fond application (#0E1114)")}
+      ${tok("--surface", "Cartes (#171C21)")}
+      ${tok("--coral", "Accent — branding configurable, défaut #E9705D")}
+      ${tok("--success", "Prêt / validé (#3DD68C)")}
+      ${tok("--warning", "Attention (#F5A83C)")}
+      ${tok("--danger", "Rejet / suppression (#E5484D)")}
+    </div>
+
+    <h2 class="section-title">Typographie — Oswald (titres) + Source Sans 3 (corps)</h2>
+    <div class="sg-type">
+      <div style="font-size:28px;font-weight:700">Nombre KPI — 28px / 700</div>
+      <div style="font-size:20px;font-weight:700">Titre de section — 20px / 700</div>
+      <div style="font-size:16px">Corps de texte — 16px / 400, interligne 1.5</div>
+      <div class="muted" style="font-size:13px">Label secondaire — 13px / 500</div>
+    </div>
+
+    <h2 class="section-title">Badges de statut <span class="muted" style="font-weight:400">(icône + texte, jamais couleur seule)</span></h2>
+    <div class="sg-row">
+      ${statusBadge("PENDING_REVIEW")} ${statusBadge("APPROVED")} ${statusBadge("REJECTED")} ${statusBadge("TRANSMITTED")} ${statusBadge("EDITED")} ${statusBadge("TRASHED")}
+    </div>
+
+    <h2 class="section-title">Boutons</h2>
+    <div class="sg-row">
+      <button class="btn btn-primary">${icon("i-send")} Primaire</button>
+      <button class="btn btn-tonal">Secondaire</button>
+      <button class="btn" disabled>Désactivé</button>
+    </div>
+
+    <h2 class="section-title">Carte KPI</h2>
+    <div class="cockpit-grid stats-row sg-kpi">
+      ${statCard({ icon: "i-help", value: 12, label: "À décider", variant: "warning" })}
+    </div>
+  </div>`;
+}
+
 function viewAudit(s) {
   const data = s.audit || {};
   const days = data.days || [];
@@ -1158,7 +1212,7 @@ function bindSettings() {
   const bordeaux = document.getElementById("setBordeaux");
   const swatch = document.getElementById("setSwatch");
   const preview = () => {
-    const c = coral ? coral.value : "#F2A98C";
+    const c = coral ? coral.value : "#E9705D";
     const b = bordeaux ? bordeaux.value : "#E08A84";
     if (swatch) swatch.style.background = `linear-gradient(135deg, ${c}, ${b})`;
     if (c) root.style.setProperty("--coral", c);
@@ -1389,7 +1443,7 @@ function render() {
     : `<span class="dot dot-ready"></span><span>prêt</span>`;
   const view = document.getElementById("view");
   if (!view) return;
-  const map = { cockpit: viewCockpit, facts: viewFacts, sources: viewSources, audit: viewAudit, drafts: viewDrafts, settings: viewSettings, trash: viewTrash };
+  const map = { cockpit: viewCockpit, facts: viewFacts, sources: viewSources, audit: viewAudit, drafts: viewDrafts, settings: viewSettings, trash: viewTrash, styleguide: viewStyleGuide };
   view.innerHTML = (map[s.route] || viewCockpit)(s);
   $$(".navitem, .rail .navitem, .item, .rail .item").forEach(n => {
     const on = n.dataset.route === s.route;
@@ -1401,6 +1455,8 @@ function render() {
   $$('.navitem[data-route="settings"]').forEach(n => { n.hidden = !isAdvanced; });
   const bnav = document.querySelector('.bottomnav [data-route="settings"]');
   if (bnav) bnav.hidden = !isAdvanced;
+  // Style Guide (/style-guide) : outil dev/design, réservé au rôle advanced.
+  $$('.sg-navlink').forEach(n => { n.hidden = !isAdvanced; });
   // Badges de compteur sur la navigation (Articles / Sources / Brouillons / Corbeille)
   try {
     const facts = s.facts || [];

@@ -11,7 +11,7 @@ _HEX = re.compile(r"^#?[0-9A-Fa-f]{6}$")
 
 DEFAULTS = {
     "app_name": "KORA Agent",
-    "accent_coral": "#F2A98C",
+    "accent_coral": "#E9705D",
     "accent_bordeaux": "#E08A84",
     # Libellés de l'interface (white-label)
     "label_cockpit": "Tableau de bord",
