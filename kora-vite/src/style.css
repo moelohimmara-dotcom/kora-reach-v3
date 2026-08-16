@@ -1962,3 +1962,47 @@ html.icons-ready .material-icons { visibility: visible; }
 .skel-line { height: 12px; border-radius: 4px; display: block; }
 .skel-line-title { width: 70%; height: 14px; }
 .skel-line-sub { width: 40%; }
+
+/* ============================================================
+   GUIDE UTILISATEUR / ONBOARDING (wireframe 11.1-11.3)
+   ============================================================ */
+.tour-overlay {
+  position: fixed; z-index: 200; border-radius: 10px; pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,.65);
+  border: 2px solid var(--coral);
+  transition: left .25s ease, top .25s ease, width .25s ease, height .25s ease;
+}
+.tour-bubble {
+  position: fixed; z-index: 201; width: 300px; padding: 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0,0,0,.4);
+}
+.tour-bubble-title { display: flex; align-items: center; gap: 8px; font-weight: 700; margin-bottom: 6px; }
+.tour-bubble-title .ic { width: 16px; height: 16px; color: var(--coral); }
+.tour-bubble-text { font-size: 13px; color: var(--text-secondary); margin: 0 0 12px; }
+.tour-bubble-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tour-bubble-progress { font-size: 11px; color: var(--text-secondary); }
+.tour-bubble-actions { display: flex; gap: 8px; }
+
+.idle-banner {
+  display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+  background: var(--surface-raised); border-top: 1px solid var(--border); font-size: 13px;
+}
+.idle-banner .ic { width: 18px; height: 18px; color: var(--coral); flex: 0 0 auto; }
+.idle-banner span:not(.ic) { flex: 1; }
+.idle-banner-close { background: none; border: none; color: var(--text-secondary); cursor: pointer; display: flex; padding: 4px; }
+.idle-banner-close:hover, .idle-banner-close:focus-visible { color: var(--text-primary); outline: none; }
+
+/* Bulle d'aide contextuelle (11.2) */
+.help-tip { position: relative; display: inline-flex; }
+.help-tip-btn { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: none; background: none; color: var(--text-secondary); cursor: pointer; padding: 0; }
+.help-tip-btn .ic { width: 14px; height: 14px; }
+.help-tip-btn:hover, .help-tip-btn:focus-visible { color: var(--coral); outline: none; }
+.help-tip-pop {
+  position: absolute; top: 22px; left: 0; z-index: 50; width: 220px; padding: 10px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  font-size: 12px; color: var(--text-secondary); box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+
+.toggle-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-primary); cursor: pointer; }
+.toggle-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--coral); cursor: pointer; }
