@@ -70,7 +70,11 @@ export const SHELL = `
   <!-- LEFT DRAWER SCRIM -->
   <div class="left-drawer-scrim" id="leftDrawerScrim" hidden></div>
 
-  <!-- RAIL — Desktop/Tablet persistent (refonte v2 : indicateur vertical corail, items calmes) -->
+  <!-- RAIL — Desktop/Tablet persistent (refonte v3 : sections repliables + épinglés,
+       piste "D" choisie parmi 4 propositions comparées en amont. Le corps (pins +
+       accordéons) est construit dynamiquement par renderRailBody() dans app.js à
+       partir des préférences utilisateur (kora-rail-pins / kora-rail-collapsed en
+       localStorage) — #railBody démarre vide ici. -->
   <nav class="rail" id="rail" aria-label="Navigation principale">
     <div class="rail-head">
       <span class="rail-mark">K</span>
@@ -78,25 +82,13 @@ export const SHELL = `
       <button class="rail-toggle" id="railToggle" title="Réduire/Agrandir la barre" aria-label="Réduire la barre">${ic("i-chevron")}</button>
     </div>
 
-    <div class="rail-group">Pilotage</div>
-    <button class="item" data-route="cockpit" aria-current="page"><span class="ico">${ic("i-dashboard")}</span><span class="lbl">Tableau de bord</span></button>
-    <button class="item" data-route="audit"><span class="ico">${ic("i-check")}</span><span class="lbl">Historique</span></button>
-
-    <div class="rail-group">Contenu</div>
-    <button class="item" data-route="facts"><span class="ico">${ic("i-facts")}</span><span class="lbl">Total</span><span class="ct" data-badge="facts"></span></button>
-    <button class="item" data-route="drafts"><span class="ico">${ic("i-edit")}</span><span class="lbl">Brouillons</span><span class="ct" data-badge="drafts"></span></button>
-    <button class="item" data-route="trash"><span class="ico">${ic("i-trash")}</span><span class="lbl">Corbeille</span><span class="ct" data-badge="trash"></span></button>
-
-    <div class="rail-group">Système</div>
-    <button class="item" data-route="sources"><span class="ico">${ic("i-sources")}</span><span class="lbl">Sources</span><span class="ct" data-badge="sources"></span></button>
-    <button class="item" data-route="settings"><span class="ico">${ic("i-settings")}</span><span class="lbl">Paramètres</span></button>
-    <button class="item sg-navlink" data-route="styleguide" hidden><span class="ico">${ic("i-palette")}</span><span class="lbl">Style Guide</span></button>
+    <div class="rail-body" id="railBody"></div>
 
     <div class="rail-spacer"></div>
-    <div class="decision-foot" aria-live="polite">
+    <button class="decision-foot" id="decisionFoot" type="button" aria-live="polite" title="Voir les articles en attente">
       <span class="decision-pulse" aria-hidden="true"></span>
       <div class="decision-meta"><span class="decision-n" data-decision="pending">0</span><span class="decision-l">à décider</span></div>
-    </div>
+    </button>
   </nav>
 
   <!-- RIGHT DRAWER OVERLAY — Desktop/Tablet (≥820px) : "Plus" menu -->
@@ -120,7 +112,7 @@ export const SHELL = `
 
   <nav class="bottomnav" id="bottomnav">
     <button class="navitem navitem-active" data-route="cockpit" aria-current="page">
-      <div class="nav-ico">${ic("i-gauge")}</div>
+      <div class="nav-ico">${ic("i-dashboard")}</div>
       <span>Tableau de bord</span>
     </button>
     <button class="navitem" data-route="facts">
