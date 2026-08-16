@@ -3,8 +3,9 @@
 Agent de veille et de rédaction assistée (fact-checking, clustering, publication).
 Frontend cockpit dark (vanilla JS + Vite) + backend Python (API REST, Postgres).
 
-> **Design system** : KORA dark (`--bg:#0E1114`, `--accent:#E9705D`, `--success:#3DD68C`).
-> Toute l'UI suit ce charte. Voir `kora-vite/src/style.css`.
+> **Design system** : KORA dark. La charte, les tokens et les règles vivent dans
+> **[`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md)** — **seule source de vérité** (ne pas
+> redupliquer les valeurs ici, sous peine de redérive). Vérification vivante : route `/style-guide`.
 
 ---
 
