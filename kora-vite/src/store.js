@@ -413,19 +413,31 @@ export const Store = (() => {
   }
 
   // ---- Rail adaptive (M3) : mode = auto | collapsed | expanded ----
-  // auto  -> gouverné par les breakpoints (medium=modal/navbar, expanded+=standard)
-  // collapsed / expanded -> override appliqué uniquement en expanded+ (desktop large)
+  // Le rail est une colonne fixe dès 768px (RAIL_FIXED_MIN) ; en dessous
+  // c'est un tiroir coulissant (.rail.open), un tout autre système d'affichage
+  // auquel data-rail ne s'applique pas.
+  // "auto" résout vers une valeur EXPLICITE selon le palier (compact sur
+  // tablette, large sur desktop dès RAIL_DESKTOP_MIN) — jamais d'attribut
+  // absent au-delà de 768px. Avant ce correctif, "auto" laissait l'attribut
+  // absent sur toute la plage 768-1023px : le CSS de masquage/centrage
+  // "collapsed" (voir bloc RÉFONTE RAIL v2 dans style.css) ne se déclenchait
+  // alors JAMAIS, et le rail affichait par défaut des icônes orphelines avec
+  // des libellés non masqués (juste écrasés à 0px de large par le flexbox) —
+  // bug constaté en vérifiant en preview live (revue sidebar desktop/tablette).
   const RAIL_MODES = ["auto", "collapsed", "expanded"];
+  const RAIL_FIXED_MIN = 768;   // en dessous : tiroir coulissant, pas de data-rail
+  const RAIL_DESKTOP_MIN = 1024; // palier où "auto" bascule vers "expanded"
   function getRailMode() { return state.ui.railMode || "auto"; }
   function applyRailMode(m) {
     const root = document.documentElement;
-    // En expanded+ on applique l'override collapsed/expanded ; sinon on laisse le breakpoint gérer (auto)
-    const isExpanded = window.matchMedia && window.matchMedia("(min-width: 840px)").matches;
-    if (m === "auto" || !isExpanded) {
+    const w = window.innerWidth || document.documentElement.clientWidth || 0;
+    if (w < RAIL_FIXED_MIN) {
+      // Tiroir mobile : le rail n'est pas une colonne fixe, data-rail n'a pas de sens ici.
       root.removeAttribute("data-rail");
-    } else {
-      root.setAttribute("data-rail", m);
+      return;
     }
+    const effective = (m === "auto") ? (w < RAIL_DESKTOP_MIN ? "collapsed" : "expanded") : m;
+    root.setAttribute("data-rail", effective);
   }
   function setRailMode(m) {
     if (!RAIL_MODES.includes(m)) m = "auto";
@@ -433,15 +445,37 @@ export const Store = (() => {
     applyRailMode(m);
     setState({ ui: { ...state.ui, railMode: m } });
   }
+  let _railResizeBound = false;
   function initRailMode() {
     let m = "auto";
     try { m = localStorage.getItem("kora-rail-mode") || "auto"; } catch (e) {}
     if (!RAIL_MODES.includes(m)) m = "auto";
     applyRailMode(m);
+    // Recalcule au franchissement d'un palier (redimensionnement fenêtre desktop,
+    // rotation tablette) — sans ça, data-rail restait figé sur la valeur calculée
+    // au chargement même après un resize traversant 768px/1024px.
+    if (!_railResizeBound) {
+      _railResizeBound = true;
+      let t = null;
+      window.addEventListener("resize", () => {
+        clearTimeout(t);
+        t = setTimeout(() => applyRailMode(getRailMode()), 150);
+      });
+    }
     return m;
   }
-  // Alias rétro-compat (ancien UI pré-M3 : app.js utilise getRail/setRail)
-  function getRail() { return getRailMode() === "collapsed" ? "collapsed" : "expanded"; }
+  // Alias rétro-compat (ancien UI pré-M3 : app.js utilise getRail/setRail pour
+  // le bouton replier/déplier). IMPORTANT : reflète la valeur EFFECTIVEMENT
+  // affichée (résolution de "auto" selon le palier actuel), pas le mode brut —
+  // sinon un premier clic en mode "auto" sur tablette semblait ne rien faire
+  // (le rail était déjà visuellement compact) puis "repliait" un rail déjà
+  // replié au lieu de proposer l'agrandissement (bug constaté en preview live).
+  function getRail() {
+    const m = getRailMode();
+    if (m !== "auto") return m;
+    const w = window.innerWidth || document.documentElement.clientWidth || 0;
+    return w < RAIL_DESKTOP_MIN ? "collapsed" : "expanded";
+  }
   function setRail(r) { setRailMode(r === "collapsed" ? "collapsed" : "expanded"); }
 
   // ---- Sélection multiple + actions en masse ----
