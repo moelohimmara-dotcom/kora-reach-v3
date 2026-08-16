@@ -478,47 +478,6 @@ export const Store = (() => {
   }
   function setRail(r) { setRailMode(r === "collapsed" ? "collapsed" : "expanded"); }
 
-  // ---- Rail v3 : items épinglés + sections repliables (piste "D") ----
-  // Préférence client-only (localStorage), même convention que kora-theme /
-  // kora-rail-mode / kora-guides-enabled. Par défaut : Tableau de bord + Total
-  // épinglés (les deux destinations les plus consultées), section "Système"
-  // repliée (Sources/Paramètres, consultés rarement au quotidien).
-  const RAIL_DEFAULT_PINS = ["cockpit", "facts"];
-  const RAIL_DEFAULT_COLLAPSED_GROUPS = ["systeme"];
-  function getRailPins() {
-    try {
-      const raw = localStorage.getItem("kora-rail-pins");
-      if (raw === null) return RAIL_DEFAULT_PINS.slice();
-      const arr = JSON.parse(raw);
-      return Array.isArray(arr) ? arr : RAIL_DEFAULT_PINS.slice();
-    } catch (e) { return RAIL_DEFAULT_PINS.slice(); }
-  }
-  function setRailPins(pins) {
-    try { localStorage.setItem("kora-rail-pins", JSON.stringify(pins)); } catch (e) {}
-  }
-  function toggleRailPin(route) {
-    const pins = getRailPins();
-    const i = pins.indexOf(route);
-    if (i === -1) pins.push(route); else pins.splice(i, 1);
-    setRailPins(pins);
-    return pins;
-  }
-  function getCollapsedGroups() {
-    try {
-      const raw = localStorage.getItem("kora-rail-collapsed");
-      if (raw === null) return RAIL_DEFAULT_COLLAPSED_GROUPS.slice();
-      const arr = JSON.parse(raw);
-      return Array.isArray(arr) ? arr : RAIL_DEFAULT_COLLAPSED_GROUPS.slice();
-    } catch (e) { return RAIL_DEFAULT_COLLAPSED_GROUPS.slice(); }
-  }
-  function setGroupCollapsed(groupId, collapsed) {
-    const groups = getCollapsedGroups();
-    const i = groups.indexOf(groupId);
-    if (collapsed && i === -1) groups.push(groupId);
-    else if (!collapsed && i !== -1) groups.splice(i, 1);
-    try { localStorage.setItem("kora-rail-collapsed", JSON.stringify(groups)); } catch (e) {}
-  }
-
   // ---- Sélection multiple + actions en masse ----
   function setSelectMode(on) {
     setState({ selectMode: !!on, selection: on ? state.selection : {} });
@@ -722,7 +681,6 @@ export const Store = (() => {
     // alias rétro-compat (certains appels utilisent initRail)
     initRail: initRailMode,
     getRail, setRail,
-    getRailPins, setRailPins, toggleRailPin, getCollapsedGroups, setGroupCollapsed,
     checkAuth, login, logout, changePassword, saveAvatar, forgot, resetPassword,
     loadUsers, createUser, setRole, deleteUser,
     setSelectMode, toggleSelect, clearSelection, selectedIds,
