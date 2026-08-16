@@ -422,7 +422,6 @@ button:disabled > .ic { color: var(--icon-color-disabled); opacity: .55; }
 /* Exceptions maintenues (icônes sur accent / dégradé) */
 .fab-action > .ic { color: var(--coral); }
 .overflow-item > .ic { color: var(--coral); }
-.rail .navitem-center > .ic,
 .navitem-center > .ic { background: linear-gradient(135deg,var(--coral),var(--bordeaux)); color: #20100B; }
 
 
@@ -444,7 +443,6 @@ button:disabled > .ic { color: var(--icon-color-disabled); opacity: .55; }
 html.icons-ready .material-icons { visibility: visible; }
 .material-icons.ic-s { font-size: 15px; }
 .material-icons.ic-l { font-size: 24px; }
-.rail .navitem .material-icons { font-size: 22px; }
 .bottomnav .navitem .material-icons { font-size: 24px; }
 
 #app { min-height: 100dvh; display: flex; flex-direction: column; }
@@ -877,7 +875,7 @@ html.icons-ready .material-icons { visibility: visible; }
 /* Desktop : la barre flottante se centre dans la ZONE DE CONTENU (viewport moins le rail)
    et se réajuste automatiquement quand le rail coulissant se déploie/rabat (attribut data-rail).
    Centre = milieu de l'espace à droite du rail = 50% + (largeur_rail / 2). */
-[data-rail="collapsed"] .select-bar { left: calc(50% + 36px); }   /* rail 72px -> +36 */
+[data-rail="collapsed"] .select-bar { left: calc(50% + 38px); }   /* rail 76px -> +38 */
 [data-rail="expanded"]  .select-bar { left: calc(50% + 130px); }  /* rail 260px -> +130 */
 @keyframes barIn { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
 .select-bar-info { font-size: var(--t-label-sm); font-weight: 700; padding: 0 8px; white-space: nowrap; }
@@ -1302,40 +1300,29 @@ html.icons-ready .material-icons { visibility: visible; }
 @media (min-width: 768px) {
   #app { flex-direction: row; }
   .topbar { position: fixed; top: 0; left: 0; right: 0; }
-  .view { padding-top: 84px; padding-left: calc(72px + var(--space-6)); padding-right: var(--space-6); transition: padding-left var(--dur-med) var(--ease); }
-  [data-rail="collapsed"] .view { padding-left: calc(72px + var(--space-6)); }
-  /* Tablette : on GARDE la bottomnav (navigation au pouce) et le rail reste compact (collapsed par défaut) */
+  .view { padding-top: 84px; padding-right: var(--space-6); transition: padding-left var(--dur-med) var(--ease); }
+  /* Largeur du rail ET marge du contenu : source unique = data-rail, qui est
+     TOUJOURS explicite ("collapsed"/"expanded") dès 768px, y compris pour le
+     mode "auto" — voir store.js applyRailMode(). Les deux valeurs (76px/260px)
+     sont définies une seule fois dans le bloc "RÉFONTE RAIL v2" en fin de
+     fichier ; ne pas les redéclarer ici (c'était la cause du bug où élargir
+     le rail sur tablette ne décalait pas le contenu, qui restait masqué
+     dessous — constaté en revue de la sidebar desktop/tablette). */
+  [data-rail="collapsed"] .view { padding-left: calc(76px + var(--space-6)); }
+  [data-rail="expanded"] .view { padding-left: calc(260px + var(--space-6)); }
+  /* Tablette : on GARDE la bottomnav (navigation au pouce) */
   .fab { bottom: 30px; right: 30px; }
   .fab-menu { bottom: 104px; right: 30px; }
-  .rail { position: fixed; left: 0; top: 64px; bottom: 0; width: 72px; z-index: 21; padding: var(--space-3) var(--space-2) var(--space-4); gap: 2px; display: flex; flex-direction: column; background: var(--md-sys-color-surface); border-right: 1px solid var(--glass-border-strong); box-shadow: var(--shadow-rail); transition: width var(--dur-med) var(--ease); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
-  [data-rail="expanded"] .rail { width: 260px; }
-  /* Collapsed : icônes seules, fond transparent */
-  .rail .navitem { flex: 0 0 auto; flex-direction: row; justify-content: flex-start; gap: 16px; padding: 10px 14px; min-height: 48px; border-radius: var(--radius-md); background: transparent; color: var(--md-sys-color-on-surface-variant); font-size: 14px; font-weight: 600; line-height: 1.1; transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
-  .rail .navitem .ic { width: 24px; height: 24px; flex: none; }
-  .rail .navitem span { display: none; }
-  [data-rail="expanded"] .rail .navitem span { display: inline; }
-  .rail .rail-sep { display: none; }
-  [data-rail="expanded"] .rail .rail-sep { display: block; height: 1px; background: var(--glass-border-strong); margin: 8px 14px; opacity: .6; }
-  .rail .navitem:hover { background: var(--glass-bg-hover); color: var(--md-sys-color-on-surface); }
-  .rail .navitem.active { background: var(--coral); color: #20100B; }
-  .rail .navitem.active > .ic { color: #20100B; }
-  .rail .navitem.active::before { display: none; }
-  .rail .navitem-center .ic { background: linear-gradient(135deg,var(--coral),var(--bordeaux)); color:#20100B; padding:0; box-shadow: var(--glass-glow); }
+  .rail { position: fixed; left: 0; top: 64px; bottom: 0; z-index: 21; padding: var(--space-3) var(--space-2) var(--space-4); gap: 2px; display: flex; flex-direction: column; background: var(--md-sys-color-surface); border-right: 1px solid var(--glass-border-strong); box-shadow: var(--shadow-rail); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
   .stat-row { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .fact-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* Desktop ≥1024px : rail large + bottomnav masquée (navigation clavier/souris) */
+/* Desktop ≥1024px : bottomnav masquée (navigation clavier/souris). Largeur du
+   rail/marge du contenu déjà couvertes par le bloc 768px ci-dessus (mêmes
+   valeurs sur tablette et desktop, aucune règle à dupliquer ici). */
 @media (min-width: 1024px) {
   .bottomnav { display: none; }
-  .rail { width: 260px; }
-  [data-rail="collapsed"] .rail { width: 72px; }
-  .view { padding-left: calc(260px + var(--space-6)); }
-  [data-rail="collapsed"] .view { padding-left: calc(72px + var(--space-6)); }
-  .rail .navitem span { display: inline; }
-  [data-rail="collapsed"] .rail .navitem span { display: none; }
-  .rail .rail-sep { display: block; }
-  [data-rail="collapsed"] .rail .rail-sep { display: none; }
 }
 
 /* Rail en drawer coulissant sur mobile (≤820px) */
@@ -1711,8 +1698,12 @@ html.icons-ready .material-icons { visibility: visible; }
 .decision-n { font-family: var(--mono, monospace); font-size: 19px; font-weight: 500; color: var(--signal, var(--coral)); font-variant-numeric: tabular-nums; }
 .decision-l { font-size: 11.5px; color: var(--on-soft); margin-top: 2px; }
 
-/* COLLAPSED : rail replié en icônes seules (transition fluide de largeur) */
+/* LARGEUR DU RAIL — seule source de vérité (voir bloc @media 768px plus haut,
+   dont les marges .view sont calculées sur ces mêmes valeurs 76px/260px).
+   data-rail est toujours explicite dès 768px (store.js applyRailMode), donc
+   ces deux règles couvrent tablette ET desktop sans duplication. */
 .rail { transition: width var(--dur-med, 250ms) cubic-bezier(.2,0,0,1); background: #12151A; }
+:root[data-rail="expanded"] .rail { width: 260px; }
 :root[data-rail="collapsed"] .rail { width: 76px; }
 :root[data-rail="collapsed"] .rail-head { justify-content: center; padding: 4px 0 14px; }
 :root[data-rail="collapsed"] .rail-mark { margin: 0; }
