@@ -1862,3 +1862,19 @@ html.icons-ready .material-icons { visibility: visible; }
 .reject-confirm-option-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .reject-confirm-option-head strong { font-size: 14px; color: var(--text-primary); }
 .reject-confirm-danger:hover, .reject-confirm-danger:focus-visible { border-color: var(--danger); }
+
+/* ============================================================
+   ÉDITEUR ENRICHI (wireframe 4.4) — barre d'outils Markdown
+   ============================================================ */
+.rte-status { font-size: 11px; color: var(--text-secondary); white-space: nowrap; margin-left: auto; }
+.rte-status-saved { color: var(--success); }
+.rte-toolbar { display: flex; align-items: center; gap: 4px; padding: 6px; margin: 8px 0; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; flex-wrap: wrap; }
+.rte-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border: none; border-radius: 8px; background: transparent;
+  color: var(--text-primary); cursor: pointer; font-size: 13px;
+}
+.rte-btn:hover, .rte-btn:focus-visible { background: var(--surface-raised); outline: none; }
+.rte-btn .ic { width: 16px; height: 16px; }
+.rte-select { height: 32px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); font-size: 12px; padding: 0 6px; }
+.rte-sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
