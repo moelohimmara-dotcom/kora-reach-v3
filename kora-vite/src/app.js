@@ -978,12 +978,65 @@ function stateBox(ic, title, msg, loading = false, actionLabel = null, actionFn 
   </div>`;
 }
 
+// Bulle de rejet (wireframe 4.3b) : au clic sur "Rejeter", propose un choix
+// explicite plutôt qu'un rejet silencieux. "Mettre à la corbeille" (par défaut,
+// recommandé, récupérable 11j -> decide(REJECTED), comportement déjà en place)
+// vs "Supprimer définitivement" (irréversible -> deleteForever, sans détour par
+// la corbeille). Évite qu'un clic sur Rejeter supprime irréversiblement par accident.
+function renderRejectConfirm(s) {
+  const sh = s.sheet;
+  const body = document.getElementById("sheetBody");
+  const sheet = document.getElementById("sheet");
+  const scrim = document.getElementById("sheetScrim");
+  const f = sh.fact;
+  const c = f.champion || {};
+  body.innerHTML = `
+    <div class="reject-confirm">
+      <div class="reject-confirm-head">
+        ${icon("i-info", "ic-l")}
+        <h2 class="sheet-title">Rejeter cet article ?</h2>
+      </div>
+      <p class="muted">« ${esc((c.title || "").slice(0, 90))} »</p>
+      <p class="muted">Choisissez ce qu'il advient de l'article rejeté :</p>
+      <div class="reject-confirm-options">
+        <button class="reject-confirm-option" data-reject-choice="trash">
+          <div class="reject-confirm-option-head">
+            ${icon("i-trash")}
+            <strong>Mettre à la corbeille</strong>
+            <span class="badge badge-transmitted">recommandé</span>
+          </div>
+          <p class="muted">Récupérable pendant 11 jours, puis suppression automatique.</p>
+        </button>
+        <button class="reject-confirm-option reject-confirm-danger" data-reject-choice="delete">
+          <div class="reject-confirm-option-head">
+            ${icon("i-close")}
+            <strong>Supprimer définitivement</strong>
+          </div>
+          <p class="muted">Action irréversible : l'article et son historique sont effacés immédiatement.</p>
+        </button>
+      </div>
+      <button class="btn btn-tonal btn-block" data-reject-cancel="1">Annuler</button>
+    </div>`;
+  sheet.hidden = false; scrim.hidden = false;
+  body.querySelector('[data-reject-choice="trash"]').onclick = () => { Store.decide(f.fact_id, "REJECTED"); Store.closeSheet(); snack("Article rejeté — envoyé à la corbeille"); };
+  body.querySelector('[data-reject-choice="delete"]').onclick = () => {
+    if (!window.confirm("Supprimer définitivement cet article ? Cette action est irréversible.")) return;
+    Store.deleteForever([f.fact_id]);
+  };
+  const cancelBtn = body.querySelector("[data-reject-cancel]");
+  if (cancelBtn) cancelBtn.onclick = () => Store.closeSheet();
+  // Focus trap minimal : ramène le focus dans le panneau, Échap déjà géré globalement.
+  const firstBtn = body.querySelector(".reject-confirm-option");
+  if (firstBtn) firstBtn.focus();
+}
+
 function renderSheet(s) {
   const sh = s.sheet;
   const body = document.getElementById("sheetBody");
   const sheet = document.getElementById("sheet");
   const scrim = document.getElementById("sheetScrim");
   if (!sh || !body || !sheet || !scrim) { sheet.hidden = true; scrim.hidden = true; return; }
+  if (sh.type === "reject-confirm") return renderRejectConfirm(s);
   const f = sh.fact; const c = f.champion || {};
   const img = imgSrc(f);
   const ph = placeholderSvg(Store.getTheme());
@@ -1050,7 +1103,12 @@ function renderSheet(s) {
 
   const closeBtn = body.querySelector("[data-close]");
   if (closeBtn) closeBtn.onclick = () => Store.closeSheet();
-  $$("[data-decide]", body).forEach(b => b.onclick = () => { Store.decide(f.fact_id, b.dataset.decide); Store.closeSheet(); });
+  $$("[data-decide]", body).forEach(b => b.onclick = () => {
+    // "Rejeter" ouvre la bulle de choix (corbeille vs suppression définitive)
+    // au lieu de rejeter directement — évite une suppression accidentelle.
+    if (b.dataset.decide === "REJECTED") { Store.openSheet({ type: "reject-confirm", fact: f }); renderSheet(Store.state); return; }
+    Store.decide(f.fact_id, b.dataset.decide); Store.closeSheet();
+  });
   const rb = body.querySelector("[data-retract]");
   if (rb) rb.onclick = () => { Store.retract(f.fact_id); Store.closeSheet(); };
   const ed = body.querySelector("[data-edit]");
