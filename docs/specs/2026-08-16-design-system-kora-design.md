@@ -32,39 +32,61 @@ Trois artefacts se recouvrent et se contredisent :
 | `--danger` | `#E5484D` | DESIGN_SYSTEM.md ✅ |
 | Police (corps **et** titres) | **Source Sans Pro** | ni Inter (doc), ni Oswald (imports) ❌ |
 
-**Incohérences résiduelles identifiées** :
-- **Trois valeurs de "coral"** coexistent : `#E9705D` (`--accent`, réellement utilisé), `#F2A98C` (`--coral` calculé + `--md-sys-color-primary`), `#FF6B4A` (`--coral` défini plus haut dans `style.css`, écrasé en cascade).
-- La **police documentée (Inter) diffère de la police rendue (Source Sans Pro)**.
-- La couche **Material Design 3** (26 rôles) est largement **non consommée** par les composants et constitue du bruit.
+**L'accent est un token de BRANDING configurable, pas un hex figé** (constat de l'audit Lot 1, 2026-08-16) :
+- Le vrai token d'accent est **`--coral`** — utilisé **64 fois** par les composants, contre `--accent` **3 fois** (quasi legacy).
+- `--coral` est **injecté dynamiquement par le backend** : `store.js` → `applySettings()` fait `root.style.setProperty("--coral", s.accent_coral)` à partir de `/api/settings`. Le défaut vit dans `settings.py` (`accent_coral = #F2A98C`). C'est la **fonctionnalité white-label** (Paramètres → Personnalisation), intentionnelle.
+- Les **deux `--coral` statiques de `style.css`** (`#FF6B4A` ligne 16, `#E9705D` ligne 1841) sont des **fallbacks écrasés** dès que les réglages se chargent. `--accent: #E9705D` est du **legacy** à réconcilier.
 
-**Conclusion** : la couche sémantique est déjà cohérente entre l'app et `docs/DESIGN_SYSTEM.md`. B.1 n'est donc pas « choisir entre trois chartes » mais **« adopter la couche sémantique comme canon et élaguer le reste »**.
+**Autres incohérences** :
+- La **police documentée (Inter) diffère de la police rendue (Source Sans Pro)**.
+- Couche **Material Design 3** : 128 tokens `--md-sys-color-*` définis, ~25 réellement consommés → **24 tokens morts** (variantes `-fixed`, `-fixed-dim`, `inverse-*`) à élaguer.
+- **44 valeurs hex brutes** hors `:root` dans `style.css` (composants qui court-circuitent les tokens) — dette à rebrancher progressivement.
+
+**Conclusion** : la couche sémantique de structure (`--bg`, `--surface`, `--success`…) est déjà cohérente entre l'app et `docs/DESIGN_SYSTEM.md`. **L'accent, lui, est volontairement configurable** (`--coral`, défaut `#F2A98C`). B.1 = **documenter fidèlement cette réalité + élaguer les fallbacks morts et les tokens Material 3 inutilisés**, sans casser le branding dynamique ni changer l'apparence.
 
 ---
 
 ## 2. Décision (canon)
 
-**La couche sémantique réellement rendue est le canon.** Valeurs de référence figées :
+**Deux natures de tokens à distinguer** :
 
+**a) Tokens de structure — figés (canon) :**
 ```
 --bg:        #0E1114   (fond application)
 --surface:   #171C21   (cartes)
---accent:    #E9705D   (actions, accent — jamais glow néon)
 --success:   #3DD68C   (état « prêt », validé)
 --warning:   #F5A83C   (attention)
 --danger:    #E5484D   (rejet, suppression)
 Police:      Source Sans Pro (corps + titres)
 ```
 
-Tout le reste (couche Material Design 3, `--coral` à `#F2A98C`/`#FF6B4A`, mention Inter) est **traité comme de la dette à documenter puis élaguer**, sans changement visuel perceptible pour l'utilisateur.
+**b) Token d'accent — configurable (branding white-label) :**
+```
+--coral      = accent primaire. Piloté par settings.accent_coral (/api/settings),
+               injecté au runtime via store.js applySettings().
+               Défaut : #F2A98C (settings.py).
+--bordeaux, --coral-strong = dérivés de --coral.
+```
+
+**Défaut d'accent décidé = `#E9705D`** (charte KORA documentée ; validé 2026-08-16). Toutes les sources du défaut sont unifiées sur cette valeur :
+- `settings.py` → `DEFAULTS["accent_coral"]` : `#F2A98C` → **`#E9705D`**.
+- `style.css` → les deux `--coral` statiques (`#FF6B4A`, `#E9705D`) → **une seule** définition `#E9705D` ; `--accent` legacy aligné.
+- `app.js` → fallbacks codés en dur `#F2A98C` (thèmes L32-35, champ couleur L718/720, L1161) → **`#E9705D`**.
+
+Ainsi, avant même le chargement de `/api/settings`, l'UI affiche déjà la couleur de charte (pas de flash). Le white-label reste pleinement fonctionnel : un déploiement ayant stocké un `accent_coral` en base garde le sien.
+
+Tout le reste (24 tokens Material 3 morts, mention Inter dans la doc) est **documenté puis élagué**, sans changement visuel perceptible.
 
 ---
 
 ## 3. Travaux (5 lots)
 
-### Lot 1 — Audit du CSS (lecture seule, aucun changement visuel)
-- Repérer, par grep croisé `style.css` ↔ `app.js`/`shell.js`/`store.js`, les tokens **réellement consommés** vs les tokens **morts** (couche Material 3 non référencée).
-- Cartographier les définitions en cascade conflictuelles (`--coral` défini plusieurs fois).
-- Produire une liste : « à garder / à supprimer / à consolider ». Aucune modification à ce lot.
+### Lot 1 — Audit du CSS ✅ FAIT (2026-08-16, lecture seule)
+Résultats :
+- **Accent** : `--coral` (64 usages) est le vrai token, piloté par le branding (`store.js applySettings` ← `settings.accent_coral`, défaut `#F2A98C`). `--accent` (3 usages) est legacy. Deux fallbacks statiques `--coral` divergents dans `style.css` (`#FF6B4A` L16, `#E9705D` L1841).
+- **Material 3** : 128 tokens définis, ~25 consommés → **24 morts** (`-fixed`, `-fixed-dim`, `inverse-*`, quelques `on-*`).
+- **Hex bruts** : 44 occurrences hors `:root` (composants à rebrancher, dette progressive).
+- **Police** : Source Sans Pro rendue (doc dit Inter → à corriger).
 
 ### Lot 2 — Mettre à jour `docs/DESIGN_SYSTEM.md`
 - Corriger la **police** : `Inter/system-ui` → **Source Sans Pro** (réalité rendue).
@@ -81,10 +103,18 @@ Tout le reste (couche Material Design 3, `--coral` à `#F2A98C`/`#FF6B4A`, menti
 ### Lot 4 — Corriger le README
 - Remplacer la charte codée en dur par un **renvoi** vers `docs/DESIGN_SYSTEM.md` (éviter la duplication qui redérive).
 
-### Lot 5 — Élagage ciblé (optionnel, un seul commit de convergence)
-- Sur la base du Lot 1 : supprimer les tokens Material 3 morts et consolider les `--coral` en double, **uniquement si** l'audit confirme qu'ils ne sont pas consommés.
-- Rebrancher tout composant qui utiliserait encore une couleur codée en dur sur le token sémantique.
-- **Vérification obligatoire** : avant/après sur `/style-guide` + cockpit en preview live — aucun changement visuel perceptible.
+### Lot 5 — Unification de l'accent + élagage ciblé
+**5a — Unifier le défaut d'accent sur `#E9705D`** (léger changement visuel assumé : pêche → terracotta, uniquement pour les déploiements au défaut) :
+- `settings.py` : `DEFAULTS["accent_coral"] = "#E9705D"`.
+- `style.css` : une seule définition `--coral: #E9705D` (retirer `#FF6B4A` L16 ; garder/aligner L1841) ; `--accent` aligné.
+- `app.js` : remplacer les fallbacks `#F2A98C` (L32-35, L718, L720, L1161) par `#E9705D`.
+- Vérifier en preview que le branding dynamique (Paramètres → Personnalisation) surcharge toujours correctement.
+
+**5b — Élaguer les 24 tokens Material 3 morts** (identifiés au Lot 1 : `-fixed`, `-fixed-dim`, `inverse-*`, `on-*` non consommés). Suppression pure, aucun `var()` ne les référence.
+
+**5c — Hex bruts (44)** : hors périmètre B.1 immédiat — noter comme dette, rebrancher au fil des évolutions de chaque composant (pas un rasage en un coup, risque de régression visuelle).
+
+- **Vérification obligatoire** : avant/après sur `/style-guide` + cockpit en preview live. Seul changement visuel attendu = la teinte d'accent par défaut (5a) ; rien d'autre.
 
 ---
 
