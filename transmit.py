@@ -85,6 +85,32 @@ def _build_supabase_payload(fact: dict, final_text: str) -> dict:
     }
 
 
+def _mark_article_published(src_url: str) -> None:
+    """Repasse l'article de l'entrepôt à status='published' après un publish
+    WordPress réussi. Identifie la ligne par source_url (clé de dédupe de la table
+    `articles`, qui n'a pas de fact_id).
+
+    Best-effort : n'interrompt JAMAIS la transmission (toute erreur est avalée).
+    Idempotent : ne réécrit pas une ligne déjà 'published'. 'published' est en
+    minuscules pour matcher la requête du compteur count_published()."""
+    if not src_url:
+        return
+    try:
+        import db
+        con, _ = db.conn()
+        try:
+            cur = con.cursor()
+            cur.execute(
+                "UPDATE articles SET status='published' "
+                "WHERE source_url=%s AND lower(status) <> 'published'" % db.placeholder(),
+                (src_url,))
+            con.commit()
+        finally:
+            con.close()
+    except Exception:
+        pass
+
+
 def transmit(fact: dict, final_text: str, provider: str = None, wp_status: str = "publish") -> dict:
     """Transmet l'article. Retourne {status, provider, http_status, detail}.
     - provider explicite: force un seul backend.
@@ -110,13 +136,22 @@ def transmit(fact: dict, final_text: str, provider: str = None, wp_status: str =
         return _to_supabase(fact, final_text)
     # mode() == "both"
     results = []
+    wp_published = False
     if WP_URL and WP_USER and WP_APP_PASS:
-        results.append(_to_wordpress(payload))
+        wp_res = _to_wordpress(payload, wp_status=wp_status)  # passe wp_status (sinon un 'draft' publiait quand même)
+        results.append(wp_res)
+        wp_published = (wp_res["status"] == "TRANSMITTED" and wp_status == "publish")
     # Entrepôt: Postgres local si activé, sinon Supabase cloud (legacy)
     if (os.environ.get("DATABASE_BACKEND") or "sqlite").lower() == "postgres":
         results.append(_to_postgres(fact, final_text))
     elif SB_URL and SB_KEY:
         results.append(_to_supabase(fact, final_text))
+    # Ferme la boucle : l'entrepôt insère l'article en 'PENDING_REVIEW' ; si WordPress
+    # l'a RÉELLEMENT publié (status=publish, succès), on le repasse à 'published' pour
+    # que le compteur "Publiés" du dashboard reflète la réalité. Sans ça, aucun code
+    # ne fait jamais passer articles.status à 'published' -> compteur figé.
+    if wp_published:
+        _mark_article_published(payload.get("source_url", ""))
     if not results:
         return {"status": "ERROR", "provider": "both", "http_status": 0,
                 "detail": "Aucun backend configuré."}
