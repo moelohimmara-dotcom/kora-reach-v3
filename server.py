@@ -20,6 +20,7 @@ import normalizer
 import config
 from audit import get_events, log, get_daily, delete_events, purge_all, purge_day
 import settings
+import agent_prompts
 import auth
 from hitl_store import (
     fact_id_of, decide, get as hitl_get, list_all,
@@ -133,6 +134,17 @@ class Handler(BaseHTTPRequestHandler):
             # GET = lecture du branding (nom/logo/couleurs) -> public pour l'écran de connexion.
             # La MODIFICATION (POST) reste advanced (voir do_POST).
             return self._send(200, settings.get_settings())
+        if path == "/api/agent-prompts":
+            # Zone sensible (§9.5) : prompt système + add-on de l'agent -> advanced uniquement.
+            if not self._require_role("advanced"):
+                return
+            ov = agent_prompts.get_overrides()
+            return self._send(200, {
+                "system": ov["system"],
+                "addon": ov["addon"],
+                "system_is_default": not ov["system"],
+                "default_system": writer.SYSTEM_PROMPT,
+            })
         if path == "/api/last":
             if not self._require_auth():
                 return
@@ -460,6 +472,20 @@ class Handler(BaseHTTPRequestHandler):
             if not self._require_role("advanced"):
                 return
             res = settings.save_settings(payload or {})
+            return self._send(200 if res.get("ok") else 400, res)
+        if p.path == "/api/agent-prompts":
+            # Zone sensible (§9.5) : édition tracée dans le journal d'audit (agent_prompts.py).
+            if not self._require_role("advanced"):
+                return
+            field = payload.get("field")  # "system" | "addon"
+            value = payload.get("value", "")
+            res = agent_prompts.set_override(field, value, editor=self._actor_username())
+            return self._send(200 if res.get("ok") else 400, res)
+        if p.path == "/api/agent-prompts/reset":
+            if not self._require_role("advanced"):
+                return
+            field = payload.get("field")  # "system" | "addon"
+            res = agent_prompts.reset(field, editor=self._actor_username())
             return self._send(200 if res.get("ok") else 400, res)
         # ---- Auth ----
         if p.path == "/api/auth/login":
