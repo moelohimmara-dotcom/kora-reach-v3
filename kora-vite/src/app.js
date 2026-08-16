@@ -687,6 +687,12 @@ function viewSettings(s) {
     { id: "personalization", ic: "i-brush", title: "Personnalisation", sub: "Nom, logo, couleurs, libellés" },
     { id: "accounts", ic: "i-users", title: "Comptes & habilitations", sub: "Utilisateurs et rôles" },
     { id: "agent", ic: "i-spark", title: "Agent", sub: "Prompt système, instructions (zone sensible)" },
+    // Style Guide (B.1) : sorti du rail principal (revue sidebar) — outil de
+    // gouvernance design occasionnel, pas un geste quotidien. data-setnav
+    // spécial : ne correspond à AUCUN tiroir #drawer-styleguide, il navigue
+    // directement vers /style-guide (voir override après la boucle générique
+    // dans bindSettings, même précaution que auditNav/agentNav).
+    { id: "styleguide", ic: "i-palette", title: "Style Guide", sub: "Référence vivante du design system" },
   ] : [];
   const adminItems = isAdmin ? [
     { id: "auditlog", ic: "i-shield", title: "Journal d'audit", sub: "Connexions, mots de passe, paramètres" },
@@ -869,6 +875,125 @@ function viewSettings(s) {
 // Rôle minimum requis pour accéder à une route (13.3). Routes absentes de
 // cette map = accessibles à tout utilisateur authentifié.
 const ROUTE_ROLE = { styleguide: "advanced" };
+
+// ============================================================================
+// RAIL v3 (piste "D" — choisie parmi 4 propositions comparées avant codage) :
+// sections repliables + items épinglables. Remplace le rail statique de
+// shell.js par un rendu dynamique (#railBody) piloté par les préférences
+// utilisateur (Store.getRailPins()/getCollapsedGroups(), localStorage).
+//
+// Corrections décidées en revue et appliquées ici :
+// - "Sources" (config sensible, /api/whitelist en 403 pour un rôle normal)
+//   porte `role: "advanced"` -> masqué pour les autres, quelle que soit sa
+//   position (épinglé ou dans le groupe Système).
+// - "Style Guide" est retiré du rail (outil de gouvernance design occasionnel,
+//   pas un geste quotidien) -> déplacé dans Paramètres > Avancés (viewSettings).
+// ============================================================================
+const RAIL_GROUPS = [
+  { id: "pilotage", label: "Pilotage", items: [
+    { route: "cockpit", icon: "i-dashboard", label: "Tableau de bord" },
+    { route: "audit", icon: "i-check", label: "Historique" },
+  ] },
+  { id: "contenu", label: "Contenu", items: [
+    { route: "facts", icon: "i-facts", label: "Total", badge: "facts" },
+    { route: "drafts", icon: "i-edit", label: "Brouillons", badge: "drafts" },
+    { route: "trash", icon: "i-trash", label: "Corbeille", badge: "trash" },
+  ] },
+  { id: "systeme", label: "Système", items: [
+    { route: "sources", icon: "i-sources", label: "Sources", badge: "sources", role: "advanced" },
+    { route: "settings", icon: "i-settings", label: "Paramètres" },
+  ] },
+];
+const RAIL_ITEM_INDEX = {}; // route -> {item, groupId} — évite de re-parcourir RAIL_GROUPS à chaque pin
+RAIL_GROUPS.forEach(g => g.items.forEach(it => { RAIL_ITEM_INDEX[it.route] = { item: it, groupId: g.id }; }));
+
+function railItemRow(it) {
+  return `<div class="item-row">
+    <button class="item" data-route="${it.route}"${it.role ? ` data-role="${it.role}"` : ""}>
+      <span class="ico">${icon(it.icon)}</span>
+      <span class="lbl">${esc(it.label)}</span>
+      ${it.badge ? `<span class="ct" data-badge="${it.badge}"></span>` : ""}
+    </button>
+    <button class="pin-star" type="button" data-pin="${it.route}" title="Épingler/désépingler">${icon("i-star")}</button>
+  </div>`;
+}
+
+function renderRailBody() {
+  const body = document.getElementById("railBody");
+  if (!body) return;
+  const pins = Store.getRailPins();
+  const collapsed = Store.getCollapsedGroups();
+  let html = "";
+  if (pins.length) {
+    html += `<div class="rail-pins">
+      <div class="rail-group rail-group-pins"><span class="pin-ic">${icon("i-star")}</span>Épinglés</div>
+      ${pins.map(r => RAIL_ITEM_INDEX[r]).filter(Boolean).map(x => railItemRow(x.item)).join("")}
+    </div>`;
+  }
+  RAIL_GROUPS.forEach(g => {
+    const visibleItems = g.items.filter(it => !pins.includes(it.route));
+    if (!visibleItems.length) return; // groupe entièrement épinglé -> pas de section vide
+    const isCollapsed = collapsed.includes(g.id);
+    html += `<div class="rail-acc ${isCollapsed ? "collapsed" : ""}" data-acc-group="${g.id}">
+      <button class="rail-acc-head" type="button" data-acc-toggle="${g.id}">
+        <span class="rail-group">${esc(g.label)}</span>
+        <span class="rail-acc-chev">${icon("i-chevron")}</span>
+      </button>
+      <div class="rail-acc-body">${visibleItems.map(railItemRow).join("")}</div>
+    </div>`;
+  });
+  body.innerHTML = html;
+  applyRailRoleVisibility();
+}
+
+// Masque "Sources" (data-role="advanced") pour un rôle non-advanced, quelle
+// que soit sa position actuelle (épinglé ou dans Système) — corrige le
+// dead-end 403 constaté en revue (clic -> "Sources en chargement…" indéfini).
+function applyRailRoleVisibility() {
+  const isAdvanced = (Store.state.auth && Store.state.auth.role === "advanced");
+  $$('#railBody .item[data-role="advanced"]').forEach(n => {
+    const row = n.closest(".item-row");
+    if (row) row.hidden = !isAdvanced;
+  });
+}
+
+let _railBodyBuilt = false;
+function bindRailBody() {
+  const body = document.getElementById("railBody");
+  if (!body || body.__bound) return;
+  body.__bound = true;
+  // Listener délégué unique sur le conteneur STABLE (#railBody n'est jamais
+  // remplacé lui-même, seul son innerHTML change) : reste valide même après
+  // un renderRailBody() déclenché hors cycle de render() complet (clic
+  // épingler/replier), contrairement à bind() qui ré-attache les .onclick
+  // globaux uniquement à chaque render() (cf. exclusion de #railBody dans
+  // bind() plus bas, pour éviter le double-navigate()).
+  body.addEventListener("click", (e) => {
+    const pinBtn = e.target.closest("[data-pin]");
+    if (pinBtn) {
+      Store.toggleRailPin(pinBtn.dataset.pin);
+      renderRailBody();
+      return;
+    }
+    const accHead = e.target.closest("[data-acc-toggle]");
+    if (accHead) {
+      const gid = accHead.dataset.accToggle;
+      const isCollapsed = Store.getCollapsedGroups().includes(gid);
+      Store.setGroupCollapsed(gid, !isCollapsed);
+      renderRailBody();
+      return;
+    }
+    const itemBtn = e.target.closest(".item[data-route]");
+    if (itemBtn) {
+      if (Store.state.ui.busy) { snack("Génération en cours…"); return; }
+      const railEl = document.getElementById("rail");
+      if (railEl) railEl.classList.remove("open");
+      const sc = document.getElementById("railScrim");
+      if (sc) sc.hidden = true;
+      navigate(itemBtn.dataset.route);
+    }
+  });
+}
 
 // Bandeau d'erreur réseau global (13.1). s.ui.error est déjà peuplé par tous
 // les appels API en échec (~14 sites dans store.js — health, hitl, audit,
@@ -1759,6 +1884,10 @@ function bindSettings() {
   if (auditNav) auditNav.onclick = () => { openDrawer("auditlog"); loadAuditLog(); };
   const agentNav = view.querySelector('.settings-nav-item[data-setnav="agent"]');
   if (agentNav) agentNav.onclick = () => { openDrawer("agent"); loadAgentPrompts(); };
+  // Style Guide : pas un tiroir, une navigation directe vers /style-guide
+  // (sorti du rail principal, cf. RAIL_GROUPS dans app.js).
+  const sgNav = view.querySelector('.settings-nav-item[data-setnav="styleguide"]');
+  if (sgNav) sgNav.onclick = () => navigate("styleguide");
   if (scrim) scrim.onclick = closeDrawer;
   view.querySelectorAll("[data-setback]").forEach(b => b.onclick = closeDrawer);
   // Escape ferme le tiroir settings (sans fermer la feuille HITL)
@@ -1835,6 +1964,15 @@ function render() {
     view.innerHTML = blocked ? view403() : (map[s.route] || viewCockpit)(s);
   }
   _lastRenderedRoute = blocked ? "403" : s.route;
+  // Rail v3 : construit UNE SEULE FOIS (pas à chaque render/poll — les clics
+  // épingler/replier appellent renderRailBody() eux-mêmes, cf. bindRailBody()
+  // plus haut). Même précaution que pour les tiroirs Paramètres : reconstruire
+  // #railBody à chaque poll écraserait l'état replié/déplié en cours.
+  if (!_railBodyBuilt) {
+    _railBodyBuilt = true;
+    renderRailBody();
+    bindRailBody();
+  }
   $$(".navitem, .rail .navitem, .item, .rail .item").forEach(n => {
     const on = n.dataset.route === s.route;
     n.classList.toggle("active", on);
@@ -1845,8 +1983,9 @@ function render() {
   $$('.navitem[data-route="settings"]').forEach(n => { n.hidden = !isAdvanced; });
   const bnav = document.querySelector('.bottomnav [data-route="settings"]');
   if (bnav) bnav.hidden = !isAdvanced;
-  // Style Guide (/style-guide) : outil dev/design, réservé au rôle advanced.
-  $$('.sg-navlink').forEach(n => { n.hidden = !isAdvanced; });
+  // Sources (config sensible, 403 pour un rôle normal) : masqué quelle que
+  // soit sa position dans le rail (épinglé ou dans le groupe Système).
+  applyRailRoleVisibility();
   // Badges de compteur sur la navigation (Articles / Sources / Brouillons / Corbeille)
   try {
     const facts = s.facts || [];
@@ -2379,7 +2518,12 @@ function bind() {
   // RAIL — Desktop/Tablet persistent (collapse/expand + drawer)
   // =========================================================
   const railEl = document.getElementById("rail");
-  $$("[data-route]").forEach(n => n.onclick = () => {
+  // #railBody est exclu ici : sa navigation est gérée par un listener délégué
+  // dans bindRailBody() (posé UNE FOIS sur le conteneur stable), pas par un
+  // .onclick réattaché à chaque render() — sinon un item repositionné par un
+  // clic épingler/replier (renderRailBody(), hors cycle de render() complet)
+  // resterait sans handler jusqu'au prochain render() naturel (poll).
+  $$("[data-route]").filter(n => !n.closest("#railBody")).forEach(n => n.onclick = () => {
     // Pendant une génération (busy), la génération est prioritaire : on reste
     // sur l'écran de génération et on ignore la navigation vers un autre écran.
     if (Store.state.ui.busy) { snack("Génération en cours…"); return; }
@@ -2406,6 +2550,11 @@ function bind() {
   // Clic sur le scrim = ferme le drawer mobile (corrige l'impossibilité de refermer)
   const rsc = document.getElementById("railScrim");
   if (rsc) rsc.onclick = closeRailDrawer;
+  // Widget "à décider" (bas du rail) : rendu cliquable (piste D) — avant, il
+  // avait l'apparence d'un CTA (dégradé, pouls animé) mais aucun handler
+  // n'était attaché (constaté en revue). Renvoie vers Articles filtré "En attente".
+  const df = document.getElementById("decisionFoot");
+  if (df) df.onclick = () => { navigate("facts"); Store.setFactFilter("pending"); };
 
   // =========================================================
   // RIGHT DRAWER OVERLAY — Desktop/Tablet (≥820px) : "Plus" menu

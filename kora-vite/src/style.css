@@ -1686,11 +1686,57 @@ html.icons-ready .material-icons { visibility: visible; }
 .item.active::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px;
   background: var(--coral); box-shadow: 0 0 8px rgba(255,107,74,.55); }
 
+/* ============================================================
+   RAIL v3 — sections repliables + items épinglables (piste "D",
+   choisie parmi 4 propositions comparées avant codage). Structure
+   construite dynamiquement par renderRailBody() (app.js) dans #railBody.
+   ============================================================ */
+.rail-body { display: flex; flex-direction: column; min-height: 0; }
+
+/* .item-row enveloppe .item + l'étoile d'épinglage. .item n'est plus width:100%
+   direct (il partage la ligne avec l'étoile) -> flex:1 à la place. Évite un
+   bouton imbriqué dans un bouton (HTML invalide) : l'étoile est une SŒUR de
+   .item, pas un enfant, tout en restant visuellement "dans" la même ligne. */
+.item-row { display: flex; align-items: center; gap: 2px; width: 100%; }
+.item-row .item { flex: 1; width: auto; }
+.pin-star { flex: 0 0 auto; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 8px;
+  color: var(--muted); opacity: 0; transition: opacity var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+.pin-star .ic { width: 14px; height: 14px; }
+.item-row:hover .pin-star { opacity: .8; }
+.pin-star:hover { background: var(--surface-2, #23272F); color: var(--coral); opacity: 1; }
+.pin-star:focus-visible { opacity: 1; outline: 2px solid var(--coral); outline-offset: 1px; }
+/* Épinglé : étoile (pleine par nature, cf. icons.js #i-star) toujours visible,
+   pas seulement au survol — distinction pinned/non-pinned par couleur+opacité. */
+.rail-pins .pin-star { opacity: .6; color: var(--coral); }
+.rail-pins .pin-star:hover { opacity: 1; }
+
+.rail-group-pins { display: flex; align-items: center; gap: 6px; }
+.rail-group-pins .pin-ic { display: inline-flex; color: var(--coral); }
+.rail-group-pins .pin-ic .ic { width: 11px; height: 11px; }
+.rail-pins { margin-bottom: 4px; }
+
+/* Section repliable (Pilotage / Contenu / Système) */
+.rail-acc-head { display: flex; align-items: center; justify-content: space-between; width: 100%;
+  padding: 16px 10px 6px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.rail-acc-head .rail-group { padding: 0; }
+.rail-acc-chev { width: 13px; height: 13px; color: var(--muted); flex: 0 0 auto; transition: transform var(--dur-fast) var(--ease); }
+.rail-acc-chev .ic { width: 13px; height: 13px; }
+.rail-acc.collapsed .rail-acc-chev { transform: rotate(-90deg); }
+.rail-acc.collapsed .rail-acc-body { display: none; }
+.rail-acc-body { display: flex; flex-direction: column; gap: 1px; }
+
 .rail-spacer { flex: 1; min-height: 8px; }
 
-/* Bandeau de décision (SIGNATURE corail — seul élément plein) */
+/* Bandeau de décision (SIGNATURE corail — seul élément plein). C'est un
+   <button> (piste D : rendu cliquable, il n'affichait avant qu'une apparence
+   de CTA sans handler — constaté en revue) : reset des styles UA de bouton
+   (couleur/police héritées par défaut, curseur explicite). */
 .decision-foot { margin-top: 10px; padding: 12px 14px; border-radius: 12px; display: flex; align-items: center; gap: 11px;
-  background: linear-gradient(135deg, rgba(255,107,74,.18), rgba(194,84,47,.10)); border: 1px solid rgba(255,107,74,.25); }
+  background: linear-gradient(135deg, rgba(255,107,74,.18), rgba(194,84,47,.10)); border: 1px solid rgba(255,107,74,.25);
+  width: 100%; font: inherit; color: inherit; cursor: pointer; text-align: left;
+  transition: border-color var(--dur-fast) var(--ease); }
+.decision-foot:hover { border-color: rgba(255,107,74,.45); }
+.decision-foot:focus-visible { outline: 2px solid var(--coral); outline-offset: 2px; }
 .decision-pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--signal, var(--coral));
   box-shadow: 0 0 0 0 rgba(230,192,121,.5); animation: koraPulseRail 2.4s ease-in-out infinite; flex: 0 0 auto; }
 @keyframes koraPulseRail { 0%,100% { box-shadow: 0 0 0 0 rgba(230,192,121,.5); } 50% { box-shadow: 0 0 0 7px rgba(230,192,121,0); } }
@@ -1714,6 +1760,15 @@ html.icons-ready .material-icons { visibility: visible; }
 :root[data-rail="collapsed"] .item { justify-content: center; padding: 10px 0; }
 :root[data-rail="collapsed"] .decision-foot { justify-content: center; padding: 12px 0; }
 :root[data-rail="collapsed"] .item.active::before { top: 6px; bottom: 6px; }
+/* Rail v3 en mode icônes seules : l'étoile d'épinglage et les en-têtes de
+   section repliable n'ont plus leur place (pas de largeur pour un libellé ou
+   une flèche) -> tout s'affiche à plat, quel que soit l'état replié/déplié
+   choisi par l'utilisateur pour chaque section (kora-rail-collapsed reste
+   respecté dès que le rail redevient large). */
+:root[data-rail="collapsed"] .pin-star { display: none; }
+:root[data-rail="collapsed"] .item-row { justify-content: center; }
+:root[data-rail="collapsed"] .rail-acc-head { display: none; }
+:root[data-rail="collapsed"] .rail-acc-body { display: flex !important; }
 
 @media (prefers-reduced-motion: reduce) { .decision-pulse { animation: none; } .rail { transition: none; } }
 
