@@ -2,6 +2,16 @@ import "./style.css";
 import { SHELL } from "./shell.js";
 import { Store } from "./store.js";
 import { App } from "./app.js";
+import { SPRITE } from "./icons.js";
+
+// Sprite SVG des icônes : en build de prod, postbuild.mjs l'injecte déjà
+// statiquement dans dist/index.html (anti-flash, avant même que ce script ne
+// s'exécute) — le même check d'idempotence (id="i-dashboard") évite un
+// doublon ici. En dev (npm run dev), postbuild.mjs ne tourne jamais : sans
+// cette injection, AUCUNE icône ne s'affiche nulle part dans l'app.
+if (!document.getElementById("i-dashboard")) {
+  document.body.insertAdjacentHTML("afterbegin", SPRITE);
+}
 
 // === Material Design 3 : typographie officielle (typescale tokens) ===
 import { styles as typescaleStyles } from "@material/web/typography/md-typescale-styles.js";

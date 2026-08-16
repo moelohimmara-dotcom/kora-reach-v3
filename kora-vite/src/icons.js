@@ -1,6 +1,10 @@
 // Sprite SVG KORA — Lucide Icons (MIT, https://lucide.dev)
 // Outline 24px, stroke 2px, currentColor. Mêmes id #i-* que l'ancien sprite -> app.js inchangé.
-const SPRITE = `<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+// Exporté (2026-08-16) pour que main.js puisse l'injecter au boot en dev
+// (npm run dev) — jusqu'ici SEUL postbuild.mjs l'injectait, et uniquement
+// dans dist/index.html après `npm run build` : en dev, AUCUNE icône ne
+// s'affichait jamais nulle part dans l'app (bug constaté en preview live).
+export const SPRITE = `<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
   <symbol id="i-dashboard" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <rect width="7" height="9" x="3" y="3" rx="1" />
   <rect width="7" height="5" x="14" y="3" rx="1" />
