@@ -1846,3 +1846,19 @@ html.icons-ready .material-icons { visibility: visible; }
 .sg-type > div { margin: 6px 0; }
 .sg-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .sg-kpi { max-width: 260px; }
+
+/* ============================================================
+   BULLE DE REJET (wireframe 4.3b) — choix corbeille / suppression
+   ============================================================ */
+.reject-confirm { display: flex; flex-direction: column; gap: 14px; padding: 4px 2px 8px; }
+.reject-confirm-head { display: flex; align-items: center; gap: 10px; }
+.reject-confirm-options { display: flex; flex-direction: column; gap: 10px; }
+.reject-confirm-option {
+  display: block; width: 100%; text-align: left; padding: 12px 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  cursor: pointer; transition: background .15s ease, border-color .15s ease;
+}
+.reject-confirm-option:hover, .reject-confirm-option:focus-visible { background: var(--surface-raised); border-color: var(--coral); outline: none; }
+.reject-confirm-option-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.reject-confirm-option-head strong { font-size: 14px; color: var(--text-primary); }
+.reject-confirm-danger:hover, .reject-confirm-danger:focus-visible { border-color: var(--danger); }
