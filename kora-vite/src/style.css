@@ -13,7 +13,7 @@
    ============================================================ */
 :root {
   /* ---- Brand primitives (Neumorphisme : corail vif pour contraste AA+) ---- */
-  --coral: #FF6B4A;
+  --coral: #E9705D;
   --coral-text: #FF8A6B;            /* corail clair pour TEXTE sur fond sombre (dark) */
   --coral-strong: #F2542D;
   --bordeaux: #C2542F;
