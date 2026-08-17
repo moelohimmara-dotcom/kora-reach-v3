@@ -151,10 +151,23 @@
     </form>
 
     <form id="formStep2" style="display:none">
-      <p class="muted" style="margin-top:0">Code à 6 chiffres de votre application d'authentification (ou un code de secours).</p>
-      <div class="field">
-        <label for="rCode">Code</label>
-        <input id="rCode" maxlength="10" autocomplete="one-time-code" inputmode="numeric" required>
+      <div id="totpCodeFields">
+        <p class="muted" style="margin-top:0">Code à 6 chiffres de votre application d'authentification (ou un code de secours).</p>
+        <div class="field">
+          <label for="rCode">Code</label>
+          <input id="rCode" maxlength="10" autocomplete="one-time-code" inputmode="numeric">
+        </div>
+      </div>
+      <div id="securityAnswerFields" style="display:none">
+        <p class="muted" style="margin-top:0">Répondez à vos deux questions de sécurité.</p>
+        <div class="field">
+          <label id="secQ1Label" for="secA1">—</label>
+          <input id="secA1" autocomplete="off">
+        </div>
+        <div class="field">
+          <label id="secQ2Label" for="secA2">—</label>
+          <input id="secA2" autocomplete="off">
+        </div>
       </div>
       <button type="submit" class="primary" style="width:100%">Vérifier</button>
       <button type="button" class="link-btn" id="backToStep1">Retour</button>
@@ -175,6 +188,27 @@
         <input id="setupCode" maxlength="6" inputmode="numeric" autocomplete="one-time-code" required>
       </div>
       <button type="button" class="primary" id="setupConfirmBtn" style="width:100%">Activer la 2FA</button>
+    </div>
+
+    <div id="securitySetupFlow" style="display:none">
+      <p class="muted" style="margin-top:0">Choisissez 2 questions différentes et donnez vos réponses. On vous les redemandera à chaque connexion — retenez-les bien, elles ne sont jamais affichées en clair ensuite.</p>
+      <div class="field">
+        <label for="secSetupQ1">1ère question</label>
+        <select id="secSetupQ1"></select>
+      </div>
+      <div class="field">
+        <label for="secSetupA1">Votre réponse</label>
+        <input id="secSetupA1" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="secSetupQ2">2e question</label>
+        <select id="secSetupQ2"></select>
+      </div>
+      <div class="field">
+        <label for="secSetupA2">Votre réponse</label>
+        <input id="secSetupA2" autocomplete="off">
+      </div>
+      <button type="button" class="primary" id="securitySetupBtn" style="width:100%">Enregistrer</button>
     </div>
 
     <div id="backupFlow" style="display:none">
@@ -288,7 +322,7 @@
     return data;
   }
 
-  let mfaToken = null, setupToken = null, setupSecret = null;
+  let mfaToken = null, secToken = null, setupToken = null, setupSecret = null, step2Mode = "totp";
 
   // ---- Étape 1 : mot de passe ----
   $("#formStep1").addEventListener("submit", async (e) => {
@@ -298,18 +332,32 @@
     const p = $("#rPass").value;
     const r = await api("/login", { method: "POST", body: JSON.stringify({ username: u, password: p }) });
     if (!r.ok) return showErr(frErr(r.error));
-    if (r.totp_setup_required) {
+    if (r.setup_required) {
       setupToken = r.setup_token;
       $("#formStep1").style.display = "none";
-      $("#setupFlow").style.display = "block";
-      const initRes = await api("/2fa/setup-init", { method: "POST", body: JSON.stringify({ setup_token: setupToken }) });
-      if (!initRes.ok) { showErr(frErr(initRes.error)); return; }
-      setupSecret = initRes.secret;
-      $("#setupSecret").textContent = initRes.secret.replace(/(.{4})/g, "$1 ").trim();
+      $("#securitySetupFlow").style.display = "block";
+      await loadSecurityQuestionOptions();
+      return;
+    }
+    if (r.security_required) {
+      secToken = r.sec_token;
+      step2Mode = "security";
+      $("#totpCodeFields").style.display = "none";
+      $("#securityAnswerFields").style.display = "block";
+      $("#rCode").required = false;
+      $("#secQ1Label").textContent = r.q1;
+      $("#secQ2Label").textContent = r.q2;
+      $("#formStep1").style.display = "none";
+      $("#formStep2").style.display = "block";
+      $("#secA1").focus();
       return;
     }
     if (r.mfa_required) {
       mfaToken = r.mfa_token;
+      step2Mode = "totp";
+      $("#totpCodeFields").style.display = "block";
+      $("#securityAnswerFields").style.display = "none";
+      $("#rCode").required = true;
       $("#formStep1").style.display = "none";
       $("#formStep2").style.display = "block";
       $("#rCode").focus();
@@ -324,12 +372,37 @@
     $("#formStep1").style.display = "block";
   });
 
-  // ---- Étape 2 : code TOTP (connexion normale) ----
+  // ---- Étape 2 : code TOTP OU réponses aux questions de sécurité ----
   $("#formStep2").addEventListener("submit", async (e) => {
     e.preventDefault();
     clearMsgs();
-    const code = $("#rCode").value.trim();
-    const r = await api("/login/verify-2fa", { method: "POST", body: JSON.stringify({ mfa_token: mfaToken, code }) });
+    let r;
+    if (step2Mode === "security") {
+      r = await api("/login/verify-security", { method: "POST", body: JSON.stringify({ sec_token: secToken, a1: $("#secA1").value, a2: $("#secA2").value }) });
+    } else {
+      const code = $("#rCode").value.trim();
+      r = await api("/login/verify-2fa", { method: "POST", body: JSON.stringify({ mfa_token: mfaToken, code }) });
+    }
+    if (!r.ok) return showErr(frErr(r.error));
+    enterConsole(r.username);
+  });
+
+  // ---- Configuration questions de sécurité (1ère connexion) ----
+  async function loadSecurityQuestionOptions() {
+    const r = await api("/security/questions");
+    const opts = (r.questions || []).map((q) => `<option value="${q}">${q}</option>`).join("");
+    $("#secSetupQ1").innerHTML = opts;
+    $("#secSetupQ2").innerHTML = opts;
+    $("#secSetupQ2").selectedIndex = 1;
+  }
+
+  $("#securitySetupBtn").addEventListener("click", async () => {
+    clearMsgs();
+    const q1 = $("#secSetupQ1").value, q2 = $("#secSetupQ2").value;
+    const a1 = $("#secSetupA1").value, a2 = $("#secSetupA2").value;
+    if (q1 === q2) return showErr("Choisissez deux questions différentes.");
+    if (a1.trim().length < 2 || a2.trim().length < 2) return showErr("Réponses trop courtes.");
+    const r = await api("/security/setup-confirm", { method: "POST", body: JSON.stringify({ setup_token: setupToken, q1, a1, q2, a2 }) });
     if (!r.ok) return showErr(frErr(r.error));
     enterConsole(r.username);
   });

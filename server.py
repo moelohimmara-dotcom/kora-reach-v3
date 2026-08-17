@@ -116,6 +116,10 @@ class Handler(BaseHTTPRequestHandler):
         return u
 
     def _root_get(self, path, qs):
+        if path == "/api/root/security/questions":
+            # Liste de questions suggérées (aucune donnée sensible -> public,
+            # nécessaire à l'écran de connexion avant toute session).
+            return self._send(200, {"questions": root_auth.SECURITY_QUESTIONS})
         if path == "/api/root/me":
             u = self._require_root()
             if not u:
@@ -225,6 +229,40 @@ class Handler(BaseHTTPRequestHandler):
             r = root_auth.verify_login_totp(payload.get("mfa_token", ""), payload.get("code", ""))
             if not r.get("ok"):
                 root_auth.log_root_event("login_failure_2fa", "?", ip)
+                return self._send(401, r)
+            root_auth.log_root_event("login_success", r.get("username"), ip)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Set-Cookie", root_auth.cookie_value(r["session_id"]))
+            body = json.dumps({"ok": True, "username": r.get("username")}, ensure_ascii=False).encode("utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
+            self.send_header("Access-Control-Allow-Credentials", "true")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if path == "/api/root/security/setup-confirm":
+            r = root_auth.security_setup_confirm(
+                payload.get("setup_token", ""), payload.get("q1", ""), payload.get("a1", ""),
+                payload.get("q2", ""), payload.get("a2", ""),
+            )
+            if r.get("ok"):
+                root_auth.log_root_event("security_questions_configured", r.get("username"), ip)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Set-Cookie", root_auth.cookie_value(r["session_id"]))
+                body = json.dumps({"ok": True, "username": r["username"]}, ensure_ascii=False).encode("utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
+                self.send_header("Access-Control-Allow-Credentials", "true")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            return self._send(400, r)
+        if path == "/api/root/login/verify-security":
+            r = root_auth.verify_login_security(payload.get("sec_token", ""), payload.get("a1", ""), payload.get("a2", ""))
+            if not r.get("ok"):
+                root_auth.log_root_event("login_failure_security", "?", ip)
                 return self._send(401, r)
             root_auth.log_root_event("login_success", r.get("username"), ip)
             self.send_response(200)
