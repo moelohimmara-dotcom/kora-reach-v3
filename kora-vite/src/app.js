@@ -846,7 +846,7 @@ function viewSettings(s) {
           <div class="field-row">
             <div class="field"><span>Identifiant</span><input class="text-input" id="setNewUser" type="text" maxlength="40" placeholder="redacteur1"></div>
             <div class="field"><span>Email</span><input class="text-input" id="setNewEmail" type="email" maxlength="80" placeholder="redacteur@kora.reach"></div>
-            <div class="field"><span>Mot de passe</span><input class="text-input" id="setNewUserPw" type="password" maxlength="64" placeholder="••••••••" autocomplete="new-password"></div>
+            <div class="field"><span>Mot de passe</span><span class="pw-wrap"><input class="text-input" id="setNewUserPw" type="password" maxlength="64" placeholder="••••••••" autocomplete="new-password"><button type="button" class="pw-toggle" data-pw="setNewUserPw" aria-label="Afficher le mot de passe">${icon("i-eye")}</button></span></div>
             <div class="field"><span>Rôle</span><select class="text-input" id="setNewUserRole"><option value="normal" selected>Normal</option><option value="advanced">Avancé</option></select></div>
           </div>
           <div class="actions"><button class="btn btn-primary" id="setAddUser">Créer le compte</button></div>
@@ -1812,11 +1812,12 @@ function bindSettings() {
     } else if (state === "disable") {
       body.innerHTML = `
         <p class="muted" style="margin:0 0 10px">Confirme ton mot de passe pour désactiver la double authentification.</p>
-        <div class="field"><span>Mot de passe</span><input class="text-input" id="sec2FADisablePw" type="password" autocomplete="current-password"></div>
+        <div class="field"><span>Mot de passe</span><span class="pw-wrap"><input class="text-input" id="sec2FADisablePw" type="password" autocomplete="current-password"><button type="button" class="pw-toggle" data-pw="sec2FADisablePw" aria-label="Afficher le mot de passe">${icon("i-eye")}</button></span></div>
         <div class="actions">
           <button class="btn btn-danger" id="sec2FADisableConfirmBtn">Désactiver</button>
           <button class="btn btn-ghost" id="sec2FADisableCancelBtn">Annuler</button>
         </div>`;
+      bindPasswordToggles(body);
       const confirmDis = document.getElementById("sec2FADisableConfirmBtn");
       if (confirmDis) confirmDis.onclick = async () => {
         const pw = document.getElementById("sec2FADisablePw")?.value || "";
