@@ -1,0 +1,57 @@
+"""permissions.py — table de vérité RBAC (ADR-0004).
+
+Centralise ce qui était auparavant éparpillé dans server.py : une douzaine
+d'appels `_require_role("advanced")` répétés inline, un par endpoint sensible,
+sans qu'aucun endroit du code ne dise clairement "qui a le droit de faire
+quoi". Chaque action sensible est déclarée ICI une seule fois, avec le rôle
+minimum requis — ajouter un rôle ou changer un droit se fait à un seul
+endroit, lisible d'un coup d'œil, plutôt qu'en cherchant dans tout server.py.
+
+Rôles éditeur (du moins au plus privilégié) :
+    lecteur   — consultation seule (voir server.py : toute mutation hors
+                actions sur son propre compte est bloquée pour ce rôle,
+                cf. LECTEUR_ALLOWED_POST dans do_POST).
+    normal    — Éditeur : usage courant (génération, validation, publication).
+    advanced  — Admin : tout ce qui précède + les capacités listées ci-dessous.
+
+Le compte ROOT (console système, root_auth.py) est un système
+d'authentification totalement séparé par conception (ADR-0002) : il n'a pas
+sa place dans cette table, ses propres endpoints (/api/root/*) vérifient une
+session root, pas un rôle éditeur.
+"""
+
+ROLES_ORDER = ["lecteur", "normal", "advanced"]
+
+# Action -> rôle minimum requis pour l'exécuter. Toutes "advanced" à ce jour ;
+# le seul intérêt de lister ça en table plutôt qu'en checks épars, c'est de
+# pouvoir un jour abaisser une capacité à "normal" (ou en ajouter une nouvelle)
+# sans devoir relire tout server.py pour retrouver les endroits concernés.
+CAPABILITIES = {
+    "voir_sources": "advanced",              # GET /api/whitelist
+    "voir_prompts_agent": "advanced",         # GET /api/agent-prompts
+    "action_demo": "advanced",                # GET /api/seed_demo
+    "voir_comptes": "advanced",               # GET /api/auth/users
+    "purger_audit": "advanced",               # POST /api/audit/purge
+    "modifier_identite": "advanced",          # POST /api/settings
+    "modifier_prompts_agent": "advanced",     # POST /api/agent-prompts
+    "reinitialiser_prompts_agent": "advanced",  # POST /api/agent-prompts/reset
+    "creer_compte": "advanced",               # POST /api/auth/users
+    "changer_role": "advanced",               # POST /api/auth/users/role
+    "supprimer_compte": "advanced",           # DELETE /api/auth/users
+    "purger_audit_lot": "advanced",           # DELETE /api/audit
+}
+
+
+def _role_rank(role):
+    try:
+        return ROLES_ORDER.index(role or "lecteur")
+    except ValueError:
+        return 0  # rôle inconnu -> traité comme le moins privilégié (fail-safe)
+
+
+def role_can(role, capability):
+    """True si `role` a le droit d'effectuer `capability`.
+    Lève KeyError si `capability` n'est pas déclarée — erreur de programmation
+    à corriger ici, pas un cas à avaler silencieusement."""
+    required = CAPABILITIES[capability]
+    return _role_rank(role) >= _role_rank(required)
