@@ -54,6 +54,11 @@
   input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
   .field { margin-bottom: 14px; }
+  .pw-wrap { position: relative; display: block; }
+  .pw-wrap input { width: 100%; padding-right: 38px; }
+  .pw-toggle { position: absolute; top: 50%; right: 3px; transform: translateY(-50%); width: 30px; height: 30px; display: grid; place-items: center; background: none; border: none; padding: 0; color: var(--text-dim); }
+  .pw-toggle:hover { color: var(--accent); }
+  .pw-toggle svg { display: block; }
   .muted { color: var(--text-dim); }
   .mono-num { font-variant-numeric: tabular-nums; }
   code, .code { font-family: var(--mono); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; }
@@ -145,7 +150,12 @@
       </div>
       <div class="field">
         <label for="rPass">Mot de passe</label>
-        <input id="rPass" name="password" type="password" autocomplete="current-password" required>
+        <span class="pw-wrap">
+          <input id="rPass" name="password" type="password" autocomplete="current-password" required>
+          <button type="button" class="pw-toggle" data-pw="rPass" aria-label="Afficher le mot de passe">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </span>
       </div>
       <button type="submit" class="primary" style="width:100%">Se connecter</button>
     </form>
@@ -242,7 +252,15 @@
         <form id="createUserForm" class="toolbar">
           <div class="field" style="margin:0"><label>Identifiant</label><input name="username" required style="width:160px"></div>
           <div class="field" style="margin:0"><label>Email</label><input name="email" type="email" style="width:200px"></div>
-          <div class="field" style="margin:0"><label>Mot de passe</label><input name="password" type="password" required style="width:160px"></div>
+          <div class="field" style="margin:0">
+            <label>Mot de passe</label>
+            <span class="pw-wrap">
+              <input id="createUserPw" name="password" type="password" required style="width:160px">
+              <button type="button" class="pw-toggle" data-pw="createUserPw" aria-label="Afficher le mot de passe">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </span>
+          </div>
           <div class="field" style="margin:0">
             <label>Rôle</label>
             <select name="role">
@@ -292,6 +310,24 @@
   const API = "/kora-v2/api/root";
   const $ = (sel, root) => (root || document).querySelector(sel);
   const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
+
+  // ---- Bouton œil : afficher/masquer un mot de passe saisi ----
+  const EYE_OFF_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a21.3 21.3 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 7 11 7a21.3 21.3 0 0 1-2.87 3.94M1 1l22 22M14.12 14.12a3 3 0 1 1-4.24-4.24"/></svg>';
+  const EYE_ON_SVG = $(".pw-toggle svg") ? $(".pw-toggle svg").outerHTML : "";
+  function bindPasswordToggles() {
+    $$(".pw-toggle").forEach((btn) => {
+      btn.onclick = () => {
+        const el = document.getElementById(btn.dataset.pw);
+        if (!el) return;
+        const show = el.type === "password";
+        el.type = show ? "text" : "password";
+        btn.innerHTML = show ? EYE_OFF_SVG : EYE_ON_SVG;
+        btn.setAttribute("aria-label", show ? "Masquer le mot de passe" : "Afficher le mot de passe");
+        el.focus();
+      };
+    });
+  }
+  bindPasswordToggles();
 
   const errBox = $("#errBox");
   const okBox = $("#okBox");
