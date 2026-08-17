@@ -6,14 +6,20 @@ table dédiée (kora_root), sessions dédiées (kora_root_sessions), cookie déd
 compte éditeur (même 'advanced') est compromis, la console système reste
 hors d'atteinte — deux systèmes d'authentification qui ne se recoupent pas.
 
-- 2FA (TOTP) OBLIGATOIRE d'office pour le compte root, jamais optionnelle :
+- 2e facteur OBLIGATOIRE d'office pour le compte root, jamais optionnel :
   tant que la configuration n'est pas confirmée, login() ne renvoie qu'un
   jeton de configuration (setup_token), jamais de session console.
 - Root créé depuis .env (ROOT_USER / ROOT_PASS / ROOT_EMAIL) au 1er lancement,
   même convention que ADMIN_USER/ADMIN_PASS dans auth.py.
-- Réutilise totp.py (même module RFC 6238 que la 2FA éditeur — pas de
-  duplication de la crypto) et le même schéma de hash PBKDF2-HMAC-SHA256
-  que auth.py pour le mot de passe.
+- Réutilise totp.py (même module RFC 6238 que la 2FA éditeur) et le même
+  schéma de hash PBKDF2-HMAC-SHA256 que auth.py pour le mot de passe.
+
+Deux mécanismes de 2e facteur sont supportés, choisis à la configuration :
+- TOTP (recommandé) : code à 6 chiffres généré par une app d'authentification.
+- Questions de sécurité (moins sûr — cf. NIST SP 800-63B, réponses souvent
+  devinables/recherchables ; choisi ici sciemment par l'exploitant après
+  avertissement explicite, pour ce compte précis). Réponses hashées en
+  PBKDF2-HMAC-SHA256 comme le mot de passe, jamais stockées en clair.
 """
 import os
 import hashlib
@@ -107,6 +113,20 @@ def init():
         con.commit()
     finally:
         con.close()
+    # Migration : questions de sécurité (2e facteur alternatif au TOTP,
+    # choisi explicitement par l'exploitant après avertissement — cf.
+    # docstring du module). Réponses hashées, jamais en clair.
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        for col, ctype in (("sec_q1", "TEXT"), ("sec_a1_hash", "TEXT"), ("sec_q2", "TEXT"), ("sec_a2_hash", "TEXT")):
+            try:
+                cur.execute(f"ALTER TABLE kora_root ADD COLUMN {col} {ctype}")
+                con.commit()
+            except Exception:
+                con.rollback()  # colonne déjà présente
+    finally:
+        con.close()
     con, _ = db.conn()
     try:
         cur = con.cursor()
@@ -170,16 +190,22 @@ def login(username, password, ip=None):
     if not u or not _verify_password(password, _row_get(u, "password_hash")):
         return {"ok": False, "error": "invalid_credentials"}
     root_id = _row_get(u, "id")
-    if not _row_get(u, "totp_enabled"):
-        # 2FA jamais configurée : mot de passe seul ne donne accès qu'à un
-        # jeton de configuration, jamais à la console.
+    has_totp = bool(_row_get(u, "totp_enabled"))
+    has_questions = bool(_row_get(u, "sec_q1"))
+    if not has_totp and not has_questions:
+        # Aucun 2e facteur configuré : mot de passe seul ne donne accès qu'à
+        # un jeton de configuration, jamais à la console.
         token = _uid()
         with _pending_lock:
             _setup_pending[token] = {"root_id": root_id, "expires_at": datetime.now().timestamp() + SETUP_TOKEN_TTL_S}
-        return {"ok": True, "totp_setup_required": True, "setup_token": token}
+        return {"ok": True, "setup_required": True, "setup_token": token}
     token = _uid()
     with _pending_lock:
         _mfa_pending[token] = {"root_id": root_id, "expires_at": datetime.now().timestamp() + MFA_TOKEN_TTL_S, "attempts": 0}
+    if has_questions:
+        q1 = _row_get(u, "sec_q1")
+        q2 = _row_get(u, "sec_q2")
+        return {"ok": True, "security_required": True, "sec_token": token, "q1": q1, "q2": q2}
     return {"ok": True, "mfa_required": True, "mfa_token": token}
 
 
@@ -285,6 +311,77 @@ def totp_setup_confirm(setup_token, code):
     finally:
         con.close()
     return {"ok": True, "backup_codes": codes, "session_id": create_session(root_id), "username": username_by_id(root_id)}
+
+
+# ----------------------------------------------------------------------------
+# Questions de sécurité — 2e facteur ALTERNATIF au TOTP (§ docstring module :
+# plus faible, choisi sciemment après avertissement). Réponses normalisées
+# (espaces/casse) avant hash pour tolérer les variations de saisie, puis
+# hashées PBKDF2-HMAC-SHA256 comme un mot de passe — jamais en clair.
+# ----------------------------------------------------------------------------
+SECURITY_QUESTIONS = [
+    "Quel est le nom de votre premier animal de compagnie ?",
+    "Dans quelle ville êtes-vous né·e ?",
+    "Quel est le prénom de votre meilleur·e ami·e d'enfance ?",
+    "Quel est le nom de votre école primaire ?",
+    "Quel est le modèle de votre première voiture ?",
+    "Quel est le plat que préparait votre grand-mère ?",
+]
+
+
+def _norm_answer(a):
+    return " ".join((a or "").strip().lower().split())
+
+
+def _hash_answer(a):
+    return _hash_password(_norm_answer(a))
+
+
+def _verify_answer(a, stored):
+    return _verify_password(_norm_answer(a), stored)
+
+
+def security_setup_confirm(setup_token, q1, a1, q2, a2):
+    root_id = _consume_setup_token(setup_token)
+    if not root_id:
+        return {"ok": False, "error": "setup_expired"}
+    q1 = (q1 or "").strip()
+    q2 = (q2 or "").strip()
+    if not q1 or not q2 or q1 == q2:
+        with _pending_lock:
+            _setup_pending[setup_token] = {"root_id": root_id, "expires_at": datetime.now().timestamp() + SETUP_TOKEN_TTL_S}
+        return {"ok": False, "error": "questions_invalides"}
+    if len(_norm_answer(a1)) < 2 or len(_norm_answer(a2)) < 2:
+        with _pending_lock:
+            _setup_pending[setup_token] = {"root_id": root_id, "expires_at": datetime.now().timestamp() + SETUP_TOKEN_TTL_S}
+        return {"ok": False, "error": "reponses_trop_courtes"}
+    ph = db.placeholder()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(
+            f"UPDATE kora_root SET sec_q1={ph}, sec_a1_hash={ph}, sec_q2={ph}, sec_a2_hash={ph} WHERE id={ph}",
+            (q1, _hash_answer(a1), q2, _hash_answer(a2), root_id),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return {"ok": True, "session_id": create_session(root_id), "username": username_by_id(root_id)}
+
+
+def verify_login_security(sec_token, a1, a2):
+    root_id = _consume_mfa(sec_token)
+    if not root_id:
+        return {"ok": False, "error": "mfa_expired"}
+    u = _get_by_id(root_id)
+    if not u:
+        return {"ok": False, "error": "no_user"}
+    h1 = _row_get(u, "sec_a1_hash")
+    h2 = _row_get(u, "sec_a2_hash")
+    if h1 and h2 and _verify_answer(a1, h1) and _verify_answer(a2, h2):
+        _finalize_mfa(sec_token)
+        return {"ok": True, "session_id": create_session(root_id), "username": _row_get(u, "username")}
+    return {"ok": False, "error": "invalid_code"}
 
 
 # ----------------------------------------------------------------------------
