@@ -22,6 +22,7 @@ from audit import get_events, log, get_daily, delete_events, purge_all, purge_da
 import settings
 import agent_prompts
 import auth
+import root_auth
 from hitl_store import (
     fact_id_of, decide, get as hitl_get, list_all,
     mark_transmitted, mark_transmission_failed, retract,
@@ -99,9 +100,235 @@ class Handler(BaseHTTPRequestHandler):
             return "anonymous"
         return u["username"] if isinstance(u, dict) else u[1]
 
+    # ------------------------------------------------------------------
+    # Console root (12.1-12.5) : authentification et session TOTALEMENT
+    # séparées de l'auth éditeur ci-dessus (root_auth.py, cookie kora_root_sid).
+    # ------------------------------------------------------------------
+    def _root_session(self):
+        sid = root_auth.read_cookie_sid(self.headers)
+        return root_auth.get_session_root(sid) if sid else None
+
+    def _require_root(self):
+        u = self._root_session()
+        if not u:
+            self._send(401, {"error": "unauthorized"})
+            return None
+        return u
+
+    def _root_get(self, path, qs):
+        if path == "/api/root/me":
+            u = self._require_root()
+            if not u:
+                return
+            return self._send(200, {"ok": True, "username": u["username"] if isinstance(u, dict) else u[1]})
+        if path == "/api/root/users":
+            if not self._require_root():
+                return
+            users = auth.list_users()
+
+            def _u(row):
+                if isinstance(row, dict):
+                    return {"id": row["id"], "username": row["username"], "email": row["email"],
+                            "role": row["role"] or "normal", "created_at": row["created_at"],
+                            "active": bool(row["active"] if row["active"] is not None else 1),
+                            "totp_enabled": bool(row["totp_enabled"])}
+                return {"id": row[0], "username": row[1], "email": row[2], "role": row[3] or "normal",
+                        "created_at": row[4], "active": bool(row[5] if len(row) > 5 and row[5] is not None else 1),
+                        "totp_enabled": bool(row[6]) if len(row) > 6 else False}
+            return self._send(200, {"users": [_u(u) for u in users]})
+        if path == "/api/root/sessions":
+            if not self._require_root():
+                return
+            sessions = root_auth.list_sessions()
+            out = []
+            for s in sessions:
+                rid = s["root_id"] if isinstance(s, dict) else s[1]
+                exp = s["expires_at"] if isinstance(s, dict) else s[2]
+                out.append({"session_id": (s["session_id"] if isinstance(s, dict) else s[0])[:8] + "…",
+                             "username": root_auth.username_by_id(rid), "expires_at": exp})
+            return self._send(200, {"sessions": out})
+        if path == "/api/root/audit":
+            if not self._require_root():
+                return
+            n = 200
+            import os as _os
+            def _tail(fp, source):
+                lines = []
+                if fp and _os.path.isfile(fp):
+                    with open(fp, "r", encoding="utf-8", errors="replace") as f:
+                        for line in f.readlines()[-n:]:
+                            parts = line.rstrip("\n").split("\t", 3)
+                            if len(parts) == 4:
+                                lines.append({"ts": parts[0], "event": parts[1], "ip": parts[2], "detail": parts[3], "source": source})
+                return lines
+            editor_log = _tail(auth._AUTH_LOG, "éditeur")
+            root_log_path = os.environ.get("KORA_ROOT_AUTH_LOG", os.path.join(ROOT, "root_audit.log"))
+            root_log = _tail(root_log_path, "root")
+            merged = sorted(editor_log + root_log, key=lambda e: e["ts"], reverse=True)[:n]
+            return self._send(200, {"events": merged})
+        if path == "/api/root/health":
+            if not self._require_root():
+                return
+            with _LAST_LOCK:
+                last = {"running": LAST_CYCLE["running"], "ts": LAST_CYCLE["ts"]}
+            stats = get_dashboard_stats()
+            return self._send(200, {
+                "agent_busy": reach_agent.agent.is_busy,
+                "whitelist_version": wl.WHITELIST_VERSION,
+                "transmit_mode": transmit.mode(),
+                "llm_circuit": writer.llm_circuit_status(),
+                "last_cycle": last,
+                "stats": stats,
+                "active_editor_sessions_note": "sessions éditeurs non comptées séparément ici (voir /api/root/sessions pour les sessions root)",
+            })
+        if path == "/api/root/config":
+            if not self._require_root():
+                return
+            return self._send(200, {
+                "branding": settings.get_settings(),
+                "sources_actives": len([s for s in config.SOURCES if s.source_level in config.ACTIVE_LEVELS]),
+                "sources_total": len(config.SOURCES),
+                "limits": config.LIMITS,
+            })
+        self._send(404, {"error": "unknown endpoint"})
+
+    def _root_post(self, path, payload):
+        ip = self.client_address[0]
+        if path == "/api/root/login":
+            u = (payload.get("username") or "").strip()
+            pw = payload.get("password") or ""
+            r = root_auth.login(u, pw, ip=ip)
+            if not r.get("ok"):
+                root_auth.log_root_event("login_failure", u, ip)
+                return self._send(401, r)
+            root_auth.log_root_event("login_step1_ok", u, ip)
+            return self._send(200, r)
+        if path == "/api/root/2fa/setup-init":
+            r = root_auth.totp_setup_init(payload.get("setup_token", ""))
+            return self._send(200 if r.get("ok") else 400, r)
+        if path == "/api/root/2fa/setup-confirm":
+            r = root_auth.totp_setup_confirm(payload.get("setup_token", ""), payload.get("code", ""))
+            if r.get("ok"):
+                root_auth.log_root_event("totp_configured", r.get("username"), ip)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Set-Cookie", root_auth.cookie_value(r["session_id"]))
+                body = json.dumps({"ok": True, "username": r["username"], "backup_codes": r["backup_codes"]}, ensure_ascii=False).encode("utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
+                self.send_header("Access-Control-Allow-Credentials", "true")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            return self._send(400, r)
+        if path == "/api/root/login/verify-2fa":
+            r = root_auth.verify_login_totp(payload.get("mfa_token", ""), payload.get("code", ""))
+            if not r.get("ok"):
+                root_auth.log_root_event("login_failure_2fa", "?", ip)
+                return self._send(401, r)
+            root_auth.log_root_event("login_success", r.get("username"), ip)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Set-Cookie", root_auth.cookie_value(r["session_id"]))
+            body = json.dumps({"ok": True, "username": r.get("username")}, ensure_ascii=False).encode("utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
+            self.send_header("Access-Control-Allow-Credentials", "true")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if path == "/api/root/logout":
+            u = self._root_session()
+            sid = root_auth.read_cookie_sid(self.headers)
+            if sid:
+                root_auth.delete_session(sid)
+            if u:
+                root_auth.log_root_event("logout", u["username"] if isinstance(u, dict) else u[1], ip)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Set-Cookie", root_auth.clear_cookie_value())
+            body = b'{"ok": true}'
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
+            self.send_header("Access-Control-Allow-Credentials", "true")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        # --- Tout ce qui suit exige une session console active (12.1) ---
+        me = self._require_root()
+        if not me:
+            return
+        actor = me["username"] if isinstance(me, dict) else me[1]
+        if path == "/api/root/users":
+            uname = (payload.get("username") or "").strip()
+            email = (payload.get("email") or "").strip().lower()
+            pw = payload.get("password") or ""
+            role = payload.get("role", "normal")
+            if role not in ("normal", "advanced", "lecteur"):
+                return self._send(400, {"error": "role_invalide"})
+            if len(uname) < 3:
+                return self._send(400, {"error": "username_too_short"})
+            if len(pw) < 8:
+                return self._send(400, {"error": "password_too_short"})
+            r = auth.add_user(uname, pw, email, role)
+            if r.get("ok"):
+                root_auth.log_root_event("user_created", f"{uname} (role={role}) by root:{actor}", ip)
+            return self._send(200 if r.get("ok") else 400, r)
+        if path == "/api/root/users/role":
+            uid = payload.get("id")
+            new_role = payload.get("role")
+            if not uid or new_role not in ("normal", "advanced", "lecteur"):
+                return self._send(400, {"error": "id_ou_role_invalide"})
+            uname = auth.username_by_id(uid) or uid
+            r = auth.set_role(uid, new_role)
+            if r.get("ok"):
+                root_auth.log_root_event("role_changed", f"{uname} -> {new_role} by root:{actor}", ip)
+            return self._send(200 if r.get("ok") else 400, r)
+        if path == "/api/root/users/active":
+            uid = payload.get("id")
+            active = bool(payload.get("active"))
+            if not uid:
+                return self._send(400, {"error": "id_requis"})
+            uname = auth.username_by_id(uid) or uid
+            r = auth.set_active(uid, active)
+            root_auth.log_root_event("account_disabled" if not active else "account_enabled", f"{uname} by root:{actor}", ip)
+            return self._send(200, r)
+        if path == "/api/root/users/reset-password":
+            uid = payload.get("id")
+            new_pw = payload.get("password") or ""
+            if not uid:
+                return self._send(400, {"error": "id_requis"})
+            uname = auth.username_by_id(uid) or uid
+            r = auth.admin_reset_password(uid, new_pw)
+            if r.get("ok"):
+                root_auth.log_root_event("password_reset", f"{uname} by root:{actor}", ip)
+            return self._send(200 if r.get("ok") else 400, r)
+        if path == "/api/root/sessions/revoke":
+            sid_prefix = payload.get("session_id", "")
+            if not sid_prefix:
+                return self._send(400, {"error": "session_id_requis"})
+            for s in root_auth.list_sessions():
+                full = s["session_id"] if isinstance(s, dict) else s[0]
+                if full.startswith(sid_prefix):
+                    root_auth.delete_session(full)
+                    root_auth.log_root_event("session_revoked", f"{full[:8]}… by root:{actor}", ip)
+                    return self._send(200, {"ok": True})
+            return self._send(404, {"error": "session_introuvable"})
+        if path == "/api/root/config":
+            branding = payload.get("branding")
+            if not isinstance(branding, dict):
+                return self._send(400, {"error": "branding_requis"})
+            r = settings.save_settings(branding)
+            if r.get("ok"):
+                root_auth.log_root_event("config_updated", f"by root:{actor}", ip)
+            return self._send(200 if r.get("ok") else 400, r)
+        self._send(404, {"error": "unknown endpoint"})
+
     def do_GET(self):
         p = urllib.parse.urlparse(self.path)
         path = p.path
+        if path.startswith("/api/root/"):
+            return self._root_get(path, p.query)
         if path == "/api/health":
             return self._send(200, {"status": "ok", "whitelist_version": wl.WHITELIST_VERSION,
                                      "mutex": reach_agent.agent.is_busy, "editor": EDITOR_NAME,
@@ -250,6 +477,10 @@ class Handler(BaseHTTPRequestHandler):
         # fichier statique
         if path == "/":
             path = "index.html"
+        elif path == "/root-console":
+            # Console système root (12.5) : route dédiée, jamais liée dans la
+            # nav de l'app éditeur -> accessible seulement en tapant l'URL.
+            path = "root-console.html"
         path = path.split("?")[0]
         fp = os.path.normpath(os.path.join(STATIC, path.lstrip("/")))
         if not fp.startswith(STATIC) or not os.path.isfile(fp):
@@ -316,10 +547,21 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(raw or b"{}")
         except Exception:
             payload = {}
+        # Console root (12.5) : authentification totalement séparée, jamais
+        # de session éditeur ici -> traité à part, AVANT toute logique éditeur.
+        if p.path.startswith("/api/root/"):
+            return self._root_post(p.path, payload)
         # Routes publiques (aucune session requise) : login, forgot, reset
         PUBLIC_POST = {"/api/auth/login", "/api/auth/forgot", "/api/auth/reset", "/api/auth/login/verify-2fa"}
         if p.path not in PUBLIC_POST and not self._require_auth():
             return
+        # Rôle 'lecteur' (12.1) : lecture seule -> bloque toute mutation sauf
+        # les actions sur son propre compte (mot de passe, 2FA, avatar, déco).
+        LECTEUR_ALLOWED_POST = {"/api/auth/logout", "/api/auth/change-password",
+                                 "/api/auth/2fa/setup", "/api/auth/2fa/confirm",
+                                 "/api/auth/2fa/disable", "/api/auth/avatar"}
+        if p.path not in PUBLIC_POST and p.path not in LECTEUR_ALLOWED_POST and self._session_role() == "lecteur":
+            return self._send(403, {"error": "forbidden", "reason": "role_lecteur_lecture_seule"})
         if p.path == "/api/cycle":
             if reach_agent.agent.is_busy:
                 return self._send(429, {"error": "cycle_en_cours"})
@@ -642,7 +884,7 @@ class Handler(BaseHTTPRequestHandler):
             email = (payload.get("email") or "").strip().lower()
             pw = payload.get("password") or ""
             role = payload.get("role", "normal")
-            if role not in ("normal", "advanced"):
+            if role not in ("normal", "advanced", "lecteur"):
                 self._send(400, {"error": "role_invalide"})
                 return
             if len(uname) < 3:
@@ -666,7 +908,7 @@ class Handler(BaseHTTPRequestHandler):
             if not uid:
                 self._send(400, {"error": "id_requis"})
                 return
-            if new_role not in ("normal", "advanced"):
+            if new_role not in ("normal", "advanced", "lecteur"):
                 self._send(400, {"error": "role_invalide"})
                 return
             uname = auth.username_by_id(uid) or uid
@@ -756,6 +998,7 @@ def _fact_by_id(fid):
 def main():
     port = int(os.environ.get("PORT", "8766"))
     auth.init()  # crée tables + admin depuis .env
+    root_auth.init()  # console système root (12.5) : table + compte séparés, depuis .env
     # Purge auto de la corbeille (> 11 jours) au démarrage
     try:
         n = purge_trashed(11)
