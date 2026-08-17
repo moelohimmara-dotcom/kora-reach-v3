@@ -23,6 +23,7 @@ import settings
 import agent_prompts
 import auth
 import root_auth
+import permissions
 from hitl_store import (
     fact_id_of, decide, get as hitl_get, list_all,
     mark_transmitted, mark_transmission_failed, retract,
@@ -84,12 +85,15 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return u["role"] if isinstance(u, dict) else (u[5] if len(u) > 5 else "normal")
 
-    def _require_role(self, role):
+    def _require_capability(self, capability):
+        """Vérifie qu'un rôle a le droit d'effectuer `capability`, en lisant
+        la table de vérité centralisée dans permissions.py (ADR-0004) au lieu
+        d'un rôle littéral répété à chaque appel — voir docs/adr/0004."""
         if not self._session_ok():
             self._send(401, {"error": "unauthorized"})
             return False
-        if self._session_role() != role:
-            self._send(403, {"error": "forbidden", "role_requis": role})
+        if not permissions.role_can(self._session_role(), capability):
+            self._send(403, {"error": "forbidden", "capability": capability})
             return False
         return True
 
@@ -376,8 +380,7 @@ class Handler(BaseHTTPRequestHandler):
             # Suggestions d'angle proposées à l'utilisateur pour la régénération
             return self._send(200, {"suggestions": writer.list_regen_suggestions()})
         if path == "/api/whitelist":
-            # Sources = configuration sensible -> advanced uniquement
-            if not self._require_role("advanced"):
+            if not self._require_capability("voir_sources"):
                 return
             return self._send(200, [{
                 "id": e.id, "name": e.name, "category": e.category,
@@ -400,8 +403,7 @@ class Handler(BaseHTTPRequestHandler):
             # La MODIFICATION (POST) reste advanced (voir do_POST).
             return self._send(200, settings.get_settings())
         if path == "/api/agent-prompts":
-            # Zone sensible (§9.5) : prompt système + add-on de l'agent -> advanced uniquement.
-            if not self._require_role("advanced"):
+            if not self._require_capability("voir_prompts_agent"):
                 return
             ov = agent_prompts.get_overrides()
             return self._send(200, {
@@ -420,8 +422,7 @@ class Handler(BaseHTTPRequestHandler):
                     "ts": LAST_CYCLE["ts"],
                 })
         if path == "/api/seed_demo":
-            # Action de démo -> advanced uniquement (évite de polluer la prod par un anonyme)
-            if not self._require_role("advanced"):
+            if not self._require_capability("action_demo"):
                 return
             # DEV/démo : injecte des faits cohérents (générés via la logique reconçue)
             # dans LAST_CYCLE pour peupler le dashboard HITL sans collecte réseau.
@@ -481,7 +482,7 @@ class Handler(BaseHTTPRequestHandler):
             uid = user["id"] if isinstance(user, dict) else user[0]
             return self._send(200, auth.totp_status(uid))
         if path == "/api/auth/users":
-            if not self._require_role("advanced"):
+            if not self._require_capability("voir_comptes"):
                 return
             users = auth.list_users()
             out = [dict(u) if isinstance(u, dict) else {"id": u[0], "username": u[1], "email": u[3], "role": u[4] if len(u) > 4 else "normal", "created_at": u[5] if len(u) > 5 else u[4]} for u in users]
@@ -746,7 +747,7 @@ class Handler(BaseHTTPRequestHandler):
             items = list_trashed()
             return self._send(200, {"ok": True, "items": items, "retention_days": 11})
         if p.path == "/api/audit/purge":
-            if not self._require_role("advanced"):
+            if not self._require_capability("purger_audit"):
                 return
             scope = payload.get("scope", "all")  # "all" | "day"
             day = payload.get("day")
@@ -756,20 +757,20 @@ class Handler(BaseHTTPRequestHandler):
             n = purge_all(EDITOR_NAME)
             return self._send(200, {"ok": True, "scope": "all", "deleted": n})
         if p.path == "/api/settings":
-            if not self._require_role("advanced"):
+            if not self._require_capability("modifier_identite"):
                 return
             res = settings.save_settings(payload or {})
             return self._send(200 if res.get("ok") else 400, res)
         if p.path == "/api/agent-prompts":
             # Zone sensible (§9.5) : édition tracée dans le journal d'audit (agent_prompts.py).
-            if not self._require_role("advanced"):
+            if not self._require_capability("modifier_prompts_agent"):
                 return
             field = payload.get("field")  # "system" | "addon"
             value = payload.get("value", "")
             res = agent_prompts.set_override(field, value, editor=self._actor_username())
             return self._send(200 if res.get("ok") else 400, res)
         if p.path == "/api/agent-prompts/reset":
-            if not self._require_role("advanced"):
+            if not self._require_capability("reinitialiser_prompts_agent"):
                 return
             field = payload.get("field")  # "system" | "addon"
             res = agent_prompts.reset(field, editor=self._actor_username())
@@ -911,8 +912,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, r)
             return
         if p.path == "/api/auth/users":
-            # Gestion des comptes (advanced-only) : création avec choix de rôle
-            if not self._require_role("advanced"):
+            if not self._require_capability("creer_compte"):
                 return
             # Rate-limit création de compte (anti-abuse) par IP
             if not auth.rate_ok(self.client_address[0], "create_user"):
@@ -938,8 +938,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200 if r.get("ok") else 400, r)
             return
         if p.path == "/api/auth/users/role":
-            # Changement de rôle d'un compte existant (advanced-only, self-service des habilitations)
-            if not self._require_role("advanced"):
+            if not self._require_capability("changer_role"):
                 return
             uid = payload.get("id")
             new_role = payload.get("role")
@@ -970,9 +969,9 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(raw or b"{}")
         except Exception:
             payload = {}
-        if not self._require_role("advanced"):
-            return
         if p.path == "/api/auth/users":
+            if not self._require_capability("supprimer_compte"):
+                return
             uid = payload.get("id")
             if not uid:
                 return self._send(400, {"error": "id_requis"})
@@ -990,6 +989,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200 if r.get("ok") else 400, r)
             return
         if p.path == "/api/audit":
+            if not self._require_capability("purger_audit_lot"):
+                return
             ids = payload.get("ids", [])
             if not ids:
                 return self._send(400, {"error": "ids_requis"})
