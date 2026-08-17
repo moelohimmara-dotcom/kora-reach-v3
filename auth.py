@@ -121,15 +121,18 @@ def list_users():
     con, _ = db.conn()
     try:
         cur = con.cursor()
-        cur.execute(f"SELECT id, username, email, role, created_at FROM kora_users ORDER BY username")
+        cur.execute(f"SELECT id, username, email, role, created_at, active, totp_enabled FROM kora_users ORDER BY username")
         return cur.fetchall()
     finally:
         con.close()
 
 
 def set_role(uid, role):
-    """Change le rôle d'un compte (advanced-only côté serveur)."""
-    if role not in ("normal", "advanced"):
+    """Change le rôle d'un compte (advanced/root-only côté serveur).
+    'lecteur' (12.1) : lecture seule, ajouté pour la hiérarchie de rôles
+    attribuée par la console root, sans renommer 'normal'/'advanced' déjà
+    utilisés ailleurs dans le code (évite une migration risquée)."""
+    if role not in ("normal", "advanced", "lecteur"):
         return {"ok": False, "error": "role_invalide"}
     ph = db.placeholder()
     con, _ = db.conn()
@@ -140,6 +143,42 @@ def set_role(uid, role):
         return {"ok": True}
     finally:
         con.close()
+
+
+def set_active(uid, active):
+    """Active/désactive un compte éditeur (12.1, réservé à la console root).
+    Un compte désactivé échoue à login() et voit ses sessions révoquées
+    immédiatement — pas d'attente d'expiration."""
+    ph = db.placeholder()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(f"UPDATE kora_users SET active={ph} WHERE id={ph}", (1 if active else 0, uid))
+        con.commit()
+    finally:
+        con.close()
+    if not active:
+        delete_all_sessions_for_user(uid)
+    return {"ok": True}
+
+
+def admin_reset_password(uid, new_password):
+    """Réinitialise le mot de passe d'un compte SANS connaître l'ancien
+    (réservé à la console root — 12.1). Révoque aussi les sessions actives
+    de ce compte : un mot de passe qu'on vient de forcer à changer ne doit
+    pas laisser une session déjà ouverte ailleurs."""
+    if not new_password or len(new_password) < 8:
+        return {"ok": False, "error": "mot_de_passe_trop_court"}
+    ph = db.placeholder()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(f"UPDATE kora_users SET password_hash={ph} WHERE id={ph}", (_hash_password(new_password), uid))
+        con.commit()
+    finally:
+        con.close()
+    delete_all_sessions_for_user(uid)
+    return {"ok": True}
 
 
 def _valid_avatar(data_url):
@@ -250,7 +289,8 @@ def init():
         # l'utilisateur n'a pas prouvé qu'il l'a bien enregistré (saisie d'un
         # code valide) — évite un verrouillage si l'appli d'auth n'a pas reçu
         # le bon secret.
-        for col, ctype in (("totp_secret", "TEXT"), ("totp_enabled", "INTEGER DEFAULT 0"), ("totp_backup_codes", "TEXT")):
+        for col, ctype in (("totp_secret", "TEXT"), ("totp_enabled", "INTEGER DEFAULT 0"), ("totp_backup_codes", "TEXT"),
+                           ("active", "INTEGER DEFAULT 1")):
             try:
                 cur.execute(f"ALTER TABLE kora_users ADD COLUMN {col} {ctype}")
                 con.commit()
@@ -428,6 +468,10 @@ def login(username, password, ip=None):
     stored_hash = u["password_hash"] if isinstance(u, dict) else u[2]
     if not _verify_password(password, stored_hash):
         return {"ok": False, "error": "invalid_credentials"}
+    # Compte désactivé par la console root (12.1) : mot de passe correct
+    # sans importance, aucune session ne doit être créée.
+    if _row_get(u, "active", 1) == 0:
+        return {"ok": False, "error": "account_disabled"}
     uid = u["id"] if isinstance(u, dict) else u[0]
     # 2FA (9.3) : mot de passe validé, mais si l'utilisateur a activé la double
     # authentification, PAS de session tout de suite — un jeton temporaire
