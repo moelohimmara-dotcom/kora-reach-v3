@@ -28,6 +28,7 @@ import secrets
 import base64
 import json
 import threading
+import unicodedata
 from datetime import datetime, timedelta
 
 import db
@@ -329,8 +330,23 @@ SECURITY_QUESTIONS = [
 ]
 
 
+_APOSTROPHES = {"’": "'", "‘": "'", "ʼ": "'", "`": "'", "´": "'"}
+
+
 def _norm_answer(a):
-    return " ".join((a or "").strip().lower().split())
+    """Normalise une réponse avant hash/comparaison : espaces, casse, accents
+    (café = cafe) et variantes d'apostrophe (guillemet courbe du clavier
+    mobile ’ = apostrophe droite ') — sans ça, une réponse contenant un accent
+    ou une apostrophe (fréquent pour des noms de lieux guinéens, ex.
+    N'Zérékoré) peut échouer à la connexion alors qu'elle est correcte,
+    simplement parce que le clavier a tapé un caractère visuellement
+    identique mais différent en Unicode qu'au moment de la configuration."""
+    s = (a or "").strip().lower()
+    for variant, straight in _APOSTROPHES.items():
+        s = s.replace(variant, straight)
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return " ".join(s.split())
 
 
 def _hash_answer(a):
