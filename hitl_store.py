@@ -39,7 +39,23 @@ def _ph():
     return db.placeholder()
 
 
+_initialized = False
+
+
 def _init():
+    # Garde d'idempotence process-wide : _init() est appelée par ~8 fonctions
+    # différentes à chaque requête (count_published, get_dashboard_stats, ...).
+    # Sans ce flag, chaque appel ré-exécutait 3 CREATE TABLE + 2 ALTER TABLE
+    # (5 connexions Postgres à chaque fois). Sous charge concurrente, les
+    # ALTER TABLE (verrou AccessExclusive) se mettaient en file d'attente les
+    # uns derrière les autres, et TOUTE requête touchant hitl_facts/articles
+    # se retrouvait bloquée en cascade derrière -> connexions Postgres
+    # épuisées, service inutilisable (incident du 2026-08-18). La migration
+    # de schéma ne doit tourner qu'une fois par démarrage du process, pas par
+    # requête.
+    global _initialized
+    if _initialized:
+        return
     con, mode = db.conn()
     try:
         if mode == "postgres":
@@ -120,6 +136,7 @@ def _init():
     finally:
         try: con.close()
         except Exception: pass
+    _initialized = True
 
 
 _init()
