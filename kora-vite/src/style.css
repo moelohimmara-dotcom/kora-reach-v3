@@ -2014,6 +2014,20 @@ html.icons-ready .material-icons { visibility: visible; }
 .error-banner-close { background: none; border: none; color: #fff; cursor: pointer; display: flex; padding: 4px; opacity: .85; }
 .error-banner-close:hover, .error-banner-close:focus-visible { opacity: 1; outline: none; }
 
+/* Bandeau cycle en cours (wireframe 3.3) */
+.cycle-banner { background: var(--surface-raised, var(--md-sys-color-surface-container-high)); border-bottom: 1px solid var(--md-sys-color-outline); }
+.cycle-banner-track { height: 3px; overflow: hidden; background: color-mix(in srgb, var(--coral) 15%, transparent); }
+.cycle-banner-bar { height: 100%; width: 40%; background: var(--coral); border-radius: 2px; animation: cycle-indeterminate 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .cycle-banner-bar { animation: none; width: 100%; } }
+@keyframes cycle-indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+.cycle-banner-row { display: flex; align-items: center; gap: 10px; padding: 8px 16px; font-size: 13px; color: var(--md-sys-color-on-surface-variant); }
+.cycle-banner-row .ic { width: 16px; height: 16px; flex: none; color: var(--coral); animation: cycle-spin 1.6s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .cycle-banner-row .ic { animation: none; } }
+@keyframes cycle-spin { to { transform: rotate(360deg); } }
+
 /* ============================================================
    SKELETON — liste d'articles en chargement (wireframe 13.2)
    ============================================================ */

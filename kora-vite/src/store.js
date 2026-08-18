@@ -362,6 +362,17 @@ export const Store = (() => {
     // (force=true ignore la fenêtre 24h, demand=1) qui peuplera les facts.
     await startCycle(1, true);
   }
+  // Interruption d'un cycle en cours (wireframe 3.3). Coopérative côté backend
+  // (/api/cycle/cancel — reach_agent.cancel_cycle()) : l'arrêt survient après
+  // l'article en cours, pas instantanément. La boucle de poll de startCycle()
+  // continue de tourner normalement, elle verra running=false dès que le
+  // backend aura effectivement arrêté.
+  async function cancelCycle() {
+    try {
+      await api("/api/cycle/cancel", { method: "POST" });
+      setState({ ui: { ...state.ui, overlay: "Interruption demandée — arrêt après l'article en cours…" } });
+    } catch (e) { setState({ ui: { ...state.ui, error: e.message } }); }
+  }
   async function decide(factId, decision, editedText = "") {
     setState({ ui: { ...state.ui, busy: true, overlay: "Enregistrement…" } });
     try {
@@ -710,7 +721,7 @@ export const Store = (() => {
   return {
     state, setState, subscribe, api,
     loadHealth, loadLast, loadHITL, loadAudit, loadSources, loadSettings, applySettings,
-    startCycle, seed, decide, retract, setRoute, openSheet, closeSheet, wait,
+    startCycle, cancelCycle, seed, decide, retract, setRoute, openSheet, closeSheet, wait,
     getFactFilter, setFactFilter,
     getTheme, setTheme, initTheme,
     getRailMode, setRailMode, initRailMode, applyRailMode,

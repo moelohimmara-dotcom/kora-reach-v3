@@ -2198,6 +2198,20 @@ function render() {
     const t = document.getElementById("globalLoaderText");
     if (t) t.textContent = s.ui.overlay || "Agent en cours…";
   }
+  // Bandeau cycle en cours (wireframe 3.3) : étape + progression + interruption.
+  const cb = document.getElementById("cycleBanner");
+  if (cb) {
+    cb.hidden = !busy;
+    const cbText = document.getElementById("cycleBannerText");
+    if (cbText) cbText.textContent = s.ui.overlay || "Collecte des sources whitelist…";
+    const cbCancel = document.getElementById("cycleBannerCancel");
+    if (cbCancel) cbCancel.onclick = () => confirmAction({
+      title: "Interrompre le cycle ?",
+      message: "L'arrêt survient après l'article en cours, pas instantanément.",
+      confirmLabel: "Interrompre",
+      onConfirm: () => Store.cancelCycle(),
+    });
+  }
   // Ne pas ré-exécuter renderSheet pendant l'édition (sinon le poll périodique
   // écrase le brouillon en cours) — sauf si le panneau a été fermé entre-temps
   // (ex. Échap), auquel cas il faut bien le masquer.
