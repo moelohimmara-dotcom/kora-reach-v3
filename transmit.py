@@ -17,14 +17,6 @@ SB_URL = os.environ.get("SUPABASE_URL", "")
 SB_KEY = os.environ.get("SUPABASE_KEY", "")
 
 
-def mode() -> str:
-    if WP_URL and WP_USER and WP_APP_PASS:
-        return "wordpress"
-    if SB_URL and SB_KEY:
-        return "supabase"
-    return "dry_run"
-
-
 def _build_payload(fact: dict, final_text: str) -> dict:
     """Payload générique (pour dry_run / wordpress)."""
     champ = fact.get("champion", {})
@@ -187,6 +179,21 @@ def mode() -> str:
     if pg:
         return "postgres"
     return "dry_run"
+
+
+def credentials_status() -> list:
+    """État masqué des identifiants de transmission (wireframe 9.6) : jamais
+    la valeur réelle, seulement 'configuré' / 'absent'. Sert un écran de
+    diagnostic, pas de saisie — la config reste 100% côté .env serveur."""
+    pg = (os.environ.get("DATABASE_BACKEND") or "sqlite").lower() == "postgres"
+    return [
+        {"name": "WP_URL", "label": "URL WordPress", "configured": bool(WP_URL)},
+        {"name": "WP_USER", "label": "Utilisateur WordPress", "configured": bool(WP_USER)},
+        {"name": "WP_APP_PASS", "label": "Mot de passe applicatif WordPress", "configured": bool(WP_APP_PASS)},
+        {"name": "SUPABASE_URL", "label": "URL Supabase", "configured": bool(SB_URL)},
+        {"name": "SUPABASE_KEY", "label": "Clé Supabase", "configured": bool(SB_KEY)},
+        {"name": "DATABASE_BACKEND", "label": "Entrepôt Postgres local", "configured": pg},
+    ]
 
 
 def _upload_media(image_url: str, fallback_url: str = "") -> int:

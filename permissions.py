@@ -39,6 +39,7 @@ CAPABILITIES = {
     "changer_role": "advanced",               # POST /api/auth/users/role
     "supprimer_compte": "advanced",           # DELETE /api/auth/users
     "purger_audit_lot": "advanced",           # DELETE /api/audit
+    "voir_transmetteur": "advanced",          # GET /api/settings/transmitter
 }
 
 
