@@ -364,6 +364,37 @@ class Handler(BaseHTTPRequestHandler):
             if r.get("ok"):
                 root_auth.log_root_event("config_updated", f"by root:{actor}", ip)
             return self._send(200 if r.get("ok") else 400, r)
+        # ------------------------------------------------------------------
+        # Actions critiques système (wireframe 12.5) : double confirmation
+        # côté front + ressaisie du mot de passe root ici, systématique et
+        # non contournable. Chaque action journalisée dans l'audit root,
+        # séparément du journal éditorial (log_root_event).
+        # ------------------------------------------------------------------
+        if path.startswith("/api/root/actions/"):
+            root_id = me["id"] if isinstance(me, dict) else me[0]
+            if not root_auth.verify_password(root_id, payload.get("password") or ""):
+                return self._send(403, {"error": "invalid_credentials"})
+            if path == "/api/root/actions/restart-service":
+                root_auth.log_root_event("service_restart", f"by root:{actor}", ip)
+                self._send(200, {"ok": True, "detail": "Redémarrage en cours (quelques secondes, relancé par systemd)."})
+                # Sortie différée : laisse la réponse HTTP partir avant que le
+                # process ne meure. Restart=always côté systemd (RestartSec=3)
+                # relance immédiatement — pas besoin de sudo/systemctl ici.
+                threading.Timer(0.5, lambda: os._exit(0)).start()
+                return
+            if path == "/api/root/actions/clear-cache":
+                with auth._rl_lock:
+                    auth._rl_hits.clear()
+                with root_auth._rl_lock:
+                    root_auth._rl_hits.clear()
+                root_auth.log_root_event("cache_cleared", f"by root:{actor}", ip)
+                return self._send(200, {"ok": True, "detail": "Compteurs de limitation de débit (login) réinitialisés."})
+            if path == "/api/root/actions/force-release-mutex":
+                released = reach_agent.force_release_cycle_lock()
+                root_auth.log_root_event("mutex_force_released", f"released={released} by root:{actor}", ip)
+                return self._send(200, {"ok": True, "released": released,
+                                        "detail": "Verrou libéré." if released else "Aucun verrou actif."})
+            return self._send(404, {"error": "unknown_action"})
         self._send(404, {"error": "unknown endpoint"})
 
     def do_GET(self):
