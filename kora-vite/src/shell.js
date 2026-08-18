@@ -49,6 +49,16 @@ export const SHELL = `
     <button class="idle-banner-close" id="idleBannerClose" aria-label="Fermer">${ic("i-close")}</button>
   </div>
 
+  <!-- Bandeau cycle en cours (wireframe 3.3) — étape + progression indéterminée + interruption -->
+  <div class="cycle-banner" id="cycleBanner" hidden>
+    <div class="cycle-banner-track"><div class="cycle-banner-bar"></div></div>
+    <div class="cycle-banner-row">
+      ${ic("i-refresh")}
+      <span id="cycleBannerText">Collecte des sources whitelist…</span>
+      <button class="btn btn-tonal btn-sm" id="cycleBannerCancel" style="margin-left:auto">Interrompre</button>
+    </div>
+  </div>
+
   <!-- LEFT DRAWER — Mobile (≤819px) : hamburger → 248px slide-in -->
   <nav class="left-drawer" id="leftDrawer" hidden>
     <div class="left-drawer-header">
