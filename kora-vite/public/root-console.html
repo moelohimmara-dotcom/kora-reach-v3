@@ -596,6 +596,15 @@
       <div class="panel">
         <h3>Sessions console root actives</h3>
         <div id="rootSessionsWrap"><p class="empty">Chargement…</p></div>
+      </div>
+      <div class="panel">
+        <h3>Actions critiques</h3>
+        <p class="muted" style="margin-top:0">Irréversibles ou disruptives pour tous les utilisateurs. Confirmation + mot de passe root ressaisi à chaque action.</p>
+        <div class="row-actions" style="gap:10px">
+          <button class="danger" id="actionRestartBtn">Redémarrer le service backend</button>
+          <button id="actionClearCacheBtn">Vider le cache (limites de connexion)</button>
+          <button class="danger" id="actionForceMutexBtn">Forcer la libération du mutex</button>
+        </div>
       </div>`;
     const sr = await api("/sessions");
     const wrap = $("#rootSessionsWrap");
@@ -608,6 +617,44 @@
       const r2 = await api("/sessions/revoke", { method: "POST", body: JSON.stringify({ session_id: btn.dataset.sid }) });
       if (r2.ok) loadSupervision(); else alert(frErr(r2.error));
     }));
+    bindCriticalActions();
+  }
+
+  // ---- Actions critiques (wireframe 12.5) : confirmation + mot de passe root ----
+  async function criticalAction(path, confirmMsg, restarting) {
+    if (!window.confirm(confirmMsg)) return;
+    const pw = window.prompt("Confirmez avec votre mot de passe root :");
+    if (!pw) return;
+    const r = await api(path, { method: "POST", body: JSON.stringify({ password: pw }) });
+    if (!r.ok) { alert(frErr(r.error)); return; }
+    alert(r.detail || "Action effectuée.");
+    if (restarting) {
+      // Le process backend va sortir sous quelques secondes (systemd le
+      // relance) : la session HTTP courante va être coupée un instant.
+      setTimeout(() => window.location.reload(), 4000);
+    } else {
+      loadSupervision();
+    }
+  }
+  function bindCriticalActions() {
+    const rb = $("#actionRestartBtn");
+    if (rb) rb.onclick = () => criticalAction(
+      "/actions/restart-service",
+      "Redémarrer le service backend maintenant ? Coupure de quelques secondes pour tous les utilisateurs connectés.",
+      true
+    );
+    const cb = $("#actionClearCacheBtn");
+    if (cb) cb.onclick = () => criticalAction(
+      "/actions/clear-cache",
+      "Réinitialiser les compteurs de limitation de connexion (rate-limit login) ?",
+      false
+    );
+    const mb = $("#actionForceMutexBtn");
+    if (mb) mb.onclick = () => criticalAction(
+      "/actions/force-release-mutex",
+      "Forcer la libération du verrou de cycle ? À utiliser uniquement si un cycle semble bloqué anormalement longtemps (au-delà de 5 min).",
+      false
+    );
   }
 
   // ---- Configuration ----

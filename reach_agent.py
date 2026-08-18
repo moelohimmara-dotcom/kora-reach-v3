@@ -107,6 +107,20 @@ def _release_cycle_lock():
         pass
 
 
+def force_release_cycle_lock():
+    """Libère le verrou de cycle SANS vérifier le PID propriétaire (wireframe
+    12.5 — action critique console root). _release_cycle_lock() refuse
+    volontairement de toucher au lock d'un autre process ; celle-ci est
+    l'échappatoire manuelle explicite pour un cycle bloqué au-delà du TTL
+    (300s) qu'on ne veut pas attendre. Retourne True si un lock a été
+    effectivement supprimé, False s'il n'y en avait pas."""
+    try:
+        os.remove(_CYCLE_LOCK_PATH)
+        return True
+    except OSError:
+        return False
+
+
 def _is_cycle_locked():
     """Lecture seule pour l'API : True si lock valide (PID vivant + TTL)."""
     try:

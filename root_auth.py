@@ -181,6 +181,17 @@ def username_by_id(root_id):
     return _row_get(r, "username") if r else None
 
 
+def verify_password(root_id, password):
+    """Ressaisie du mot de passe root avant une action critique irréversible
+    (wireframe 12.5) — un mot de passe correct saisi une 2e fois, indépendant
+    de la session déjà ouverte, qui elle peut avoir été laissée active sur un
+    poste partagé."""
+    u = _get_by_id(root_id)
+    if not u:
+        return False
+    return _verify_password(password, _row_get(u, "password_hash"))
+
+
 # ----------------------------------------------------------------------------
 # Connexion (mot de passe -> config 2FA obligatoire ou vérification TOTP)
 # ----------------------------------------------------------------------------
