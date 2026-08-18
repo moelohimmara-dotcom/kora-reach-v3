@@ -1061,6 +1061,11 @@ html.icons-ready .material-icons { visibility: visible; }
 .src-row .meta-ic, .audit-row .meta-ic { flex: none; width: 36px; height: 36px; border-radius: var(--radius-sm); display: grid; place-items: center; background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
 .src-row .meta-ic .ic { width: 18px; height: 18px; }
 .src-row .meta, .audit-row .meta { flex: 1; min-width: 0; }
+/* .src-row est un <button> (wireframe 7.2, clic -> détail source) : reset des
+   styles natifs de bouton pour hériter du gabarit .list-row existant. */
+.src-row { display: flex; width: 100%; background: none; border: none; border-bottom: 1px solid var(--glass-border); font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.src-row:focus-visible { outline: 2px solid var(--coral); outline-offset: -2px; }
+.src-row-chevron { flex: none; width: 16px; height: 16px; opacity: 0.5; }
 .audit-time { flex: none; color: var(--md-sys-color-on-surface-variant); font-variant-numeric: tabular-nums; text-align: right; }
 @media (max-width: 520px) { .audit-time { display: none; } }
 .audit-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: var(--space-3) 0; padding: var(--space-3); background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); }
@@ -1909,6 +1914,16 @@ html.icons-ready .material-icons { visibility: visible; }
 .reject-confirm-option-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .reject-confirm-option-head strong { font-size: 14px; color: var(--text-primary); }
 .reject-confirm-danger:hover, .reject-confirm-danger:focus-visible { border-color: var(--danger); }
+
+/* Détail d'une source (wireframe 7.2) — panneau 100% lecture seule */
+.source-detail-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.source-detail-field { display: flex; flex-direction: column; gap: 4px; }
+.source-detail-label { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim, var(--md-sys-color-on-surface-variant)); }
+.source-detail-value { font-size: 14px; word-break: break-word; }
+.source-detail-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.source-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.source-detail-footnote { display: flex; align-items: center; gap: 6px; font-size: 12.5px; margin: 4px 0 0; }
+.source-detail-footnote .ic { width: 14px; height: 14px; flex: none; }
 
 /* ============================================================
    ÉDITEUR ENRICHI (wireframe 4.4) — barre d'outils Markdown
