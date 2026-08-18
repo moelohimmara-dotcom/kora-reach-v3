@@ -654,20 +654,81 @@ function viewSources(s) {
   if (!src.length) return stateBox("i-sources", "Sources en chargement…", "Récupération de la liste de sources autorisées.", !!s.ui.loading);
   // Toutes les sources nationales guinéennes regroupees dans UN seul bloc parent ; internationales supprimees (demande utilisateur)
   const gn = src.filter(e => e.category === "GN_NAT");
+  // e.guinea_filter (pas "guinee_filter") et e.vector (pas "vector_primary") :
+  // les deux noms de champs réellement renvoyés par /api/whitelist (server.py).
+  // Ligne cliquable -> détail en lecture seule (wireframe 7.2).
   const srcRow = (e) => `
-    <div class="list-row src-row">
-      <span class="meta-ic">${icon(e.guinee_filter ? "i-shield" : "i-sources")}</span>
+    <button type="button" class="list-row src-row" data-source-detail="${esc(e.id)}">
+      <span class="meta-ic">${icon(e.guinea_filter ? "i-shield" : "i-sources")}</span>
       <div class="meta">
-        <div class="name">${esc(e.name)} ${e.guinee_filter ? chip("Filtre Guinée", "warning", "i-shield") : ""}</div>
-        <div class="sub">${esc(e.category)} · ${esc(e.vector_primary)} · ${esc(e.entry_url)}</div>
+        <div class="name">${esc(e.name)} ${e.guinea_filter ? chip("Filtre Guinée", "warning", "i-shield") : ""}</div>
+        <div class="sub">${esc(e.category)} · ${esc(e.vector)} · ${esc(e.entry_url)}</div>
       </div>
-    </div>`;
+      ${icon("i-chevron-right", "src-row-chevron")}
+    </button>`;
   return `<div class="section-title">Gouvernance des sources (${gn.length})</div>
     <p class="muted" style="margin-bottom:16px">Whitelist figée G1 — aucune découverte automatique. Toute cible hors liste est refusée.</p>
     <section class="fact-group">
       <div class="group-head"><span class="group-ic">${icon("i-level1")}</span><h3 class="group-title">Sources nationales guinéennes</h3><span class="group-count">${gn.length}</span></div>
       ${gn.map(srcRow).join("") || `<div class="muted" style="padding:8px 0">Aucune source nationale.</div>`}
     </section>`;
+}
+function bindSources() {
+  document.querySelectorAll("[data-source-detail]").forEach(b => b.onclick = () => {
+    const src = (Store.state.sources || []).find(e => e.id === b.dataset.sourceDetail);
+    if (src) { Store.openSheet({ type: "source-detail", source: src }); renderSheet(Store.state); }
+  });
+}
+// Détail d'une source (wireframe 7.2) : lecture seule, gouvernance figée par
+// le CDC (G1 — whitelist versionnée en code, jamais modifiable depuis l'UI).
+function renderSourceDetail(s) {
+  const sh = s.sheet;
+  const e = sh.source;
+  const body = document.getElementById("sheetBody");
+  const sheet = document.getElementById("sheet");
+  const scrim = document.getElementById("sheetScrim");
+  const domains = (e.domains || []);
+  const vectors = [e.vector, e.vector_secondary].filter(Boolean).join(" · secours : ") || "—";
+  body.innerHTML = `
+    <div class="reject-confirm source-detail">
+      <div class="reject-confirm-head">
+        ${icon(e.guinea_filter ? "i-shield" : "i-sources", "ic-l")}
+        <h2 class="sheet-title">${esc(e.name)}</h2>
+      </div>
+      <div class="source-detail-badges">
+        ${chip(e.category === "GN_NAT" ? "Nationale guinéenne" : esc(e.category), "primary")}
+        ${e.guinea_filter ? chip("Filtre Guinée exigé", "warning", "i-shield") : ""}
+        ${chip(e.status === "active" ? "Active" : esc(e.status), e.status === "active" ? "tertiary" : "error")}
+      </div>
+      <div class="source-detail-field">
+        <div class="source-detail-label">URL d'entrée</div>
+        <div class="source-detail-value">${esc(e.entry_url)}</div>
+      </div>
+      <div class="source-detail-field">
+        <div class="source-detail-label">Domaines autorisés (fermé)</div>
+        <div class="source-detail-tags">${domains.length ? domains.map(d => chip(d)).join("") : '<span class="muted">Aucun</span>'}</div>
+      </div>
+      <div class="source-detail-field">
+        <div class="source-detail-label">Vecteur de collecte</div>
+        <div class="source-detail-value">${esc(vectors)}</div>
+      </div>
+      <div class="source-detail-grid">
+        <div class="source-detail-field">
+          <div class="source-detail-label">Responsable</div>
+          <div class="source-detail-value">${esc(e.responsible || "—")}</div>
+        </div>
+        <div class="source-detail-field">
+          <div class="source-detail-label">Version whitelist</div>
+          <div class="source-detail-value">${esc(e.version || "—")}</div>
+        </div>
+      </div>
+      <p class="muted source-detail-footnote">${icon("i-lock")} Gouvernance figée par le CDC (G1) — aucune modification possible depuis cet écran.</p>
+      <button class="btn btn-tonal btn-block" data-source-detail-close="1">Fermer</button>
+    </div>`;
+  sheet.hidden = false; scrim.hidden = false;
+  const closeBtn = body.querySelector("[data-source-detail-close]");
+  closeBtn.onclick = () => Store.closeSheet();
+  closeBtn.focus();
 }
 function viewSettings(s) {
   const theme = Store.getTheme();
@@ -1174,14 +1235,51 @@ function renderRejectConfirm(s) {
   sheet.hidden = false; scrim.hidden = false;
   body.querySelector('[data-reject-choice="trash"]').onclick = () => { Store.decide(f.fact_id, "REJECTED"); Store.closeSheet(); snack("Article rejeté — envoyé à la corbeille"); };
   body.querySelector('[data-reject-choice="delete"]').onclick = () => {
-    if (!window.confirm("Supprimer définitivement cet article ? Cette action est irréversible.")) return;
-    Store.deleteForever([f.fact_id]);
+    confirmAction({
+      title: "Supprimer définitivement ?",
+      message: "Cette action est irréversible : l'article et son historique seront effacés.",
+      confirmLabel: "Supprimer",
+      onConfirm: () => Store.deleteForever([f.fact_id]),
+    });
   };
   const cancelBtn = body.querySelector("[data-reject-cancel]");
   if (cancelBtn) cancelBtn.onclick = () => Store.closeSheet();
   // Focus trap minimal : ramène le focus dans le panneau, Échap déjà géré globalement.
   const firstBtn = body.querySelector(".reject-confirm-option");
   if (firstBtn) firstBtn.focus();
+}
+
+// Modale de confirmation générique (remplace les window.confirm() natifs —
+// audit wireframes du 2026-08-18, priorité 2 : le dialogue système casse la
+// charte KORA et n'a pas la même apparence sur deux navigateurs. Un seul
+// composant, réutilisé par tous les sites d'appel (suppression définitive,
+// purge d'historique, retrait de compte, reset de prompt, cycle forcé...).
+// Usage : confirmAction({ title, message, confirmLabel, danger, onConfirm }).
+function confirmAction({ title, message, confirmLabel = "Confirmer", cancelLabel = "Annuler", danger = true, onConfirm }) {
+  Store.openSheet({ type: "confirm", title, message, confirmLabel, cancelLabel, danger, onConfirm });
+  renderSheet(Store.state);
+}
+function renderConfirmSheet(s) {
+  const sh = s.sheet;
+  const body = document.getElementById("sheetBody");
+  const sheet = document.getElementById("sheet");
+  const scrim = document.getElementById("sheetScrim");
+  body.innerHTML = `
+    <div class="reject-confirm">
+      <div class="reject-confirm-head">
+        ${icon(sh.danger ? "i-info" : "i-check", "ic-l")}
+        <h2 class="sheet-title">${esc(sh.title)}</h2>
+      </div>
+      <p class="muted">${esc(sh.message)}</p>
+      <button class="btn ${sh.danger ? "btn-danger" : "btn-primary"} btn-block" data-confirm-yes="1">${esc(sh.confirmLabel)}</button>
+      <button class="btn btn-tonal btn-block" data-confirm-no="1">${esc(sh.cancelLabel)}</button>
+    </div>`;
+  sheet.hidden = false; scrim.hidden = false;
+  const yesBtn = body.querySelector("[data-confirm-yes]");
+  const noBtn = body.querySelector("[data-confirm-no]");
+  yesBtn.onclick = () => { Store.closeSheet(); sh.onConfirm && sh.onConfirm(); };
+  noBtn.onclick = () => Store.closeSheet();
+  noBtn.focus();
 }
 
 // Vrai le temps que l'éditeur enrichi (4.4) est ouvert. Le mode édition n'est
@@ -1202,6 +1300,8 @@ function renderSheet(s) {
   const scrim = document.getElementById("sheetScrim");
   if (!sh || !body || !sheet || !scrim) { sheet.hidden = true; scrim.hidden = true; return; }
   if (sh.type === "reject-confirm") return renderRejectConfirm(s);
+  if (sh.type === "confirm") return renderConfirmSheet(s);
+  if (sh.type === "source-detail") return renderSourceDetail(s);
   const f = sh.fact; const c = f.champion || {};
   const img = imgSrc(f);
   const ph = placeholderSvg(Store.getTheme());
@@ -1448,33 +1548,53 @@ function bindAudit() {
   if (fbAll) fbAll.onclick = () => { view.querySelectorAll(".audit-check").forEach(c => c.checked = true); refresh(); };
   const fbNone = document.getElementById("auditFbNone");
   if (fbNone) fbNone.onclick = () => { view.querySelectorAll(".audit-check").forEach(c => c.checked = false); refresh(); };
-  const doDelete = async () => {
+  const doDelete = () => {
     const ids = checks();
     if (!ids.length) return;
-    if (!confirm(`Supprimer ${ids.length} événement(s) de l'historique ?`)) return;
-    await Store.api("/api/audit", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
-    Store.loadAudit(); snack("Sélection supprimée");
+    confirmAction({
+      title: "Supprimer ces événements ?",
+      message: `${ids.length} événement(s) seront retirés de l'historique.`,
+      confirmLabel: "Supprimer",
+      onConfirm: async () => {
+        await Store.api("/api/audit", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+        Store.loadAudit(); snack("Sélection supprimée");
+      },
+    });
   };
   if (delBtn) delBtn.onclick = doDelete;
   if (fbDel) fbDel.onclick = doDelete;
   const purgeAll = document.getElementById("auditPurgeAll");
-  if (purgeAll) purgeAll.onclick = async () => {
-    if (!confirm("Vider TOUT l'historique ? (une ligne de purge sera conservée)")) return;
-    await Store.api("/api/audit/purge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "all" }) });
-    Store.loadAudit(); snack("Historique vidé");
-  };
+  if (purgeAll) purgeAll.onclick = () => confirmAction({
+    title: "Vider tout l'historique ?",
+    message: "Une ligne de purge sera conservée pour la traçabilité. Action irréversible.",
+    confirmLabel: "Vider",
+    onConfirm: async () => {
+      await Store.api("/api/audit/purge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "all" }) });
+      Store.loadAudit(); snack("Historique vidé");
+    },
+  });
   const resetToday = document.getElementById("auditResetToday");
-  if (resetToday) resetToday.onclick = async () => {
-    if (!confirm("Réinitialiser l'historique du jour (aujourd'hui) ?")) return;
-    const today = new Date().toISOString().slice(0, 10);
-    await Store.api("/api/audit/purge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "day", day: today }) });
-    Store.loadAudit(); snack("Historique du jour réinitialisé");
-  };
-  view.querySelectorAll(".audit-purge-day").forEach(b => b.onclick = async () => {
+  if (resetToday) resetToday.onclick = () => confirmAction({
+    title: "Réinitialiser l'historique du jour ?",
+    message: "Les événements d'aujourd'hui seront purgés. Action irréversible.",
+    confirmLabel: "Réinitialiser",
+    onConfirm: async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      await Store.api("/api/audit/purge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "day", day: today }) });
+      Store.loadAudit(); snack("Historique du jour réinitialisé");
+    },
+  });
+  view.querySelectorAll(".audit-purge-day").forEach(b => b.onclick = () => {
     const day = b.dataset.day;
-    if (!confirm(`Réinitialiser l'historique du ${day} ?`)) return;
-    await Store.api("/api/audit/purge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "day", day }) });
-    Store.loadAudit(); snack(`Historique du ${day} réinitialisé`);
+    confirmAction({
+      title: `Réinitialiser l'historique du ${day} ?`,
+      message: "Les événements de ce jour seront purgés. Action irréversible.",
+      confirmLabel: "Réinitialiser",
+      onConfirm: async () => {
+        await Store.api("/api/audit/purge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "day", day }) });
+        Store.loadAudit(); snack(`Historique du ${day} réinitialisé`);
+      },
+    });
   });
 }
 
@@ -1648,15 +1768,21 @@ function bindSettings() {
       await Store.loadUsers();
     } catch (e) { snack(e.message || "Erreur"); }
   });
-  view.querySelectorAll(".user-del").forEach(b => b.onclick = async () => {
+  view.querySelectorAll(".user-del").forEach(b => b.onclick = () => {
     const id = b.dataset.id;
-    if (!confirm("Retirer ce compte ? Ses sessions seront fermées.")) return;
-    try {
-      await Store.deleteUser(id);
-      snack("Compte retiré");
-      await Store.loadUsers();
-      render();
-    } catch (e) { snack(e.message || "Erreur"); }
+    confirmAction({
+      title: "Retirer ce compte ?",
+      message: "Ses sessions actives seront fermées immédiatement.",
+      confirmLabel: "Retirer",
+      onConfirm: async () => {
+        try {
+          await Store.deleteUser(id);
+          snack("Compte retiré");
+          await Store.loadUsers();
+          render();
+        } catch (e) { snack(e.message || "Erreur"); }
+      },
+    });
   });
   // ---- Navigation tiroirs (pattern Supabase) ----
   const drawers = {
@@ -1718,14 +1844,18 @@ function bindSettings() {
       } catch (e) { snack(e.message || "Erreur"); }
     };
     const resetSys = document.getElementById("agentPromptResetSystem");
-    if (resetSys) resetSys.onclick = async () => {
-      if (!confirm("Réinitialiser le prompt système à sa valeur par défaut ?")) return;
+    if (resetSys) resetSys.onclick = () => confirmAction({
+      title: "Réinitialiser le prompt système ?",
+      message: "Le prompt actuel sera remplacé par sa valeur par défaut.",
+      confirmLabel: "Réinitialiser",
+      onConfirm: async () => {
       try {
         await Store.api("/api/agent-prompts/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ field: "system" }) });
         snack("Prompt système réinitialisé");
         await loadAgentPrompts();
       } catch (e) { snack(e.message || "Erreur"); }
-    };
+      },
+    });
     const saveAddon = document.getElementById("agentPromptSaveAddon");
     if (saveAddon) saveAddon.onclick = async () => {
       const val = document.getElementById("agentPromptAddon")?.value || "";
@@ -2026,6 +2156,7 @@ function render() {
     try { renderSheet(s); } catch (e) { console.error("renderSheet", e); }
   }
   try { if (s.route === "audit") bindAudit(); } catch (e) { console.error("bindAudit", e); }
+  try { if (s.route === "sources") bindSources(); } catch (e) { console.error("bindSources", e); }
   try { if (s.route === "settings" && !settingsAlreadyMounted) bindSettings(); } catch (e) { console.error("bindSettings", e); }
   // Barre d'action de sélection multiple
   try {
@@ -2060,8 +2191,12 @@ function render() {
     });
     document.querySelectorAll("[data-del]").forEach(b => b.onclick = (e) => {
       e.preventDefault(); e.stopPropagation();
-      if (!window.confirm("Supprimer définitivement cet article ? Irréversible.")) return;
-      Store.deleteForever([b.dataset.del]).then(r => snack(`${r.deleted || 0} supprimé(s)`)).catch(e => snack("Erreur : " + e.message));
+      confirmAction({
+        title: "Supprimer définitivement ?",
+        message: "Cette action est irréversible.",
+        confirmLabel: "Supprimer",
+        onConfirm: () => Store.deleteForever([b.dataset.del]).then(r => snack(`${r.deleted || 0} supprimé(s)`)).catch(e => snack("Erreur : " + e.message)),
+      });
     });
     document.querySelectorAll("[data-finish]").forEach(b => b.onclick = () => {
       Store.finishDraft(b.dataset.finish).then(() => snack("Remis en attente de validation")).catch(e => snack("Erreur : " + e.message));
@@ -2748,9 +2883,13 @@ function bind() {
     document.addEventListener("click", (e) => {
       if (e.target.closest("[data-action='cycle-force']")) {
         if (Store.state.lastCycle?.running) return;
-        if (confirm("Lancer un cycle FORCÉ (ignorant la fenêtre 24h) ?")) {
-          Store.startCycle({ force: true });
-        }
+        confirmAction({
+          title: "Lancer un cycle forcé ?",
+          message: "La fenêtre de fraîcheur de 24h sera ignorée pour cette collecte.",
+          confirmLabel: "Lancer",
+          danger: false,
+          onConfirm: () => Store.startCycle({ force: true }),
+        });
       }
     });
 

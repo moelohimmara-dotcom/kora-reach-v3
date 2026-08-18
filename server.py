@@ -385,7 +385,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, [{
                 "id": e.id, "name": e.name, "category": e.category,
                 "entry_url": e.entry_url, "domains": list(e.allowed_domains),
-                "vector": e.vector_primary, "guinea_filter": e.guinee_filter,
+                "vector": e.vector_primary, "vector_secondary": e.vector_secondary,
+                "guinea_filter": e.guinee_filter, "responsible": e.responsible,
                 "version": e.version, "status": e.status,
             } for e in wl.WHITELIST])
         if path == "/api/audit":
