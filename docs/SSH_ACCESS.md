@@ -22,7 +22,10 @@ ssh -i vps_master_ed25519 deploy@213.156.135.139
 ## Option B — Connexion par mot de passe (user `remote`)
 
 - IP : `213.156.135.139` · Port : `22` · User : `remote`
-- Mot de passe fort (28 chars, généré) : `mcH6wIVCFKOj!DVF3OJ%pN8kH8tr`
+- Mot de passe : **ne jamais committer de secret ici** (leçon du 2026-08-18 —
+  un mot de passe en clair dans ce fichier a fuité publiquement sur GitHub le
+  temps que le repo soit public). Le mot de passe réel est conservé
+  uniquement côté VPS / gestionnaire de secrets local, jamais dans Git.
 ```bash
 ssh remote@213.156.135.139
 ```
