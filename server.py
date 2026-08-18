@@ -403,6 +403,13 @@ class Handler(BaseHTTPRequestHandler):
             # GET = lecture du branding (nom/logo/couleurs) -> public pour l'écran de connexion.
             # La MODIFICATION (POST) reste advanced (voir do_POST).
             return self._send(200, settings.get_settings())
+        if path == "/api/settings/transmitter":
+            # État du transmetteur (wireframe 9.6) : mode actif + identifiants
+            # configurés en masqué (jamais la valeur réelle). Lecture seule,
+            # gouvernée par .env serveur — pas de POST correspondant.
+            if not self._require_capability("voir_transmetteur"):
+                return
+            return self._send(200, {"mode": transmit.mode(), "credentials": transmit.credentials_status()})
         if path == "/api/agent-prompts":
             if not self._require_capability("voir_prompts_agent"):
                 return

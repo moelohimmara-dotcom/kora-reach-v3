@@ -748,6 +748,7 @@ function viewSettings(s) {
     { id: "personalization", ic: "i-brush", title: "Personnalisation", sub: "Nom, logo, couleurs, libellés" },
     { id: "accounts", ic: "i-users", title: "Comptes & habilitations", sub: "Utilisateurs et rôles" },
     { id: "agent", ic: "i-spark", title: "Agent", sub: "Prompt système, instructions (zone sensible)" },
+    { id: "transmitter", ic: "i-send", title: "Transmetteur", sub: "Mode de publication actif" },
     // Style Guide (B.1) : sorti du rail principal (revue sidebar) — outil de
     // gouvernance design occasionnel, pas un geste quotidien. data-setnav
     // spécial : ne correspond à AUCUN tiroir #drawer-styleguide, il navigue
@@ -919,6 +920,12 @@ function viewSettings(s) {
       <div class="drawer-head"><button class="drawer-back" type="button" data-setback aria-label="Retour">${icon("i-chevron")}</button><h2>Agent <span class="role-badge role-advanced">Zone sensible</span></h2></div>
       <div class="drawer-body" id="agentPromptBody">
         <p class="muted" id="agentPromptLoading">Chargement…</p>
+      </div>
+    </aside>
+    <aside class="settings-panel" id="drawer-transmitter" hidden>
+      <div class="drawer-head"><button class="drawer-back" type="button" data-setback aria-label="Retour">${icon("i-chevron")}</button><h2>Transmetteur</h2></div>
+      <div class="drawer-body" id="transmitterBody">
+        <p class="muted" id="transmitterLoading">Chargement…</p>
       </div>
     </aside>` : ""}
     ${isAdmin ? `<aside class="settings-panel" id="drawer-auditlog" hidden>
@@ -1791,6 +1798,7 @@ function bindSettings() {
     personalization: "drawer-personalization",
     accounts: "drawer-accounts",
     agent: "drawer-agent",
+    transmitter: "drawer-transmitter",
     auditlog: "drawer-auditlog",
   };
   const loadAuditLog = async () => {
@@ -1880,6 +1888,45 @@ function bindSettings() {
     try {
       const data = await Store.api("/api/agent-prompts");
       renderAgentPromptBody(data);
+    } catch (e) { body.innerHTML = '<p class="muted">Erreur de chargement (rôle avancé requis).</p>'; }
+  };
+
+  // ---- Transmetteur (9.6) : mode actif + identifiants masqués, lecture seule ----
+  const MODE_LABELS = {
+    dry_run: ["Démo (aucune publication réelle)", "warning", "i-info"],
+    wordpress: ["WordPress", "tertiary", "i-send"],
+    supabase: ["Supabase", "tertiary", "i-send"],
+    postgres: ["Entrepôt Postgres local", "tertiary", "i-send"],
+    both: ["WordPress + entrepôt", "tertiary", "i-send"],
+  };
+  const renderTransmitterBody = (data) => {
+    const body = document.getElementById("transmitterBody");
+    if (!body) return;
+    const [label, kind, ic] = MODE_LABELS[data.mode] || [data.mode, "secondary", "i-send"];
+    const creds = data.credentials || [];
+    body.innerHTML = `
+      <div class="transmitter-mode-card">
+        <div class="source-detail-label">Mode actif</div>
+        <div class="transmitter-mode-value">${icon(ic, "ic-l")}<span>${esc(label)}</span></div>
+        ${chip(data.mode === "dry_run" ? "Aucune donnée publiée" : "Publication réelle active", kind)}
+      </div>
+      <div class="section-title" style="margin-top:20px">Identifiants configurés</div>
+      <p class="muted" style="margin:0 0 8px">Valeurs jamais affichées ici. Configuration modifiable uniquement côté serveur (fichier .env).</p>
+      ${creds.map(c => `
+        <div class="list-row">
+          <span class="meta-ic">${icon(c.configured ? "i-check" : "i-close")}</span>
+          <div class="meta">
+            <div class="name">${esc(c.label)}</div>
+            <div class="sub">${c.configured ? "••••••••configuré" : "Non configuré"}</div>
+          </div>
+        </div>`).join("")}`;
+  };
+  const loadTransmitterStatus = async () => {
+    const body = document.getElementById("transmitterBody");
+    if (!body) return;
+    try {
+      const data = await Store.api("/api/settings/transmitter");
+      renderTransmitterBody(data);
     } catch (e) { body.innerHTML = '<p class="muted">Erreur de chargement (rôle avancé requis).</p>'; }
   };
 
@@ -2002,6 +2049,8 @@ function bindSettings() {
   if (auditNav) auditNav.onclick = () => { openDrawer("auditlog"); loadAuditLog(); };
   const agentNav = view.querySelector('.settings-nav-item[data-setnav="agent"]');
   if (agentNav) agentNav.onclick = () => { openDrawer("agent"); loadAgentPrompts(); };
+  const transmitterNav = view.querySelector('.settings-nav-item[data-setnav="transmitter"]');
+  if (transmitterNav) transmitterNav.onclick = () => { openDrawer("transmitter"); loadTransmitterStatus(); };
   // Style Guide : pas un tiroir, une navigation directe vers /style-guide
   // (sorti du rail principal — outil de gouvernance design occasionnel).
   const sgNav = view.querySelector('.settings-nav-item[data-setnav="styleguide"]');
