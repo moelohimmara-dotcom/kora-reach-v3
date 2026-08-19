@@ -56,6 +56,7 @@ export const SHELL = `
       ${ic("i-refresh")}
       <span id="cycleBannerText">Collecte des sources whitelist…</span>
       <span class="cycle-banner-progress" id="cycleBannerProgress" hidden></span>
+      <span class="cycle-banner-estimate" id="cycleBannerEstimate" hidden></span>
       <button class="btn btn-tonal btn-sm" id="cycleBannerCancel" style="margin-left:auto">Interrompre</button>
     </div>
   </div>
@@ -181,6 +182,7 @@ export const SHELL = `
     </div>
     <div class="gl-text" id="globalLoaderText">Kora Agent explore les sources d'actualité…</div>
     <div class="gl-progress" id="globalLoaderProgress" hidden></div>
+    <div class="gl-estimate" id="globalLoaderEstimate" hidden></div>
     <div class="gl-patience" id="globalLoaderPatience" hidden>Ça prend un peu plus de temps que d'habitude — merci de patienter encore un instant.</div>
     <div class="gl-actions">
       <button class="btn btn-tonal" id="globalLoaderDismiss">Continuer à naviguer</button>

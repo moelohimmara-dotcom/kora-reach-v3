@@ -347,8 +347,9 @@ def _call_ollama_cloud(messages: List[Dict], max_tokens: int = 600) -> str:
 
 
 def _ollama_chat(messages: List[Dict], max_tokens: int = 600) -> str:
-    """Appel LLM generique (utilise par _ensure_min_length/_proofread : un
-    seul appel, peu importe le provider). VRAI enchainement : Nvidia en
+    """Appel LLM generique (utilise par _ensure_min_length/_self_critique/
+    _apply_critique_corrections : un seul appel, peu importe le provider).
+    VRAI enchainement : Nvidia en
     priorite, et si Nvidia est configure mais echoue, repli sur Ollama Cloud
     dans le MEME appel (avant : un echec Nvidia rendait None sans jamais
     tenter Ollama, meme si les deux etaient configures — corrige 2026-08-19)."""
@@ -383,33 +384,89 @@ def _ensure_min_length(raw: str, fact: Dict, lt: Dict, min_words: int = 879, max
     return raw
 
 
-def _proofread(raw: str, fact: Dict) -> str:
-    """2e règle : passe de relecture/correction orthographe, grammaire, syntaxe
-    et suppression des artifacts d'ecriture IA. NE change AUCUN fait. 1 passage, fallback original."""
+_CRITIQUE_CLEAN_MARKER = "AUCUN PROBLÈME DÉTECTÉ"
+
+
+def _self_critique(raw: str) -> str:
+    """AUTO-CRITIQUE (2026-08-19, demande explicite : contrôle qualité avant
+    sortie du texte final). Le modèle identifie les problèmes SANS les
+    corriger — étape séparée de la correction pour forcer une analyse
+    explicite par catégorie plutôt qu'une réécriture aveugle (qui, en
+    pratique, rate plus d'erreurs qu'une relecture qui doit d'abord les
+    nommer). Retourne le marqueur "propre" ou une liste de problèmes, un par
+    ligne. Échec réseau -> chaîne vide (l'appelant saute alors la correction,
+    jamais de blocage du pipeline pour ça)."""
     msg = [
         {"role": "system", "content": (
-            "Tu es un relecteur-correcteur de presse francophone (AFP/RFI). "
-            "Relis le texte et corrige STRICTEMENT : orthographe, grammaire, syntaxe, "
-            "accords, ponctuation, et supprime les artifacts d'ecriture IA (lignes orphelines "
-            "hors contexte, doubles asterisques ** residuels, repetitions de mots, formulations "
-            "artificielles). Règles : (1) NE change AUCUN fait, date, chiffre, nom ou citation ; "
-            "(2) garde la structure (Titre, CHAPO en ouverture, CORPS en paragraphes fluides SANS titres de section, signature 'Par La Rédaction') ; "
-            "(3) si un fragment de phrase est detache en fin de paragraphe sans lien, reintegre-le "
-            "dans le paragraphe precedent ; (4) reponds avec le texte CORRIGE complet, rien d'autre."
+            "Tu es un correcteur-relecteur professionnel de presse francophone, très exigeant. "
+            "Analyse le texte fourni SUR CES 5 AXES UNIQUEMENT, un par un :\n"
+            "1. ORTHOGRAPHE (mots mal orthographiés)\n"
+            "2. GRAMMAIRE (structure de phrase incorrecte)\n"
+            "3. ACCORDS (genre/nombre : adjectifs, participes passés)\n"
+            "4. CONJUGAISON (temps, mode, personne incorrects)\n"
+            "5. COHÉRENCE SÉMANTIQUE/LOGIQUE (contradictions internes, incohérences factuelles "
+            "entre deux passages du MÊME texte, ruptures de sens, phrases qui ne veulent rien dire, "
+            "chiffres ou dates qui se contredisent d'un paragraphe à l'autre)\n"
+            "NE juge JAMAIS le style ou les choix éditoriaux, uniquement ces erreurs objectives. "
+            f"Si tu ne trouves AUCUN problème sur ces 5 axes, réponds EXACTEMENT : {_CRITIQUE_CLEAN_MARKER}\n"
+            "Sinon, liste CHAQUE problème sur sa propre ligne, format strict : "
+            "'[CATÉGORIE] courte citation du passage concerné -> nature précise du problème'. "
+            "Ne propose AUCUNE correction ici, identifie seulement."
         )},
-        {"role": "user", "content": f"TEXTE A RELIRE :\n{raw}"},
+        {"role": "user", "content": f"TEXTE À ANALYSER :\n{raw}"},
+    ]
+    try:
+        out = _ollama_chat(msg, 1200)
+        return (out or "").strip()
+    except Exception as e:
+        print(f"[SELF_CRITIQUE_ERROR] {type(e).__name__}: {e}")
+        return ""
+
+
+def _apply_critique_corrections(raw: str, critique_report: str) -> str:
+    """Corrige EXCLUSIVEMENT les problèmes listés par _self_critique — jamais
+    une réécriture générale (limite le risque de dérive/hallucination sur un
+    texte déjà globalement correct). Fallback texte original si l'appel
+    échoue ou si le résultat semble tronqué (perte de contenu)."""
+    msg = [
+        {"role": "system", "content": (
+            "Tu es un correcteur-relecteur professionnel de presse francophone. On te donne un "
+            "article et une liste de problèmes précis relevés par une relecture préalable "
+            "(orthographe, grammaire, accords, conjugaison, cohérence sémantique/logique). "
+            "Corrige EXCLUSIVEMENT les problèmes listés, uniquement les phrases concernées. "
+            "NE reformule RIEN d'autre, NE change AUCUN fait, date, chiffre, nom ou citation. "
+            "Garde la structure exacte (Titre, CHAPÔ en ouverture, CORPS en paragraphes fluides "
+            "SANS titre de section, signature 'Par La Rédaction'). "
+            "Réponds avec le texte COMPLET corrigé, rien d'autre."
+        )},
+        {"role": "user", "content": f"PROBLÈMES RELEVÉS :\n{critique_report}\n\nARTICLE À CORRIGER :\n{raw}"},
     ]
     try:
         fixed = _ollama_chat(msg, 3000)
         if fixed and len(fixed.split()) >= len(raw.split()) * 0.8:
             return fixed
     except Exception as e:
-        # B4 fix : log explicite de l'échec (ne pas avaler silencieusement)
         import traceback
-        print(f"[PROOFREAD_ERROR] {type(e).__name__}: {e}")
+        print(f"[CRITIQUE_CORRECTION_ERROR] {type(e).__name__}: {e}")
         traceback.print_exc()
-
     return raw
+
+
+def _self_review_pass(raw: str) -> Dict:
+    """Orchestre auto-critique -> correction ciblée. Retourne
+    {"article": texte_final, "issues_found": n, "critique": rapport}.
+    Si le texte est déjà propre (cas le plus fréquent), AUCUN appel de
+    correction n'est fait -> pas de coût de latence pour rien. Suppression
+    des artefacts d'écriture IA (lignes orphelines, ** résiduels) : intégrée
+    à l'axe GRAMMAIRE/COHÉRENCE de la critique plutôt qu'une règle séparée,
+    ces artefacts cassent justement la cohérence du texte."""
+    critique = _self_critique(raw)
+    if not critique or critique.upper().startswith(_CRITIQUE_CLEAN_MARKER):
+        return {"article": raw, "issues_found": 0, "critique": critique}
+    n_issues = len([l for l in critique.splitlines() if l.strip()])
+    corrected = _apply_critique_corrections(raw, critique)
+    print(f"[AUTOCRITIQUE] {n_issues} probleme(s) identifie(s), correction appliquee")
+    return {"article": corrected, "issues_found": n_issues, "critique": critique}
 
 
 def validate_article(raw: str, fact: Dict) -> Dict:
@@ -497,22 +554,26 @@ def _call_litellm(provider: str, key: str, messages: List[Dict], max_tokens: int
     return resp.choices[0].message.content
 
 
-def _finalize_article(art: str, fact: Dict, lt: Dict) -> str:
+def _finalize_article(art: str, fact: Dict, lt: Dict) -> Dict:
     """Post-traitement UNIFORME appliqué à tout article, quel que soit le
     provider qui l'a généré (avant 2026-08-19 : TokenRouter/litellm sautaient
-    la relecture _proofread et l'extension conditionnelle, contrairement à
-    Nvidia/Ollama -> comportement/qualité incohérents selon le provider actif).
+    la relecture et l'extension conditionnelle, contrairement à Nvidia/Ollama
+    -> comportement/qualité incohérents selon le provider actif).
     1. Extension si sous la cible de longueur (1 seule repasse bornée).
-    2. Relecture/correction (orthographe, grammaire, artefacts IA).
+    2. AUTO-CRITIQUE puis correction ciblée (orthographe, grammaire, accords,
+       conjugaison, cohérence sémantique/logique — demande explicite
+       2026-08-19 : contrôle qualité AVANT la sortie du texte final).
     3. Validation anti-injection + sanitisation des liens externes.
-    """
+    Retourne {"article", "flags", "critique_issues", "critique_report"}."""
     if len(art.split()) < lt.get("target", 879):
         art = _ensure_min_length(art, fact, lt, max_attempts=1)
-    art = _proofread(art, fact)
+    review = _self_review_pass(art)
+    art = review["article"]
     _v = validate_article(art, fact)
     if _v["flags"]:
         print("[INJECTION_BLOCKED]", "; ".join(_v["flags"]))
-    return _v["article"]
+    return {"article": _v["article"], "flags": _v["flags"],
+            "critique_issues": review["issues_found"], "critique_report": review["critique"]}
 
 
 def write_article(fact: Dict, dry_run: bool = None) -> Dict:
@@ -585,11 +646,12 @@ def write_article(fact: Dict, dry_run: bool = None) -> Dict:
                 last_err = f"{model_name}: réponse vide"
                 llm_circuit_fail(last_err)
                 continue
-            art = _finalize_article(art, fact, lt)
+            fin = _finalize_article(art, fact, lt)
             llm_circuit_ok()
-            return {"article": art, "image": image, "image_meta": image_meta,
+            return {"article": fin["article"], "image": image, "image_meta": image_meta,
                     "model": model_name, "status": "ok",
-                    "length_target": lt["target"], "length_score": lt["score"]}
+                    "length_target": lt["target"], "length_score": lt["score"],
+                    "critique_issues": fin["critique_issues"], "critique_report": fin["critique_report"]}
         except Exception as e:
             last_err = e
             llm_circuit_fail(str(e))
@@ -678,4 +740,5 @@ def regenerate(fact_id: str, suggestion: str = None, dry_run: bool = None) -> Di
         "status": written.get("status", ""),
         "suggestion_applied": suggestion or "neutre",
         "angle": angle,
+        "critique_issues": written.get("critique_issues", 0),
     }

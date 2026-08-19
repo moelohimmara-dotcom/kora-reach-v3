@@ -37,10 +37,78 @@ def init():
         else:
             cur.execute("""CREATE TABLE IF NOT EXISTS cycles (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, started TEXT, status TEXT)""")
+        # timing_stats (2026-08-19, demande explicite : estimation du temps de
+        # génération annoncée dès le lancement d'un cycle). Une seule ligne
+        # ("article_gen"), moyenne mobile exponentielle du temps REEL observé
+        # par article généré (mesuré dans reach_agent.run() autour de
+        # write_article()) -- persistée pour survivre aux redémarrages et
+        # être déjà utile dès le tout premier article d'un cycle qui vient de
+        # démarrer.
+        cur.execute("""CREATE TABLE IF NOT EXISTS timing_stats (
+            key TEXT PRIMARY KEY, avg_seconds REAL, samples INTEGER)""")
         con.commit()
     finally:
         con.close()
     _initialized = True
+
+
+_TIMING_KEY = "article_gen"
+_TIMING_DEFAULT_SEC = 150.0  # ~2min30, estimation raisonnable avant toute mesure reelle
+_TIMING_EMA_ALPHA = 0.3      # poids du dernier echantillon (0.3 = lisse sans etre lent a suivre)
+
+
+def get_avg_article_seconds() -> float:
+    """Moyenne mobile persistée du temps de génération par article (toutes
+    passes comprises : rédaction, extension éventuelle, auto-critique,
+    correction éventuelle). Valeur par défaut raisonnable tant qu'aucun
+    article n'a encore été mesuré (première utilisation)."""
+    init()
+    p = _ph()
+    con, mode = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(f"SELECT avg_seconds FROM timing_stats WHERE key={p}", (_TIMING_KEY,))
+        row = cur.fetchone()
+        if row:
+            v = row["avg_seconds"] if isinstance(row, dict) else row[0]
+            if v and v > 0:
+                return float(v)
+        return _TIMING_DEFAULT_SEC
+    finally:
+        con.close()
+
+
+def record_article_seconds(seconds: float):
+    """Met à jour la moyenne mobile après CHAQUE article réellement généré
+    (appelé depuis reach_agent.run(), jamais depuis un dry-run/template)."""
+    if not seconds or seconds <= 0:
+        return
+    init()
+    p = _ph()
+    con, mode = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(f"SELECT avg_seconds, samples FROM timing_stats WHERE key={p}", (_TIMING_KEY,))
+        row = cur.fetchone()
+        if row:
+            prev = row["avg_seconds"] if isinstance(row, dict) else row[0]
+            n = (row["samples"] if isinstance(row, dict) else row[1]) or 0
+            new_avg = (prev * (1 - _TIMING_EMA_ALPHA) + seconds * _TIMING_EMA_ALPHA) if prev else seconds
+            cur.execute(f"UPDATE timing_stats SET avg_seconds={p}, samples={p} WHERE key={p}",
+                        (new_avg, n + 1, _TIMING_KEY))
+        else:
+            if mode == "postgres":
+                cur.execute(
+                    f"INSERT INTO timing_stats (key, avg_seconds, samples) VALUES ({p},{p},{p}) "
+                    f"ON CONFLICT (key) DO NOTHING",
+                    (_TIMING_KEY, seconds, 1))
+            else:
+                cur.execute(
+                    f"INSERT OR IGNORE INTO timing_stats (key, avg_seconds, samples) VALUES ({p},{p},{p})",
+                    (_TIMING_KEY, seconds, 1))
+        con.commit()
+    finally:
+        con.close()
 
 
 def seen(url_hash: str) -> bool:
