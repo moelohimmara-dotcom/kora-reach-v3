@@ -11,6 +11,20 @@ from typing import Dict, List
 import illustrate
 import hitl_store
 
+_MOIS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
+            "août", "septembre", "octobre", "novembre", "décembre"]
+
+
+def _date_du_jour_fr() -> str:
+    """Date du jour en français ('19 août 2026'), pour ancrer le LLM sur la
+    date réelle. Sans ceci, le modèle n'a AUCUNE notion de "maintenant" et
+    peut inventer une année issue de son biais d'entraînement (ex: écrire
+    '2023' ou '2025' dans une phrase de contexte non tirée mot pour mot de
+    la source) — corrigé 2026-08-19, bug rapporté en prod."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    return f"{now.day} {_MOIS_FR[now.month - 1]} {now.year}"
+
 # --- Circuit-breaker LLM (Option C) : evite la boucle/les timeouts si le LLM tombe ---
 # Etat global : compteur d'echecs consecutifs + fin d'ouverture (epoch s).
 _LLM_CB = {"failures": 0, "open_until": 0.0, "last_err": ""}
@@ -99,7 +113,11 @@ SYSTEM_PROMPT = (
     "   - Ne tronque jamais pour rester court : remplis la cible.\n"
     "3. TON : factuel, impartial, neutre. Une seule voix. Style presse : phrases courtes, vocabulaire précis, pas d'adjectifs superlatifs.\n"
     "4. ANTI-HALLUCINATION : tu ne dois RIEN inventer. Toute info vient EXCLUSIVEMENT des contextes fournis. "
-    "Si une donnée (date précise, chiffre, citation) manque dans les contextes, marque-la '[à vérifier]' — ne jamais supposer.\n"
+    "Si une donnée (date précise, chiffre, citation) manque dans les contextes, marque-la '[à vérifier]' — ne jamais supposer. "
+    "Tu n'as AUCUNE notion fiable de la date actuelle par toi-même : n'écris JAMAIS une date précise (jour, mois, année) "
+    "qui n'apparaît pas explicitement, telle quelle, dans les textes sources fournis. La 'DATE DU JOUR' donnée dans le "
+    "message utilisateur sert uniquement de repère (ex: pour dire 'récemment', 'cette semaine') — ne la recopie jamais "
+    "comme si elle était la date d'un événement.\n"
     "5. PÉRIMÈTRE : actualité Guinée (Conakry). Si le fait est international mais filtré, garde le lien explicite avec la Guinée.\n"
     "6. SOURCES INTERDITES : tu ne dois JAMAIS nommer la source, citer son nom, son URL, ni mentionner sa provenance "
     "('selon X', 'Source : Y', 'comme l'indique le site Z'). Rédige le fait SANS AUCUNE référence à l'origine. "
@@ -237,6 +255,7 @@ def _build_messages(fact: Dict) -> List[Dict]:
         + "\n\n".join(parts)
         + f"\n\nTitre suggéré : {champ.get('title', '')}\n"
         + f"Périmètre : Guinée (Conakry).\n"
+        + f"DATE DU JOUR : {_date_du_jour_fr()} (repère temporel uniquement — n'invente AUCUNE date d'événement absente des textes ci-dessus).\n"
         + f"CIBLE DE LONGUEUR : Vise {lt['target']} mots (au moins). Pertinence calculée : {lt['score']}/100.\n"
         + "Rédige l'article complet (Titre, CHAPÔ en ouverture — paragraphe nu sans label, puis le CORPS en paragraphes fluides SANS AUCUN titre de section ni label 'Décryptage'/'À noter'/'Conclusion', et signature 'Par La Rédaction') "
         + "en français, en atteignant la cible sans rien inventer hors des textes ci-dessus."
@@ -352,7 +371,7 @@ def _ensure_min_length(raw: str, fact: Dict, lt: Dict, min_words: int = 879, max
     for attempt in range(max_attempts):
         need = max(target, min_words) - n
         msg = [
-            {"role": "system", "content": sys_base + f"L'article ci-dessous fait {n} mots mais la cible est {target} mots (minimum {min_words}, il manque ~{need} mots). ÉTENDS-LE en ajoutant de NOUVEAUX paragraphes UNIQUEMENT dans le CORPS (pyramide inversée, angles non répétitifs, STRICTEMENT basés sur les textes fournis, SANS titre de section, SANS citer la source). Ne répète AUCUNE phrase existante. Garde la structure (Titre, CHAPÔ en ouverture, CORPS fluide, signature 'Par La Rédaction'). Réponds avec l'article COMPLET étendu."},
+            {"role": "system", "content": sys_base + f"L'article ci-dessous fait {n} mots mais la cible est {target} mots (minimum {min_words}, il manque ~{need} mots). ÉTENDS-LE en ajoutant de NOUVEAUX paragraphes UNIQUEMENT dans le CORPS (pyramide inversée, angles non répétitifs, STRICTEMENT basés sur les textes fournis, SANS titre de section, SANS citer la source). Ne répète AUCUNE phrase existante. N'invente AUCUNE date précise absente du texte source fourni ci-dessous (tu n'as aucune notion fiable de la date actuelle). Garde la structure (Titre, CHAPÔ en ouverture, CORPS fluide, signature 'Par La Rédaction'). Réponds avec l'article COMPLET étendu."},
             {"role": "user", "content": f"TEXTE SOURCE (matière factuelle, ne pas citer la provenance) :\n{clean_source(champ.get('raw_content', ''))[:2500]}\n\nARTICLE ACTUEL À ÉTENDRE :\n{raw}"},
         ]
         ext = _ollama_chat(msg, 3400)
