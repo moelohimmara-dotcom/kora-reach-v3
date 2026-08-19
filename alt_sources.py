@@ -79,18 +79,28 @@ def fetch_sitemap(source) -> List[Dict]:
 
 
 def fetch_google_news(query="Guinée", gl="GN", hl="fr", limit=20) -> List[Dict]:
-    """Google News RSS search -> articles mondiaux sur la Guinée (zéro blocage bot)."""
+    """Google News RSS search -> articles mondiaux sur la Guinée (zéro blocage bot).
+    raw_content = texte complet de l'article source quand accessible (voir
+    fetchers._fetch_full_article) — un resume RSS Google News tronque ne suffit
+    pas a nourrir une synthese fiable (regle metier 2026-08-19)."""
     out = []
     try:
+        from fetchers import _fetch_full_article, _RSS_FULLTEXT_MIN_LEN
         url = f"https://news.google.com/rss/search?q={requests.utils.quote(query)}&hl={hl}&gl={gl}&ceid={gl}:{hl}"
         d = feedparser.parse(url)
         for e in d.entries[:limit]:
+            summary = e.get("summary", "")
+            link = e.get("link", "")
+            raw_content = summary
+            full = _fetch_full_article(link)
+            if len(full) >= _RSS_FULLTEXT_MIN_LEN:
+                raw_content = full
             out.append({
                 "title": e.get("title", ""),
-                "url": e.get("link", ""),
-                "summary": e.get("summary", ""),
+                "url": link,
+                "summary": summary,
                 "published_at": e.get("published", ""),
-                "raw_content": e.get("summary", ""),
+                "raw_content": raw_content,
                 "image": "",
             })
     except Exception as e:
