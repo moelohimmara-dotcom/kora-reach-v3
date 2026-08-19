@@ -12,6 +12,7 @@ import requests
 import feedparser
 import trafilatura
 from typing import Dict, List
+from fetchers import get_with_retry
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; KoraReachBot/1.0)"}
 _TIMEOUT = 15
@@ -29,7 +30,7 @@ def fetch_sitemap(source) -> List[Dict]:
         sitemap_urls = []
         for path in urls_to_try:
             try:
-                r = requests.get(path, headers=_UA, timeout=_TIMEOUT)
+                r = get_with_retry(path, headers=_UA, timeout=_TIMEOUT)
                 if r.status_code != 200:
                     continue
                 if "sitemapindex" in r.text:
@@ -49,7 +50,7 @@ def fetch_sitemap(source) -> List[Dict]:
         art_urls = []
         for sm in sitemap_urls[:5]:
             try:
-                r = requests.get(sm, headers=_UA, timeout=_TIMEOUT)
+                r = get_with_retry(sm, headers=_UA, timeout=_TIMEOUT)
                 urls = re.findall(r"<loc>(.*?)</loc>", r.text)
                 for u in urls:
                     if u.count("/") >= 4 and not any(x in u for x in ("/category/", "/tag/", "/author/", "/page/")):
@@ -59,7 +60,7 @@ def fetch_sitemap(source) -> List[Dict]:
         art_urls = art_urls[:15]
         for u in art_urls:
             try:
-                rr = requests.get(u, headers=_UA, timeout=_TIMEOUT)
+                rr = get_with_retry(u, headers=_UA, timeout=_TIMEOUT)
                 text = trafilatura.extract(rr.text)
                 meta = trafilatura.extract_metadata(rr.text)
                 if text and len(text) > 200:
@@ -87,7 +88,10 @@ def fetch_google_news(query="Guinée", gl="GN", hl="fr", limit=20) -> List[Dict]
     try:
         from fetchers import _fetch_full_article, _RSS_FULLTEXT_MIN_LEN
         url = f"https://news.google.com/rss/search?q={requests.utils.quote(query)}&hl={hl}&gl={gl}&ceid={gl}:{hl}"
-        d = feedparser.parse(url)
+        # requests + retry (au lieu de feedparser.parse(url) direct, qui n'a
+        # aucune resilience reseau propre) puis feedparser.parse(bytes).
+        resp = get_with_retry(url, headers=_HEADERS, timeout=_TIMEOUT)
+        d = feedparser.parse(resp.content)
         for e in d.entries[:limit]:
             summary = e.get("summary", "")
             link = e.get("link", "")
@@ -114,7 +118,7 @@ def fetch_gdelt(query="Guinée", maxrecords=20) -> List[Dict]:
     try:
         url = (f"https://api.gdeltproject.com/api/v2/doc/doc?query={requests.utils.quote(query)}"
                f"&mode=ArtList&maxrecords={maxrecords}&format=json")
-        r = requests.get(url, headers=_HEADERS, timeout=_TIMEOUT)
+        r = get_with_retry(url, headers=_HEADERS, timeout=_TIMEOUT)
         if r.status_code == 200:
             for a in r.json().get("articles", []):
                 out.append({
@@ -136,7 +140,7 @@ def fetch_wayback(domain_pattern, limit=15) -> List[Dict]:
     try:
         url = (f"https://web.archive.org/cdx/search/cdx?url={domain_pattern}"
                f"&output=json&limit={limit}&filter=statuscode:200&collapse=urlkey")
-        r = requests.get(url, headers=_HEADERS, timeout=_TIMEOUT)
+        r = get_with_retry(url, headers=_HEADERS, timeout=_TIMEOUT)
         if r.status_code == 200:
             rows = r.json()
             for row in rows[1:]:  # skip header

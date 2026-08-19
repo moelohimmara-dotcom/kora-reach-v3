@@ -3,11 +3,39 @@ import feedparser
 import trafilatura
 import requests
 import re
+import time
 import config
 from guardrails import check as guardrails_check, rate_limit
 from typing import List, Dict, Optional
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+
+
+def get_with_retry(url: str, headers: dict = None, timeout: float = None, retries: int = None):
+    """GET avec retry/backoff sur pannes RESEAU TRANSITOIRES (timeout, connexion
+    refusee/DNS, erreur 5xx cote serveur). Ne retente JAMAIS sur un 4xx (403
+    anti-bot, 404...) : ce genre de reponse ne se resout pas en reessayant, ca
+    ne ferait que ralentir le cycle pour rien (2026-08-19, diagnostic P1 §5 —
+    avant ce correctif, un simple timeout reseau perdait la source ENTIERE pour
+    tout le cycle, sans nouvelle tentative)."""
+    headers = headers or _HEADERS
+    timeout = timeout if timeout is not None else config.LIMITS["timeout_sec"]
+    retries = config.LIMITS["retry"] if retries is None else retries
+    last_exc = None
+    for attempt in range(retries + 1):
+        try:
+            r = requests.get(url, headers=headers, timeout=timeout)
+            if r.status_code >= 500 and attempt < retries:
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            return r
+        except (requests.ConnectionError, requests.Timeout) as e:
+            last_exc = e
+            if attempt < retries:
+                time.sleep(0.5 * (attempt + 1))
+                continue
+    raise last_exc
+
 
 def _article_title(html: str) -> str:
     from bs4 import BeautifulSoup
@@ -40,7 +68,7 @@ def _fetch_full_article(url: str) -> str:
         return ""
     try:
         rate_limit(url)
-        r = requests.get(url, headers=_HEADERS, timeout=config.LIMITS["timeout_sec"])
+        r = get_with_retry(url)
         r.raise_for_status()
         text = trafilatura.extract(r.text, include_comments=False, include_tables=False)
         return text or ""
@@ -56,9 +84,8 @@ def fetch_rss(source) -> List[Dict]:
     out = []
     try:
         rate_limit(source.url)
-        # timeout réseau explicite (évite blocage indéfini)
-        resp = requests.get(source.url, headers=_HEADERS,
-                            timeout=config.LIMITS["timeout_sec"])
+        # timeout réseau explicite (évite blocage indéfini) + retry/backoff
+        resp = get_with_retry(source.url)
         resp.raise_for_status()
         d = feedparser.parse(resp.content)
         for i, e in enumerate(d.entries):
@@ -96,7 +123,7 @@ def fetch_html(source) -> List[Dict]:
     out = []
     try:
         rate_limit(source.url)
-        resp = requests.get(source.url, headers=_HEADERS, timeout=config.LIMITS["timeout_sec"])
+        resp = get_with_retry(source.url)
         html = resp.text
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(html, "html.parser")
@@ -130,7 +157,7 @@ def fetch_html(source) -> List[Dict]:
         for _, link in candidates[:10]:
             try:
                 rate_limit(link)
-                r2 = requests.get(link, headers=_HEADERS, timeout=config.LIMITS["timeout_sec"])
+                r2 = get_with_retry(link)
                 extracted = trafilatura.extract(r2.text, include_comments=False,
                                                 include_tables=False)
                 meta = trafilatura.extract_metadata(r2.text)
