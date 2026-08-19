@@ -417,6 +417,52 @@ export const Store = (() => {
     const f = (c) => Math.max(0, Math.min(255, Math.round(c + 255 * pct)));
     return "#" + ((1 << 24) + (f(r) << 16) + (f(g) << 8) + f(b)).toString(16).slice(1).toUpperCase();
   }
+  // Le cycle tourne intégralement côté serveur (thread détaché + verrou
+  // fichier, voir reach_agent.py) : un rechargement de page, un changement
+  // d'onglet ou toute autre navigation NE L'INTERROMPT JAMAIS. Ce qui se
+  // perdait avant la correction du 2026-08-19, c'est uniquement le SUIVI
+  // client (le compteur "Article X sur Y", l'écran plein écran) — recréé en
+  // mémoire du navigateur, il disparaissait à chaque F5 alors que le cycle
+  // continuait en réalité en arrière-plan, donnant l'impression trompeuse
+  // qu'un rechargement "coupait" la génération. _watchCycle() est désormais
+  // le SEUL chemin qui pilote ce suivi, appelé soit juste après avoir posté
+  // /api/cycle (startCycle), soit au démarrage de l'app pour RECOLLER l'UI
+  // sur un cycle déjà en cours côté serveur (Store.resumeCycleWatch, voir
+  // boot() dans app.js) — jamais deux boucles de suivi en parallèle
+  // (_watching évite la double-boucle qui ferait sauter l'état en dépit
+  // l'une de l'autre).
+  let _watching = false;
+  async function _watchCycle() {
+    if (_watching) return;
+    _watching = true;
+    try {
+      for (let i = 0; i < 240; i++) {
+        const r = await api("/api/last");
+        const p = r.progress || null;
+        if (!r.running) {
+          // Le cycle est déjà terminé (ou n'a jamais démarré) : recharge
+          // depuis l'API HITL (facts avec fact_id valide) plutôt que
+          // r.result.facts (sans fact_id) -> sinon le clic carte casse.
+          if (r.result) await loadHITL();
+          setState({ lastCycle: r, ui: { ...state.ui, busy: false, cycleBusy: false, overlay: null, progress: null } });
+          return;
+        }
+        const label = p && p.total > 0
+          ? `Article ${p.current || 1} sur ${p.total}…`
+          : "Cycle en cours… (" + i * 3 + "s)";
+        setState({ lastCycle: r, ui: { ...state.ui, busy: true, cycleBusy: true, overlay: label, progress: p } });
+        await wait(3000);
+      }
+      // Dépassement du plafond de suivi (~12 min) : le cycle peut continuer
+      // légitimement côté serveur (aucun impact), on arrête juste de le
+      // suivre ici pour ne pas boucler indéfiniment. Un F5 relance le suivi.
+      setState({ ui: { ...state.ui, busy: false, cycleBusy: false, overlay: null, progress: null } });
+    } catch (e) {
+      setState({ ui: { ...state.ui, busy: false, cycleBusy: false, overlay: null, progress: null, error: e.message } });
+    } finally {
+      _watching = false;
+    }
+  }
   // demand : nb d'articles max explicitement voulu (optionnel — par défaut,
   // le backend génère TOUS les faits frais et uniques du cycle, voir
   // LOGIQUE-METIER-REACH.md §7). force : ignore la fenêtre 24h.
@@ -424,26 +470,31 @@ export const Store = (() => {
   async function startCycle({ demand, force = false } = {}) {
     setState({ ui: { ...state.ui, busy: true, cycleBusy: true, overlay: force ? "Génération forcée (hors fenêtre 24h)…" : "Collecte des sources whitelist…", progress: null } });
     try {
-      await api("/api/cycle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ demand, force }) });
-      for (let i = 0; i < 120; i++) {
-        await wait(3000);
-        const r = await api("/api/last");
-        const p = r.progress || null;
-        setState({ lastCycle: r, ui: { ...state.ui, busy: true, cycleBusy: true, progress: p } });
-        if (!r.running && r.result) {
-          // Recharge depuis l'API HITL (facts avec fact_id valide) plutôt que
-          // r.result.facts (sans fact_id) -> sinon le clic carte casse.
-          await loadHITL();
-          setState({ lastCycle: r, ui: { ...state.ui, busy: false, cycleBusy: false, overlay: null, progress: null } });
-          return;
-        }
-        const label = p && p.total > 0
-          ? `Article ${p.current || 1} sur ${p.total}…`
-          : "Cycle en cours… (" + i * 3 + "s)";
-        setState({ ui: { ...state.ui, overlay: label, progress: p } });
+      const started = await api("/api/cycle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ demand, force }) });
+      if (started && started.error) {
+        // cycle_en_cours (un cycle tourne déjà, p.ex. lancé avant un F5) :
+        // pas une vraie erreur -> on se raccorde simplement à CE cycle réel
+        // au lieu d'afficher un échec pour une action qui, de son point de
+        // vue, "n'a rien fait" alors qu'un cycle légitime est bien en vie.
+        return _watchCycle();
       }
-      setState({ ui: { ...state.ui, busy: false, cycleBusy: false, overlay: null, progress: null } });
-    } catch (e) { setState({ ui: { ...state.ui, busy: false, cycleBusy: false, overlay: null, progress: null, error: e.message } }); }
+    } catch (e) {
+      setState({ ui: { ...state.ui, busy: false, cycleBusy: false, overlay: null, progress: null, error: e.message } });
+      return;
+    }
+    return _watchCycle();
+  }
+  // Appelé une seule fois au démarrage de l'app (boot(), après résolution de
+  // la session) : si un cycle est déjà en cours côté serveur — lancé avant un
+  // rechargement de page, ou par un autre onglet/appareil du même compte —
+  // récupère l'écran de progression exactement là où il en est, sans poster
+  // un nouveau /api/cycle (qui serait de toute façon refusé, 429). Rend le
+  // rechargement transparent pour le suivi visuel du cycle en cours.
+  async function resumeCycleWatch() {
+    try {
+      const r = await api("/api/last");
+      if (r && r.running) _watchCycle();
+    } catch (e) { /* silencieux : un échec ici ne doit jamais bloquer le boot */ }
   }
   async function seed() {
     // Le backend n'expose pas /api/seed_demo ; on lance un cycle de démo
@@ -819,7 +870,7 @@ export const Store = (() => {
   return {
     state, setState, subscribe, api,
     loadHealth, loadLast, loadHITL, loadAudit, loadSources, addSource, updateSource, loadSettings, applySettings,
-    startCycle, cancelCycle, seed, decide, retract, setRoute, openSheet, closeSheet, wait,
+    startCycle, resumeCycleWatch, cancelCycle, seed, decide, retract, setRoute, openSheet, closeSheet, wait,
     getFactFilter, setFactFilter,
     getTheme, setTheme, initTheme,
     getRailMode, setRailMode, initRailMode, applyRailMode,

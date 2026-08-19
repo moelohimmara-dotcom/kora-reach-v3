@@ -3256,6 +3256,13 @@ function boot() {
       Store.checkAuth().then((ok) => {
         if (!ok) { renderAuth("login"); return; }
         Store.loadAll();   // charge facts/health/sources dès la session validée
+        // Reconnexion au cycle en cours côté serveur (2026-08-19) : un cycle
+        // tourne dans un thread détaché, jamais affecté par un F5 — mais SANS
+        // ceci, l'écran de progression ("Article X sur Y") disparaissait au
+        // rechargement, donnant l'impression trompeuse que la génération avait
+        // été interrompue alors qu'elle continuait réellement en arrière-plan.
+        // Seul le bouton "Interrompre" doit pouvoir stopper un cycle.
+        Store.resumeCycleWatch();
         // Comptes/invitations : role deja connu ici (checkAuth resolu) -> pas
         // d'appel pour rien (403 systematique) pour lecteur/editeur.
         if (Store.state.auth && isAdvancedRole(Store.state.auth.role)) {
