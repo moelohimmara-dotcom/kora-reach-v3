@@ -783,8 +783,16 @@ def get_dashboard_stats() -> dict:
         row = cur.fetchone()
         deleted = int((list(row.values())[0] if isinstance(row, dict) else row[0]) or 0)
         return {
-            "total_facts": total_facts,        # tous les faits (sidebar)
-            "articles": in_circulation,        # dashboard "Articles" (en circulation)
+            # total_facts = "Articles" partout dans l'UI (sidebar, dashboard, filtre
+            # "Tous" de la page Articles) : c'est la SEULE definition dont la somme
+            # des 6 filtres (pending+transmitted+rejected+drafts+trash) egale
+            # TOUJOURS le total affiche, par construction (voir invariant plus haut).
+            # Ne PAS utiliser un total qui exclut une des 6 categories ici : ca
+            # recree exactement le bug "Tous X mais somme des filtres = Y" deja
+            # corrige une fois (2026-08-19) et qui a resurgi le 2026-08-19 sous
+            # une autre forme (sidebar/dashboard affichant 80 quand "Tous" = 89).
+            "total_facts": total_facts,
+            "articles": in_circulation,        # sous-total "en circulation" (hors corbeille ET rejetes) -- usage ponctuel seulement, PAS pour le badge "Articles"
             "pending": pending,               # a decider (+ etats residuels)
             "transmitted": transmitted,       # publies/transmis (+ approuves)
             "drafts": edited,                 # brouillons

@@ -220,7 +220,7 @@ function viewCockpit(s) {
   // SSOT : tous les compteurs viennent de s.stats (calcules une fois par le backend).
   // Plus aucun recalcul divergent cote front (ancien cat.pending / s.trash, etc.).
   const st = s.stats || {};
-  const total = (typeof st.articles === "number") ? st.articles : 0;       // Articles (en circulation)
+  const total = (typeof st.total_facts === "number") ? st.total_facts : ((typeof st.articles === "number") ? st.articles : 0);  // Articles = total_facts, coherent avec la sidebar et le filtre "Tous" (voir get_dashboard_stats)
   const pending = (typeof st.pending === "number") ? st.pending : 0;        // A decider (PENDING_REVIEW)
   const approved = (typeof st.published === "number") ? st.published : 0;   // Publies (articles publies)
   const draft = (typeof st.drafts === "number") ? st.drafts : 0;            // Brouillons (EDITED)
@@ -2394,7 +2394,7 @@ function render() {
     // SSOT : badges de navigation tires de s.stats (calcules une seule fois par le backend)
     const stats = s.stats || {};
     const badges = {
-      facts: (typeof stats.articles === "number") ? stats.articles : ((typeof stats.total_facts === "number") ? stats.total_facts : facts.length),
+      facts: (typeof stats.total_facts === "number") ? stats.total_facts : ((typeof stats.articles === "number") ? stats.articles : facts.length),
       sources: (s.sources || []).length,
       drafts: (typeof stats.drafts === "number") ? stats.drafts : facts.filter(f => (f.status || "") === "EDITED").length,
       trash: (typeof stats.trash === "number") ? stats.trash : (s.trash || []).length || facts.filter(f => (f.status || "") === "DELETED").length,
