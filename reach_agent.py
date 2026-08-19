@@ -91,7 +91,7 @@ def estimate_launch_message() -> dict:
         note += " Un fournisseur IA montre des signes de ralentissement en ce moment : la génération pourrait être plus lente que d'habitude."
     return {"avg_sec_per_article": round(avg), "note": note, "degraded": degraded}
 
-from hitl_store import fact_id_of
+from hitl_store import fact_id_of, cleanup_orphan_decisions
 from audit import log
 from illustrate import illustrate, illustrate_all
 
@@ -301,6 +301,15 @@ class ReachAgent:
         # Securite : si le process crash sans finally, on libere au exit
         atexit.register(_release_cycle_lock)
         _init_state()  # (re)crée les tables si la DB a ete resetee
+        # Purge des decisions orphelines (2026-08-19, deplace depuis /api/hitl,
+        # ou elle tournait sur CHAQUE lecture -- charge inutile 30s/30s en
+        # auto-refresh, contribuait aux ~25s de reponse mesures en prod). Un
+        # rythme "une fois par cycle" (plusieurs fois/jour) suffit largement
+        # pour ce nettoyage defensif d'un cas rare ; jamais bloquant si echec.
+        try:
+            cleanup_orphan_decisions()
+        except Exception:
+            pass
         cid = new_cycle()
         _reset_progress(cid=cid, total=0)
         cycle_start = datetime.now(TZ)
