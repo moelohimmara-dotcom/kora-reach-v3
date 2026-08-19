@@ -68,8 +68,13 @@ def normalize_dates(published_at: str, cycle_start: datetime):
     # (24h ne peut normalement pas franchir une frontière d'année), SAUF
     # autour du 1er janvier -> couvre ce cas limite explicitement, et rend la
     # règle "année en cours" vérifiable telle quelle plutôt qu'implicite.
+    # Statut DISTINCT de "STALE" (2026-08-19, activation du bouton "Forcer
+    # hors 24h") : "Forcer" ne doit bypasser QUE la fenêtre de 24h glissante,
+    # jamais accepter une info d'une année révolue -- sinon le bouton de
+    # secours viendrait directement contredire la règle de fraîcheur
+    # explicitement demandée par ailleurs.
     if dt.year != cycle_start.year:
-        return dt, "STALE", False
+        return dt, "OLD_YEAR", False
     return dt, "OK", True
 
 

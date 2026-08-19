@@ -226,7 +226,6 @@ function viewCockpit(s) {
   const trash = (typeof st.trash === "number") ? st.trash : 0;             // Corbeille (TRASHED)
   const rejected = (typeof st.rejected === "number") ? st.rejected : 0;     // Rejetes (corbeille+decision)
   const deleted = (typeof st.deleted === "number") ? st.deleted : 0;        // Supprimes (audit)
-  const health = s.health;
   const audit = s.audit;
   const sources = s.sources || [];
   const lastCycle = s.lastCycle;
@@ -250,12 +249,14 @@ function viewCockpit(s) {
       <!-- GRAPHIQUE D'ÉVOLUTION : activité + décisions par jour -->
       ${evolutionChart(s)}
 
-      <!-- ROW 2 : System Health + Sources + Cycle Control -->
+      <!-- ROW 2 : Sources + Cycle Control (le bloc "Santé système" a été retiré
+           du dashboard le 2026-08-19 sur demande explicite : cette supervision
+           technique (mutex, circuit LLM, mode transmission...) n'a pas sa place
+           devant un compte éditeur normal -- elle vit désormais exclusivement
+           dans la Console Root, réservée au développeur/administrateur système
+           (voir root-console.html, panneau "Supervision", déjà complet et plus
+           riche que ce qui était affiché ici). -->
       <div class="cockpit-grid system-row">
-        <section class="system-section">
-          <h2 class="section-title">Santé système</h2>
-          ${systemHealthPill(health)}
-        </section>
         <section class="system-section sources-section" data-nav="sources" role="button" tabindex="0" aria-label="Voir la gouvernance des sources">
           <h2 class="section-title">Sources</h2>
           <div class="source-chips">
@@ -314,26 +315,6 @@ function statCard({ icon, value, label, variant = "primary", onClick, trend, loa
       <div class="stat-value">${loading ? '<span class="skeleton"></span>' : value}</div>
       <div class="stat-label">${label}${trendHtml}</div>
       ${error ? `<svg class="ic stat-error" aria-hidden="true"><use href="#i-close"></use></svg>` : ""}
-    </div>`;
-}
-
-function systemHealthPill(health) {
-  if (!health) return `<div class="health-pill loading"><span class="skeleton"></span></div>`;
-  const mutex = health.mutex ? "🔴 Occupé" : "🟢 Libre";
-  const mutexCls = health.mutex ? "busy" : "free";
-  const llm = health.llm_circuit || {};
-  const llmStatus = llm.failures > 0 || (llm.open_until && llm.open_until > Date.now() / 1000) ? "🟡 Dégradé" : "🟢 OK";
-  const llmCls = (llm.failures > 0 || (llm.open_until && llm.open_until > Date.now() / 1000)) ? "degraded" : "ok";
-  const transmit = health.transmit_mode || "inconnu";
-  const version = health.whitelist_version || "—";
-  return `
-    <div class="health-pill">
-      <div class="health-row">
-        <span class="health-item ${mutexCls}" data-tooltip="Mutex agent">${mutex}</span>
-        <span class="health-item ${llmCls}" data-tooltip="Circuit LLM: ${llm.failures} échecs, open_until=${llm.open_until || 0}">${llmStatus}</span>
-        <span class="health-item" data-tooltip="Mode transmission">${transmit}</span>
-        <span class="health-item version" data-tooltip="Version whitelist">${version}</span>
-      </div>
     </div>`;
 }
 
@@ -1523,7 +1504,7 @@ function renderSheet(s) {
             <span>${esc((f.champion && f.champion.level === 1) ? "Niveau 1 · Source guinéenne" : "Niveau 2 · International")}</span>
             <span class="dot-sep">·</span>
             <span>Fusion ${esc(f.n_sources || 1)} source(s)</span>
-            ${f.forced_stale ? '<span class="tag tag-warn" style="margin-left:6px">Hors fenêtre 48h</span>' : ''}
+            ${f.forced_stale ? '<span class="tag tag-warn" style="margin-left:6px" title="Généré via Forcer (hors 24h) : cette information dépassait la fenêtre de fraîcheur normale de 24h.">Hors fenêtre 24h — forcé</span>' : ''}
           </div>
         </div>
         <button class="sheet-close" data-close="1" title="Fermer" aria-label="Fermer">${icon("i-close")}</button>
@@ -3214,7 +3195,7 @@ function bind() {
         if (Store.state.lastCycle?.running) return;
         confirmAction({
           title: "Lancer un cycle forcé ?",
-          message: "La fenêtre de fraîcheur de 24h sera ignorée pour cette collecte.",
+          message: "La fenêtre de fraîcheur de 24h sera ignorée pour cette collecte. Restent exclus dans tous les cas : dates absentes ou incohérentes, et informations d'une année révolue.",
           confirmLabel: "Lancer",
           danger: false,
           onConfirm: () => Store.startCycle({ force: true }),
