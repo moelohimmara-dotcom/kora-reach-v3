@@ -1346,7 +1346,10 @@ html.icons-ready .material-icons { visibility: visible; }
 @media (min-width: 768px) {
   #app { flex-direction: row; }
   .topbar { position: fixed; top: 0; left: 0; right: 0; }
-  .view { padding-top: var(--topbar-h); padding-right: var(--space-6); transition: padding-left var(--dur-med) var(--ease); }
+  /* padding-top = hauteur du topbar (fixed) + marge de securite (space-5,
+     24px) : sans cette marge le contenu touche directement le bas du header
+     (aucun espace de respiration) -- corrige 2026-08-19. */
+  .view { padding-top: calc(var(--topbar-h) + var(--space-5)); padding-right: var(--space-6); transition: padding-left var(--dur-med) var(--ease); }
   /* Largeur du rail ET marge du contenu : source unique = data-rail, qui est
      TOUJOURS explicite ("collapsed"/"expanded") dès 768px, y compris pour le
      mode "auto" — voir store.js applyRailMode(). Les deux valeurs (76px/260px)
@@ -1492,7 +1495,7 @@ html.icons-ready .material-icons { visibility: visible; }
 .force-mobile .rail { display: none !important; }
 @media (min-width: 1100px) { .fact-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .force-mobile .bottomnav { display: flex !important; }
-.force-mobile .view { padding: var(--space-4) !important; padding-top: 72px !important; padding-bottom: 110px !important; max-width: 100% !important; }
+.force-mobile .view { padding: var(--space-4) !important; padding-top: calc(72px + var(--space-4)) !important; padding-bottom: 110px !important; max-width: 100% !important; }
 .force-mobile .fab { bottom: 88px !important; right: 20px !important; }
 .force-mobile .fab-menu { bottom: 162px !important; right: 20px !important; }
 .force-mobile .fact-grid { grid-template-columns: 1fr !important; }
