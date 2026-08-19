@@ -898,7 +898,12 @@ export const Store = (() => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fact_id, suggestion: suggestion || null }),
-        timeout: 120000,
+        // 120s -> 400s (2026-08-19) : l'auto-critique ajoute jusqu'à 2 appels
+        // LLM supplémentaires (critique + correction ciblée) au pipeline de
+        // rédaction -- un cas défavorable (fournisseur lent + les deux
+        // appels déclenchés) peut désormais dépasser 120s. Aligné sous le
+        // proxy_read_timeout nginx (600s, /kora-v2/api/), avec marge.
+        timeout: 400000,
       });
       if (r.error) throw new Error(r.error);
       return r;  // { fact_id, article, model, status, suggestion_applied, angle }
