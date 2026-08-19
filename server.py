@@ -545,6 +545,30 @@ class Handler(BaseHTTPRequestHandler):
             users = auth.list_users()
             out = [dict(u) if isinstance(u, dict) else {"id": u[0], "username": u[1], "email": u[3], "role": u[4] if len(u) > 4 else "normal", "created_at": u[5] if len(u) > 5 else u[4]} for u in users]
             return self._send(200, {"users": out})
+        if path == "/api/auth/invitations":
+            # Liste des invitations (Phase 2) : le statut affiché tient compte
+            # de l'expiration calculée ici, pas stockée en base (voir
+            # auth.list_invitations()).
+            if not self._require_capability("voir_comptes"):
+                return
+            now = datetime.now().isoformat(timespec="seconds")
+            out = []
+            for inv in auth.list_invitations():
+                display_status = inv["status"]
+                if display_status == "pending" and inv.get("expires_at") and now > inv["expires_at"]:
+                    display_status = "expired"
+                out.append({**inv, "display_status": display_status})
+            return self._send(200, {"invitations": out})
+        if path == "/api/auth/invitations/check":
+            # Public (pas de session) : l'écran "définir mon mot de passe"
+            # doit pouvoir afficher l'email/rôle avant que la personne invitée
+            # n'ait le moindre compte.
+            qs = urllib.parse.parse_qs(p.query)
+            token = (qs.get("token") or [""])[0]
+            inv = auth.get_invitation(token)
+            if not inv:
+                return self._send(404, {"error": "invitation_invalide_ou_expiree"})
+            return self._send(200, {"email": inv["email"], "role": inv["role"]})
         if path == "/api/hitl":
             # Tous les faits persistés (survit au redémarrage du service)
             # Auth requis : un normal peut lire pour valider, un anonyme non.
@@ -649,7 +673,8 @@ class Handler(BaseHTTPRequestHandler):
         if p.path.startswith("/api/root/"):
             return self._root_post(p.path, payload)
         # Routes publiques (aucune session requise) : login, forgot, reset
-        PUBLIC_POST = {"/api/auth/login", "/api/auth/forgot", "/api/auth/reset", "/api/auth/login/verify-2fa"}
+        PUBLIC_POST = {"/api/auth/login", "/api/auth/forgot", "/api/auth/reset", "/api/auth/login/verify-2fa",
+                       "/api/auth/invitations/accept"}
         if p.path not in PUBLIC_POST and not self._require_auth():
             return
         # Rôle 'lecteur' (12.1) : lecture seule -> bloque toute mutation sauf
@@ -1092,6 +1117,65 @@ class Handler(BaseHTTPRequestHandler):
             return
         if p.path == "/api/auth/reset":
             r = auth.reset_password(payload.get("token", ""), payload.get("new_password", ""))
+            self._send(200 if r.get("ok") else 400, r)
+            return
+        if p.path == "/api/auth/invitations":
+            # Créer une invitation (Phase 2, §4 du plan valide) : remplace la
+            # création directe de compte comme chemin normal.
+            if not self._require_capability("gerer_invitations"):
+                return
+            email = (payload.get("email") or "").strip().lower()
+            role = payload.get("role", "normal")
+            if role not in ("normal", "advanced", "lecteur", "owner"):
+                self._send(400, {"error": "role_invalide"})
+                return
+            # Q2 (même garde que la création directe/changement de rôle) :
+            # seul un Propriétaire peut inviter en tant que Propriétaire.
+            if role == "owner" and self._session_role() != "owner":
+                self._send(403, {"error": "reserve_aux_proprietaires"})
+                return
+            actor = self._actor_username()
+            r = auth.create_invitation(email, role, actor)
+            if r.get("ok"):
+                auth.log_auth_event("invitation_created", f"{email} (role={role}) by {actor}", self.client_address[0])
+            self._send(200 if r.get("ok") else 400, r)
+            return
+        if p.path == "/api/auth/invitations/revoke":
+            if not self._require_capability("gerer_invitations"):
+                return
+            token = payload.get("token")
+            if not token:
+                self._send(400, {"error": "token_requis"})
+                return
+            r = auth.revoke_invitation(token)
+            if r.get("ok"):
+                auth.log_auth_event("invitation_revoked", f"by {self._actor_username()}", self.client_address[0])
+            self._send(200 if r.get("ok") else 400, r)
+            return
+        if p.path == "/api/auth/invitations/resend":
+            if not self._require_capability("gerer_invitations"):
+                return
+            token = payload.get("token")
+            if not token:
+                self._send(400, {"error": "token_requis"})
+                return
+            r = auth.resend_invitation(token)
+            if r.get("ok"):
+                auth.log_auth_event("invitation_resent", f"by {self._actor_username()}", self.client_address[0])
+            self._send(200 if r.get("ok") else 400, r)
+            return
+        if p.path == "/api/auth/invitations/accept":
+            # Public (voir PUBLIC_POST) : la personne invitée n'a PAS encore
+            # de compte/session au moment d'accepter — c'est justement le but.
+            if not auth.rate_ok(self.client_address[0], "accept_invite"):
+                self._send(429, {"error": "rate_limited"})
+                return
+            token = payload.get("token", "")
+            uname = (payload.get("username") or "").strip()
+            pw = payload.get("password") or ""
+            r = auth.accept_invitation(token, uname, pw)
+            if r.get("ok"):
+                auth.log_auth_event("invitation_accepted", f"{uname} (role={r.get('role')})", self.client_address[0])
             self._send(200 if r.get("ok") else 400, r)
             return
         return self._send(404, {"error": "unknown endpoint"})
