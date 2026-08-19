@@ -317,7 +317,7 @@ class Handler(BaseHTTPRequestHandler):
             email = (payload.get("email") or "").strip().lower()
             pw = payload.get("password") or ""
             role = payload.get("role", "normal")
-            if role not in ("normal", "advanced", "lecteur"):
+            if role not in ("normal", "advanced", "lecteur", "owner"):
                 return self._send(400, {"error": "role_invalide"})
             if len(uname) < 3:
                 return self._send(400, {"error": "username_too_short"})
@@ -330,10 +330,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/root/users/role":
             uid = payload.get("id")
             new_role = payload.get("role")
-            if not uid or new_role not in ("normal", "advanced", "lecteur"):
+            if not uid or new_role not in ("normal", "advanced", "lecteur", "owner"):
                 return self._send(400, {"error": "id_ou_role_invalide"})
             uname = auth.username_by_id(uid) or uid
-            r = auth.set_role(uid, new_role)
+            # La console root (00, ADR-0002) est l'autorité ultime au-dessus de
+            # l'app editoriale -> autorisee a toucher un Propriétaire au meme
+            # titre qu'un Propriétaire (actor_role="owner"). Le garde-fou
+            # "dernier Propriétaire protégé" reste actif meme depuis root :
+            # protection d'intégrité système, pas une question de droits.
+            r = auth.set_role(uid, new_role, actor_role="owner")
             if r.get("ok"):
                 root_auth.log_root_event("role_changed", f"{uname} -> {new_role} by root:{actor}", ip)
             return self._send(200 if r.get("ok") else 400, r)

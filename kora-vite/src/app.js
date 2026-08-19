@@ -9,6 +9,13 @@ import DOMPurify from "dompurify";
 const $ = (id) => document.getElementById(id);
 const $$ = (sel, root = document) => root ? Array.from(root.querySelectorAll(sel)) : [];
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>`"'$]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "`": "&#96;", '"': "&quot;", "'": "&#39;", "$": "&#36;" }[c]));
+// Propriétaire hérite de tout ce qu'Administrateur peut faire (2026-08-19,
+// restructuration rôles/permissions — voir permissions.py ROLES_ORDER côté
+// serveur, où owner > advanced par rang). Les écrans qui réservaient une
+// section à role==="advanced" doivent aussi l'ouvrir à "owner", sinon un
+// Propriétaire se retrouve avec MOINS d'accès qu'un Administrateur au lieu
+// de plus — régression repérée en test réel après la Phase 1.
+const isAdvancedRole = (role) => role === "advanced" || role === "owner";
 // Markdown + HTML rendu de façon SÛRE (sanitisé).
 // Avant on échappait tout le texte -> un article contenant du HTML (ex: un
 // <a href> Google News ou du HTML brut de source) s'affichait comme du "code"
@@ -664,7 +671,7 @@ function viewTrash(s) {
 function viewSources(s) {
   const src = s.sources || [];
   if (!src.length) return stateBox("i-sources", "Sources en chargement…", "Récupération de la liste de sources autorisées.", !!s.ui.loading);
-  const isAdvanced = (s.auth && s.auth.role === "advanced");
+  const isAdvanced = (s.auth && isAdvancedRole(s.auth.role));
   // Toutes les sources nationales guinéennes regroupees dans UN seul bloc parent ; internationales supprimees (demande utilisateur)
   const gn = src.filter(e => e.category === "GN_NAT");
   // e.guinea_filter (pas "guinee_filter") et e.vector (pas "vector_primary") :
@@ -700,7 +707,7 @@ function bindSources() {
 function renderSourceDetail(s) {
   const sh = s.sheet;
   const e = sh.source;
-  const isAdvanced = (s.auth && s.auth.role === "advanced");
+  const isAdvanced = (s.auth && isAdvancedRole(s.auth.role));
   const body = document.getElementById("sheetBody");
   const sheet = document.getElementById("sheet");
   const scrim = document.getElementById("sheetScrim");
@@ -832,8 +839,8 @@ function renderAddSourceSheet(s) {
 }
 function viewSettings(s) {
   const theme = Store.getTheme();
-  const isAdvanced = (s.auth && s.auth.role === "advanced");
-  const isAdmin = (s.auth && (s.auth.role === "admin" || s.auth.role === "advanced"));
+  const isAdvanced = (s.auth && isAdvancedRole(s.auth.role));
+  const isAdmin = (s.auth && (s.auth.role === "admin" || isAdvancedRole(s.auth.role)));
   const themes = [
     ["dark", "Sombre", "i-moon", "Fond sombre (par défaut)"],
     ["light", "Clair", "i-sun", "Fond clair"],
@@ -1072,7 +1079,7 @@ const ROUTE_ROLE = { styleguide: "advanced" };
 // Masque "Sources" (data-role="advanced") pour un rôle non-advanced — corrige
 // le dead-end 403 constaté en revue (clic -> "Sources en chargement…" indéfini).
 function applyRailRoleVisibility() {
-  const isAdvanced = (Store.state.auth && Store.state.auth.role === "advanced");
+  const isAdvanced = (Store.state.auth && isAdvancedRole(Store.state.auth.role));
   $$('.rail .item[data-role="advanced"]').forEach(n => { n.hidden = !isAdvanced; });
 }
 
@@ -2294,7 +2301,7 @@ function render() {
   // elle-même restait accessible en tapant #styleguide directement (aucune
   // vérification au rendu). ROUTE_ROLE + view403 ferment ce trou.
   const need = ROUTE_ROLE[s.route];
-  const blocked = need && (!s.auth || s.auth.role !== need);
+  const blocked = need && (!s.auth || !isAdvancedRole(s.auth.role));
   // Paramètres : ne PAS reconstruire la vue si on est déjà sur "settings" (même
   // route qu'au dernier rendu). Sans ce garde-fou, tout setState — y compris le
   // poll périodique (stats/hitl) totalement sans rapport — reconstruit tout le
@@ -2316,7 +2323,7 @@ function render() {
     if (on) n.setAttribute("aria-current", "page"); else n.removeAttribute("aria-current");
   });
   // Habilitations : l'onglet Paramètres (gestion avancée) est réservé au rôle "advanced"
-  const isAdvanced = (s.auth && s.auth.role === "advanced");
+  const isAdvanced = (s.auth && isAdvancedRole(s.auth.role));
   $$('.navitem[data-route="settings"]').forEach(n => { n.hidden = !isAdvanced; });
   const bnav = document.querySelector('.bottomnav [data-route="settings"]');
   if (bnav) bnav.hidden = !isAdvanced;

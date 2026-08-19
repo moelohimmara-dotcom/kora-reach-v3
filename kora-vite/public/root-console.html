@@ -267,6 +267,7 @@
               <option value="normal">Éditeur</option>
               <option value="advanced">Admin</option>
               <option value="lecteur">Lecteur</option>
+              <option value="owner">Propriétaire</option>
             </select>
           </div>
           <button type="submit" class="primary">Créer</button>
@@ -505,7 +506,7 @@
   });
 
   // ---- Comptes ----
-  const ROLE_LABEL = { advanced: "Admin", normal: "Éditeur", lecteur: "Lecteur" };
+  const ROLE_LABEL = { owner: "Propriétaire", advanced: "Admin", normal: "Éditeur", lecteur: "Lecteur" };
   async function loadComptes() {
     const r = await api("/users");
     const wrap = $("#usersTableWrap");
