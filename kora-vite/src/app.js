@@ -533,6 +533,16 @@ function viewDrafts(s) {
     const st = s.decisions[f.fact_id] || f.status || "PENDING_REVIEW";
     return st === "EDITED";
   });
+  // Bug corrige 2026-08-19 (rapporte : "Aucun brouillon" s'affiche une
+  // fraction de seconde au rechargement puis disparaît) : contrairement à
+  // viewFacts(), rien ici ne distinguait "aucune donnée encore chargée"
+  // de "chargé, et il n'y a vraiment aucun brouillon" -- au tout premier
+  // rendu après un F5, s.facts est encore vide (la requête /api/hitl est
+  // en vol), drafts.length vaut donc 0 et l'état vide s'affichait à tort
+  // avant d'être remplacé dès que les données arrivaient. Même garde que
+  // viewFacts() : squelette de chargement tant que s.ui.loading est vrai
+  // et qu'aucune donnée n'est encore là.
+  if (s.ui.loading && !facts.length) return factsSkeleton();
   if (!drafts.length) return stateBox("i-edit", "Aucun brouillon", "Les articles que tu places en brouillon (correction en cours) apparaissent ici. Ouvre un fait depuis le Tableau de bord ou Articles, clique « Modifier », puis valide la correction pour le mettre en brouillon.", false);
   // Bouton Sélectionner (pour agir en masse depuis Brouillons : corbeille / remettre en attente)
   const toolbar = `<div class="toolbar-row">
@@ -653,6 +663,11 @@ function viewTrash(s) {
   // de la barre laterale (13 vs 10), ces articles etant deja comptes ailleurs.
   const isRejectedDecision = (f) => f.rejected || f.decision === "REJECTED" || f.d_status === "REJECTED";
   const items = (s.trash || []).filter(f => !isRejectedDecision(f));
+  // Bug corrigé 2026-08-19 (même famille que viewDrafts()) : "Corbeille vide"
+  // s'affichait au chargement avant l'arrivée des vraies données -- ici
+  // ui.loading n'aurait de toute façon pas aidé (loadTrash() ne le pilote
+  // pas), d'où le flag dédié trashLoaded.
+  if (!s.trashLoaded) return stateBox("i-trash", "Corbeille en chargement…", "Récupération des éléments supprimés.", true);
   if (!items.length) return stateBox("i-trash", "Corbeille vide", "Les articles supprimés restent ici 11 jours, puis sont purgés automatiquement. Restaure-les ou supprime-les définitivement.", false);
   return `<div class="section-title">Corbeille (${items.length})</div>
     <p class="muted" style="margin-bottom:16px">Restauration possible pendant 11 jours. Au-delà, suppression définitive automatique.</p>
