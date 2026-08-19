@@ -2026,6 +2026,22 @@ html.icons-ready .material-icons { visibility: visible; }
   overflow-y: auto; background: var(--surface); border: 1px solid var(--border);
   border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.35); z-index: 60;
 }
+/* Bug corrige 2026-08-19 : sur mobile, le panneau (340px, ancre a droite de
+   la cloche via right:0) debordait par la GAUCHE de l'ecran -- la cloche
+   n'est pas collee au bord droit du viewport (elle partage le topbar avec le
+   statut agent et le bouton "Lancer un cycle" a sa droite), donc un panneau
+   large de 340px "tire" vers la gauche jusqu'a sortir de l'ecran. Sur mobile,
+   on ancre au VIEWPORT (position: fixed) avec des marges de securite de
+   chaque cote, plutot qu'a la cloche avec une largeur fixe. */
+@media (max-width: 600px) {
+  .notif-panel {
+    position: fixed;
+    top: calc(var(--topbar-h) + 8px);
+    left: var(--space-4); right: var(--space-4);
+    width: auto; max-width: none;
+    max-height: calc(100dvh - var(--topbar-h) - 24px);
+  }
+}
 .notif-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--border); }
 .notif-panel-body { padding: 6px; }
 .notif-empty { padding: 16px; text-align: center; }
@@ -2139,6 +2155,14 @@ html.icons-ready .material-icons { visibility: visible; }
   position: absolute; top: 22px; left: 0; z-index: 50; width: 220px; padding: 10px;
   background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
   font-size: 12px; color: var(--text-secondary); box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+/* Meme classe de bug que .notif-panel (2026-08-19) : le bouton "?" est le
+   DERNIER element d'une rangee flex-wrap (ex. barre de filtres Articles) ->
+   proche du bord droit, un popup de 220px etendu vers la DROITE (left:0)
+   deborde facilement de l'ecran sur mobile. Ancre a droite du bouton
+   (etend vers la gauche) et largeur plafonnee a la fenetre. */
+@media (max-width: 600px) {
+  .help-tip-pop { left: auto; right: 0; width: min(220px, calc(100vw - 48px)); }
 }
 
 .toggle-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-primary); cursor: pointer; }
