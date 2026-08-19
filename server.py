@@ -479,59 +479,6 @@ class Handler(BaseHTTPRequestHandler):
                     # plein écran) — 0/0 si aucun cycle actif.
                     "progress": reach_agent.get_progress() if LAST_CYCLE["running"] else None,
                 })
-        if path == "/api/seed_demo":
-            if not self._require_capability("action_demo"):
-                return
-            # VERROU (2026-08-19) : ce endpoint écrit directement dans LAST_CYCLE
-            # (result/ts) SANS passer par le verrou fichier de reach_agent -> sans
-            # ce garde-fou, l'appeler pendant qu'un VRAI cycle tourne pouvait
-            # écraser silencieusement son résultat pour un observateur qui lirait
-            # /api/last entre-temps. Un cycle réel en cours doit être la seule
-            # chose que "Interrompre" peut affecter, jamais une action annexe.
-            with _LAST_LOCK:
-                if LAST_CYCLE["running"]:
-                    return self._send(429, {"error": "cycle_en_cours",
-                                            "detail": "Un cycle réel est en cours : la démo attendra sa fin."})
-            # DEV/démo : injecte des faits cohérents (générés via la logique reconçue)
-            # dans LAST_CYCLE pour peupler le dashboard HITL sans collecte réseau.
-            # Imports locaux pour autonomie (évite dépendance aux imports de niveau module).
-            import config as _cfg
-            from zoneinfo import ZoneInfo as _ZI
-            from datetime import timedelta as _td
-            _TZ = _ZI(_cfg.LIMITS["timezone"])
-            cs = datetime.now(_TZ)
-            recent = cs - _td(hours=2)
-            demo_raws = [
-                {"title":"Guinée: accord minier signé à Conakry","url":"https://mosaiqueguinee.com/a1","summary":"Le gouvernement guinéen a signé.","raw_content":"Accord minier en Guinée à Conakry ce jour.","published_at":recent.strftime("%Y-%m-%dT%H:%M:%S"),"image":"https://picsum.photos/seed/minier/800/450"},
-                {"title":"Guinée: signature d'un accord minier à Conakry","url":"https://guineenews.org/a1","summary":"Conakry accueille.","raw_content":"La Guinée signe un accord minier historique.","published_at":recent.strftime("%a, %d %b %Y %H:%M:%S %z"),"image":"https://picsum.photos/seed/minier/800/450"},
-                {"title":"Accord minier en Guinée scellé à Conakry","url":"https://guinee360.com/a1","summary":"Signature.","raw_content":"En Guinée, accord minier signé ce vendredi.","published_at":recent.strftime("%Y-%m-%d %H:%M:%S"),"image":"https://picsum.photos/seed/minier/800/450"},
-                {"title":"Guinée: la BAD finance un barrage à Koukoutamba","url":"https://mosaiqueguinee.com/b1","summary":"La BAD approuve.","raw_content":"Le barrage de Koukoutamba est financé par la BAD.","published_at":recent.strftime("%Y-%m-%dT%H:%M:%S"),"image":"https://picsum.photos/seed/koukou/800/450"},
-                {"title":"Koukoutamba: financement BAD pour le barrage","url":"https://guineenews.org/b1","summary":"Financement validé.","raw_content":"La BAD finance le barrage de Koukoutamba en Guinée.","published_at":recent.strftime("%Y-%m-%d %H:%M:%S"),"image":"https://picsum.photos/seed/koukou/800/450"},
-            ]
-            src = wl.get_entry("mosaique")
-            from normalizer import normalize as _norm
-            from clusterer import cluster as _cluster, pick_champion as _pc
-            from writer import write_article as _wa
-            docs = [_norm(r, src, cs) for r in demo_raws]
-            pool = [d for d in docs if d["actual"]]
-            cl = _cluster(pool, _cfg.LIMITS["cluster_sim_threshold"])
-            facts = []
-            for c in cl:
-                champ, ctx = _pc(c)
-                fct = {"champion": champ, "contexts": ctx, "n_sources": len(c),
-                       "image": champ.get("image", "")}
-                w = _wa(fct)
-                fct["article"] = w["article"]; fct["gen_model"] = w["model"]
-                fct["image_meta"] = w.get("image_meta", {})
-                facts.append(fct)
-            # Persiste les faits pour qu'ils survivent au redémarrage
-            for fct in facts:
-                try: upsert_fact(fct)
-                except Exception as _e: log("seed", "FACT_PERSIST_WARN", str(_e), "hitl")
-            with _LAST_LOCK:
-                LAST_CYCLE["result"] = {"status":"ok","facts":facts,"facts_to_generate":len(facts)}
-                LAST_CYCLE["ts"] = datetime.now().isoformat(timespec="seconds")
-            return self._send(200, {"seeded": len(facts)})
         if path == "/api/auth/me":
             sid = auth.read_cookie_sid(self.headers)
             u = auth.get_session_user(sid) if sid else None

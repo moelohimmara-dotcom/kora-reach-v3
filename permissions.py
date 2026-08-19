@@ -52,7 +52,6 @@ CAPABILITIES = {
     "voir_sources": "lecteur",                # GET /api/whitelist
     "gerer_sources": "advanced",             # POST/PATCH /api/whitelist (ajout, edition, activation)
     "voir_prompts_agent": "advanced",         # GET /api/agent-prompts
-    "action_demo": "advanced",                # GET /api/seed_demo
     "voir_comptes": "advanced",               # GET /api/auth/users
     "purger_audit": "advanced",               # POST /api/audit/purge
     "modifier_identite": "advanced",          # POST /api/settings

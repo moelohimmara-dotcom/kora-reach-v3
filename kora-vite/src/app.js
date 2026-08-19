@@ -597,7 +597,7 @@ function viewFacts(s) {
   // répondu), sans ça l'état vide "Aucun article" s'affichait un instant à
   // tort — trompeur, on ne SAIT pas encore s'il y a des articles ou non.
   if (s.ui.loading && !facts.length) return factsSkeleton();
-  if (!facts.length) return (s.lastCycle && s.lastCycle.result && s.lastCycle.result.status === "empty_or_stale") ? staleBox(s) : stateBox("i-check", "Aucun article à afficher", "Lance un cycle ou génère une démo pour générer des articles à valider.", false, "Générer démo", () => Store.seed());
+  if (!facts.length) return (s.lastCycle && s.lastCycle.result && s.lastCycle.result.status === "empty_or_stale") ? staleBox(s) : stateBox("i-check", "Aucun article à afficher", "Lance un cycle pour générer des articles à valider.", false, "Lancer un cycle", () => Store.startCycle());
   const filters = [
     ["all", "Tous", counts.all], ["pending", "En attente", counts.pending],
     ["transmitted", "Transmis", counts.transmitted], ["rejected", "Rejetés", counts.rejected],
@@ -2395,11 +2395,8 @@ function render() {
   if (sa) sa.onclick = () => {
     if (sa.dataset.force) Store.startCycle({ force: true });
     else if (sa.textContent.trim() === "Réessayer") location.reload();
-    else if (sa.textContent.trim().includes("Relancer un cycle")) Store.startCycle();
-    else Store.seed();
+    else Store.startCycle();
   };
-  const cs = document.getElementById("cockpitSeed");
-  if (cs) cs.onclick = () => Store.seed();
   // Verrou visuel : on ne peut PAS relancer un cycle tant que le précédent n'est pas fini.
   const busy = !!s.ui.busy;
   // Les boutons de LANCEMENT de cycle ne doivent se désactiver que si un cycle
@@ -3121,7 +3118,6 @@ function bind() {
     // La génération est prioritaire : on bascule toujours sur le Tableau de bord
     // (vue de génération) et on y reste, peu importe l'écran d'origine.
     if (a.dataset.act === "cycle") { navigate("cockpit"); Store.startCycle(); }
-    else if (a.dataset.act === "seed") { navigate("cockpit"); Store.seed(); }
   });
   const sc = $("#sheetScrim"); if (sc) sc.onclick = () => Store.closeSheet();
   // Clic-dehors (point 2) : clic dans N'IMPORTE QUEL périmètre HORS du conteneur interne ferme.
