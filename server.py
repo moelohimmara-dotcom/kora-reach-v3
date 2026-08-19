@@ -29,7 +29,7 @@ from hitl_store import (
     mark_transmitted, mark_transmission_failed, retract,
     upsert_fact, list_facts, get_fact,
     trash_facts, restore_fact, delete_facts, list_trashed, purge_trashed,
-    count_published, count_rejected, count_deleted, get_dashboard_stats, cleanup_orphan_decisions,
+    count_published, count_rejected, count_deleted, get_dashboard_stats,
 )
 import transmit
 import writer
@@ -538,10 +538,15 @@ class Handler(BaseHTTPRequestHandler):
             # Auth requis : un normal peut lire pour valider, un anonyme non.
             if not self._require_auth():
                 return
-            try:
-                cleanup_orphan_decisions()
-            except Exception:
-                pass
+            # Bug corrige 2026-08-19 (rapporte : bandeau d'erreur reapparaissant --
+            # /api/hitl mesure ~25s de reponse en prod) : cleanup_orphan_decisions()
+            # (DELETE ... WHERE fact_id NOT IN (SELECT ...), balayage complet de
+            # hitl_decisions) tournait a CHAQUE appel de ce endpoint -- appele au
+            # chargement de la page, a chaque navigation, et toutes les 30s par
+            # l'auto-refresh. Une purge defensive pour un cas rare (decision
+            # orpheline, ex. donnee historique/migration) n'a aucune raison de
+            # re-scanner toute la table a cette frequence. Deplacee vers un rythme
+            # raisonnable : une fois par cycle (reach_agent.py), plus jamais ici.
             out = list_facts()
             published = count_published()
             rejected = count_rejected()
