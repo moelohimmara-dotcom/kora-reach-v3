@@ -496,11 +496,6 @@ export const Store = (() => {
       if (r && r.running) _watchCycle();
     } catch (e) { /* silencieux : un échec ici ne doit jamais bloquer le boot */ }
   }
-  async function seed() {
-    // Le backend n'expose pas /api/seed_demo ; on lance un cycle de démo
-    // (force=true ignore la fenêtre 24h) qui peuplera les facts.
-    await startCycle({ force: true });
-  }
   // Interruption d'un cycle en cours (wireframe 3.3). Coopérative côté backend
   // (/api/cycle/cancel — reach_agent.cancel_cycle()) : l'arrêt survient après
   // l'article en cours, pas instantanément. La boucle de poll de startCycle()
@@ -870,7 +865,7 @@ export const Store = (() => {
   return {
     state, setState, subscribe, api,
     loadHealth, loadLast, loadHITL, loadAudit, loadSources, addSource, updateSource, loadSettings, applySettings,
-    startCycle, resumeCycleWatch, cancelCycle, seed, decide, retract, setRoute, openSheet, closeSheet, wait,
+    startCycle, resumeCycleWatch, cancelCycle, decide, retract, setRoute, openSheet, closeSheet, wait,
     getFactFilter, setFactFilter,
     getTheme, setTheme, initTheme,
     getRailMode, setRailMode, initRailMode, applyRailMode,
