@@ -732,6 +732,13 @@ def regenerate(fact_id: str, suggestion: str = None, dry_run: bool = None) -> Di
     fact["gen_model"] = written.get("model", "")
     fact["gen_status"] = written.get("status", "")
     fact["image"] = written.get("image", fact["image"])
+    # Bug corrige 2026-08-19 (trouve en verifiant le changement de generateur
+    # d'images) : seul fact["image"] (l'URL) etait mis a jour, jamais
+    # fact["image_meta"] (provider/generated) -> une regeneration changeait
+    # bien la photo affichee mais la metadonnee persistee restait celle de
+    # l'ANCIEN generateur (ex: "loremflickr" alors que l'image venait
+    # desormais de Pollinations), faussant toute verification/audit ulterieur.
+    fact["image_meta"] = written.get("image_meta", fact.get("image_meta", {}))
     fid = hitl_store.upsert_fact(fact)
     return {
         "fact_id": fid,
