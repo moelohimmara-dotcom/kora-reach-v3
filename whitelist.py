@@ -76,6 +76,24 @@ WHITELIST: List[WhitelistEntry] = [
     WhitelistEntry("visionguinee", "Vision Guinee", "GN_NAT",
         "https://www.visionguinee.info/", ("www.visionguinee.info", "visionguinee.info"),
         "html", "sitemap", responsible="edito"),
+    # --- Ajouts 2026-08-19 : verifies actifs (HTTP 200 + publication recente
+    # sur sitemap/homepage) ET presents au registre HAC (Haute Autorite de la
+    # Communication, regulateur guineen) des organes de presse en ligne.
+    WhitelistEntry("aminata", "Aminata", "GN_NAT",
+        "https://aminata.com/", ("aminata.com", "www.aminata.com"),
+        "html", "", responsible="edito", version="2026-08-19"),
+    WhitelistEntry("guineelive", "Guinéelive", "GN_NAT",
+        "https://guineelive.com/", ("guineelive.com", "www.guineelive.com"),
+        "html", "sitemap", responsible="edito", version="2026-08-19"),
+    WhitelistEntry("verite224", "Vérité224", "GN_NAT",
+        "https://verite224.com/", ("verite224.com", "www.verite224.com"),
+        "html", "sitemap", responsible="edito", version="2026-08-19"),
+    WhitelistEntry("guineedirect", "Guinéedirect", "GN_NAT",
+        "https://guineedirect.org/", ("guineedirect.org", "www.guineedirect.org"),
+        "html", "sitemap", responsible="edito", version="2026-08-19"),
+    WhitelistEntry("conakryinfos", "Conakryinfos", "GN_NAT",
+        "https://conakryinfos.com/", ("conakryinfos.com", "www.conakryinfos.com"),
+        "html", "sitemap", responsible="edito", version="2026-08-19"),
     WhitelistEntry("rfi_guinee", "RFI Guinée", "INTL",
         "https://www.rfi.fr/fr/tag/guin%C3%A9e/rss", ("www.rfi.fr", "rfi.fr"),
         "rss", guinee_filter=True, responsible="edito"),
@@ -91,7 +109,7 @@ WHITELIST: List[WhitelistEntry] = [
         allowed_redirects=("news.google.com",), responsible="edito"),
 ]
 
-WHITELIST_VERSION = "2026-08-02"
+WHITELIST_VERSION = "2026-08-19"
 _ACTIVE_DOMAINS: Set[str] = set()
 for _e in WHITELIST:
     _ACTIVE_DOMAINS.update(_e.allowed_domains)

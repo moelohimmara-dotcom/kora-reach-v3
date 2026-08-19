@@ -25,8 +25,34 @@ def _guess_date(url: str) -> str:
         return f"{m.group(1)}-{m.group(2)}-{m.group(3)}T00:00:00"
     return ""
 
+_RSS_FULLTEXT_CAP = 10  # articles/source dont on va chercher le texte COMPLET (pas le resume RSS)
+# Aligne sur le cap de fetch_html() (10 aussi) ; avec rate_limit_per_host_sec=2s,
+# une source RSS peut prendre jusqu'a ~20s a collecter (contre quasi-instantane
+# avant) — acceptable (regle metier : la fraicheur/exactitude prime sur la
+# vitesse), et absorbe par la collecte parallele multi-sources de reach_agent.
+_RSS_FULLTEXT_MIN_LEN = 200  # sous ce seuil, le resume RSS est juge trop pauvre -> on tente le scrape
+
+def _fetch_full_article(url: str) -> str:
+    """Recupere le texte COMPLET d'un article (pas le resume RSS tronque a
+    quelques phrases). Retourne '' si echec — l'appelant retombe alors sur le
+    resume RSS (jamais de crash, jamais d'item perdu)."""
+    if not url:
+        return ""
+    try:
+        rate_limit(url)
+        r = requests.get(url, headers=_HEADERS, timeout=config.LIMITS["timeout_sec"])
+        r.raise_for_status()
+        text = trafilatura.extract(r.text, include_comments=False, include_tables=False)
+        return text or ""
+    except Exception:
+        return ""
+
 def fetch_rss(source) -> List[Dict]:
-    """Retourne liste d'items {title, url, summary, published_at, raw_content, image}."""
+    """Retourne liste d'items {title, url, summary, published_at, raw_content, image}.
+    raw_content = texte COMPLET de l'article (scrape trafilatura), pas le simple
+    resume RSS (souvent tronque a 1-2 phrases) : la generation d'articles doit se
+    baser sur l'info reelle et complete, pas un extrait partiel (regle metier
+    2026-08-19, notamment pour l'actualite nationale/GN_NAT)."""
     out = []
     try:
         rate_limit(source.url)
@@ -35,18 +61,28 @@ def fetch_rss(source) -> List[Dict]:
                             timeout=config.LIMITS["timeout_sec"])
         resp.raise_for_status()
         d = feedparser.parse(resp.content)
-        for e in d.entries:
+        for i, e in enumerate(d.entries):
             img = ""
             if getattr(e, "media_content", None):
                 img = e.media_content[0].get("url", "")
             elif getattr(e, "enclosures", None):
                 img = e.enclosures[0].get("href", "") if e.enclosures else ""
+            summary = e.get("summary", "")
+            link = e.get("link", "")
+            raw_content = summary
+            # Texte complet uniquement pour les N premiers items (les plus
+            # recents dans un flux RSS) et si le resume est trop pauvre pour
+            # nourrir une synthese fiable.
+            if i < _RSS_FULLTEXT_CAP and len(summary) < 2000:
+                full = _fetch_full_article(link)
+                if len(full) >= _RSS_FULLTEXT_MIN_LEN:
+                    raw_content = full
             out.append({
                 "title": e.get("title", ""),
-                "url": e.get("link", ""),
-                "summary": e.get("summary", ""),
+                "url": link,
+                "summary": summary,
                 "published_at": e.get("published", e.get("updated", "")),
-                "raw_content": e.get("summary", ""),
+                "raw_content": raw_content,
                 "image": img,
             })
     except Exception as ex:
