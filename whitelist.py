@@ -105,7 +105,13 @@ WHITELIST: List[WhitelistEntry] = [
         "rss", guinee_filter=True, responsible="edito"),
     WhitelistEntry("google_news_guinee", "Google News Guinée", "INTL",
         "https://news.google.com/rss/search?q=Guin%C3%A9e&hl=fr&gl=GN&ceid=GN:fr",
-        ("news.google.com",), "gnews", guinee_filter=False,
+        ("news.google.com",), "gnews", guinee_filter=True,
+        # 2026-08-19 : etait a False -> la requete "Guinée" seule ne garantit PAS
+        # que la Guinée soit le SUJET (peut matcher Guinée-Bissau/Equatoriale ou
+        # une mention accessoire/diaspora hors-sujet). Regle metier explicite :
+        # un media international (RFI/BBC/France24/Google News) n'est retenu que
+        # si la Guinée (CNRD, president Doumbouya, actualite nationale ou
+        # diaspora liee) est bien le sujet — jamais une simple mention en passant.
         allowed_redirects=("news.google.com",), responsible="edito"),
 ]
 
