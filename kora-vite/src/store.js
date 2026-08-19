@@ -271,6 +271,23 @@ export const Store = (() => {
     try { setState({ sources: await api("/api/whitelist") }); }
     catch (e) { setState({ ui: { ...state.ui, error: e.message } }); }
   }
+  // Gouvernance des sources ouverte à l'UI (2026-08-19, advanced uniquement
+  // côté backend — voir permissions.py "gerer_sources"). addSource lève en
+  // cas d'échec (id dupliqué, champs manquants) : à catcher par l'appelant.
+  async function addSource(data) {
+    const r = await api("/api/whitelist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+    // api() ne lève pas sur un 4xx tant que le corps est du JSON valide -> il
+    // faut vérifier explicitement le champ error renvoyé par le backend.
+    if (r && r.error) throw new Error(r.error);
+    await loadSources();
+    return r;
+  }
+  async function updateSource(id, patch) {
+    const r = await api("/api/whitelist/" + encodeURIComponent(id), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+    if (r && r.error) throw new Error(r.error);
+    await loadSources();
+    return r;
+  }
   async function loadSettings() {
     try { const s = await api("/api/settings"); applySettings(s); setState({ settings: s }); }
     catch (e) { /* settings optionnel */ }
@@ -728,7 +745,7 @@ export const Store = (() => {
 
   return {
     state, setState, subscribe, api,
-    loadHealth, loadLast, loadHITL, loadAudit, loadSources, loadSettings, applySettings,
+    loadHealth, loadLast, loadHITL, loadAudit, loadSources, addSource, updateSource, loadSettings, applySettings,
     startCycle, cancelCycle, seed, decide, retract, setRoute, openSheet, closeSheet, wait,
     getFactFilter, setFactFilter,
     getTheme, setTheme, initTheme,
