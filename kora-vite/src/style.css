@@ -876,6 +876,8 @@ html.icons-ready .material-icons { visibility: visible; }
   .gl-orb-core { animation: none; }
 }
 .gl-text { font-size: 17px; font-weight: 700; color: var(--md-sys-color-on-surface); max-width: 40ch; }
+.gl-progress { font-size: 12.5px; font-weight: 600; letter-spacing: .02em; color: var(--coral);
+  background: color-mix(in srgb, var(--coral) 14%, transparent); padding: 3px 12px; border-radius: 999px; }
 .gl-patience { font-size: 13.5px; color: var(--md-sys-color-on-surface-variant); max-width: 38ch; }
 .gl-actions { display: flex; gap: 10px; margin-top: 4px; }
 
@@ -2060,6 +2062,7 @@ html.icons-ready .material-icons { visibility: visible; }
 }
 .cycle-banner-row { display: flex; align-items: center; gap: 10px; padding: 8px 16px; font-size: 13px; color: var(--md-sys-color-on-surface-variant); }
 .cycle-banner-row .ic { width: 16px; height: 16px; flex: none; color: var(--coral); animation: cycle-spin 1.6s linear infinite; }
+.cycle-banner-progress { font-size: 12px; font-weight: 600; color: var(--coral); flex: none; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .cycle-banner-row .ic { animation: none; } }
 @keyframes cycle-spin { to { transform: rotate(360deg); } }
 

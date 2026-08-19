@@ -2208,7 +2208,7 @@ function render() {
   $$("[data-theme-btn]").forEach(n => n.classList.toggle("active", n.dataset.themeBtn === curTheme));
   const sa = document.getElementById("stateAction");
   if (sa) sa.onclick = () => {
-    if (sa.dataset.force) Store.startCycle(1, true);
+    if (sa.dataset.force) Store.startCycle({ force: true });
     else if (sa.textContent.trim() === "Réessayer") location.reload();
     else if (sa.textContent.trim().includes("Relancer un cycle")) Store.startCycle();
     else Store.seed();
@@ -2246,6 +2246,15 @@ function render() {
   const cb = document.getElementById("cycleBanner");
   if (gl) gl.hidden = !(busy && !_loaderDismissed);
   if (cb) cb.hidden = !(busy && _loaderDismissed);
+  // Indicateur "Article X sur Y" (backend : reach_agent.CYCLE_PROGRESS, exposé
+  // par /api/last). N'apparaît que si le backend a déjà déterminé le nombre
+  // de faits à générer (total > 0) — avant ça, on reste sur le message chaleureux seul.
+  const prog = s.ui && s.ui.progress;
+  const progTxt = (prog && prog.total > 0) ? `Article ${prog.current || 1} sur ${prog.total}` : "";
+  const glProg = document.getElementById("globalLoaderProgress");
+  if (glProg) { glProg.hidden = !progTxt; glProg.textContent = progTxt; }
+  const cbProg = document.getElementById("cycleBannerProgress");
+  if (cbProg) { cbProg.hidden = !progTxt; cbProg.textContent = progTxt; }
   if (busy) {
     const glDismiss = document.getElementById("globalLoaderDismiss");
     if (glDismiss) glDismiss.onclick = () => {

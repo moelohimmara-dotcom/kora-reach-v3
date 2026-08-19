@@ -337,30 +337,38 @@ export const Store = (() => {
     const f = (c) => Math.max(0, Math.min(255, Math.round(c + 255 * pct)));
     return "#" + ((1 << 24) + (f(r) << 16) + (f(g) << 8) + f(b)).toString(16).slice(1).toUpperCase();
   }
-  async function startCycle(demand = 1, force = false) {
-    setState({ ui: { ...state.ui, busy: true, overlay: force ? "Génération forcée (hors fenêtre 24h)…" : "Collecte des sources whitelist…" } });
+  // demand : nb d'articles max explicitement voulu (optionnel — par défaut,
+  // le backend génère TOUS les faits frais et uniques du cycle, voir
+  // LOGIQUE-METIER-REACH.md §7). force : ignore la fenêtre 24h.
+  // Signature objet (et non positionnelle) pour éviter les appels ambigus.
+  async function startCycle({ demand, force = false } = {}) {
+    setState({ ui: { ...state.ui, busy: true, overlay: force ? "Génération forcée (hors fenêtre 24h)…" : "Collecte des sources whitelist…", progress: null } });
     try {
       await api("/api/cycle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ demand, force }) });
-      for (let i = 0; i < 60; i++) {
+      for (let i = 0; i < 120; i++) {
         await wait(3000);
         const r = await api("/api/last");
-        setState({ lastCycle: r });
+        const p = r.progress || null;
+        setState({ lastCycle: r, ui: { ...state.ui, busy: true, progress: p } });
         if (!r.running && r.result) {
           // Recharge depuis l'API HITL (facts avec fact_id valide) plutôt que
           // r.result.facts (sans fact_id) -> sinon le clic carte casse.
           await loadHITL();
-          setState({ lastCycle: r, ui: { ...state.ui, busy: false, overlay: null } });
+          setState({ lastCycle: r, ui: { ...state.ui, busy: false, overlay: null, progress: null } });
           return;
         }
-        setState({ ui: { ...state.ui, overlay: "Cycle en cours… (" + i * 3 + "s)" } });
+        const label = p && p.total > 0
+          ? `Article ${p.current || 1} sur ${p.total}…`
+          : "Cycle en cours… (" + i * 3 + "s)";
+        setState({ ui: { ...state.ui, overlay: label, progress: p } });
       }
-      setState({ ui: { ...state.ui, busy: false, overlay: null } });
-    } catch (e) { setState({ ui: { ...state.ui, busy: false, overlay: null, error: e.message } }); }
+      setState({ ui: { ...state.ui, busy: false, overlay: null, progress: null } });
+    } catch (e) { setState({ ui: { ...state.ui, busy: false, overlay: null, progress: null, error: e.message } }); }
   }
   async function seed() {
     // Le backend n'expose pas /api/seed_demo ; on lance un cycle de démo
-    // (force=true ignore la fenêtre 24h, demand=1) qui peuplera les facts.
-    await startCycle(1, true);
+    // (force=true ignore la fenêtre 24h) qui peuplera les facts.
+    await startCycle({ force: true });
   }
   // Interruption d'un cycle en cours (wireframe 3.3). Coopérative côté backend
   // (/api/cycle/cancel — reach_agent.cancel_cycle()) : l'arrêt survient après

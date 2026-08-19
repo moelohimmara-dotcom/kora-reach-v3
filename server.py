@@ -459,6 +459,9 @@ class Handler(BaseHTTPRequestHandler):
                     "running": LAST_CYCLE["running"],
                     "result": LAST_CYCLE["result"],
                     "ts": LAST_CYCLE["ts"],
+                    # Progression "Article X sur Y" du cycle en cours (loader
+                    # plein écran) — 0/0 si aucun cycle actif.
+                    "progress": reach_agent.get_progress() if LAST_CYCLE["running"] else None,
                 })
         if path == "/api/seed_demo":
             if not self._require_capability("action_demo"):
