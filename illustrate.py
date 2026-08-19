@@ -103,6 +103,29 @@ def _extract_keywords(title: str) -> list:
     return kws[:3]
 
 
+def _call_pollinations(prompt: str, seed: int = None):
+    """Génère une image via Pollinations.ai (modèle FLUX, gratuit, SANS clé —
+    2026-08-19, demande explicite : générateur principal de KORA). L'appel GET
+    déclenche la génération réelle côté Pollinations (synchrone, comme exigé
+    par le CDC) ; on vérifie que la réponse est bien une image avant
+    d'accepter l'URL (même garde-fou que LoremFlickr). `seed` (entier, dérivé
+    du fact_id) rend l'image reproductible et garantit l'unicité entre
+    articles d'un même cycle (voir illustrate_all())."""
+    import urllib.parse
+    encoded = urllib.parse.quote(prompt[:800])
+    params = {"width": "800", "height": "450", "nologo": "true", "model": "flux"}
+    if seed is not None:
+        params["seed"] = str(int(seed) % 1_000_000)
+    url = f"https://image.pollinations.ai/prompt/{encoded}?{urllib.parse.urlencode(params)}"
+    _rate_limit()
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 KORA/1.0"})
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        ctype = r.headers.get("Content-Type", "")
+        if "image" not in ctype:
+            raise ValueError(f"Pollinations a répondu {ctype}")
+    return url, "pollinations"
+
+
 def _call_loremflickr(title: str, salt: str = "", lock_override: int = None):
     """Génère une image via LoremFlickr (photos Flickr réelles par mot-clé, gratuit, sans clé).
     `salt` (fact_id) dérive un `lock` déterministe. `lock_override` force un lock précis
@@ -134,12 +157,16 @@ def _call_loremflickr(title: str, salt: str = "", lock_override: int = None):
 
 def illustrate(fact: dict, title: str, chapeau: str = "", lock_seed: int = None) -> dict:
     """Retourne toujours un dict: {image, provider, generated(bool), detail}.
-    Ordre de repli: FAL (proxy/key) -> LoremFlickr (gratuit, sans clé) -> OG du champion.
-    `lock_seed` (entier unique par article) force un lock LoremFlickr distinct ->
-    garantit qu'aucun article n'a la même image qu'un autre."""
+    Ordre de repli : FAL (si clé configurée) -> Pollinations (générateur
+    principal, 2026-08-19, gratuit sans clé) -> LoremFlickr (photo réelle) ->
+    Picsum (photo générique) -> OG du champion.
+    `lock_seed` (entier unique par article) force un seed Pollinations/lock
+    LoremFlickr distinct -> garantit qu'aucun article n'a la même image
+    qu'un autre."""
     og = fact.get("image", "") or ""
     prompt = _build_prompt(title, chapeau)
-    # 1) FAL (proxy/key si configuré)
+    # 1) FAL (proxy/key si configuré — inactif tant qu'aucune clé n'est fournie,
+    # échoue alors instantanément sans appel réseau, voir _call_fal())
     for attempt in range(MAX_RETRIES + 1):
         try:
             url, provider = _call_fal(prompt)
@@ -153,6 +180,15 @@ def illustrate(fact: dict, title: str, chapeau: str = "", lock_seed: int = None)
             break
     else:
         fal_err = "FAL a échoué"
+    # 1b) Pollinations.ai (FLUX, générateur principal — gratuit, sans clé)
+    poll_err = ""
+    try:
+        url, provider = _call_pollinations(prompt, seed=lock_seed)
+        if url:
+            return {"image": url, "provider": provider, "generated": True,
+                    "detail": "Image générée (Pollinations/FLUX) avec filigrane éditorial."}
+    except Exception as e:
+        poll_err = f"Pollinations indisponible ({type(e).__name__})"
     # 2) LoremFlickr (photos réelles par mot-clé, gratuit, sans clé)
     lf_err = ""
     try:
@@ -160,7 +196,7 @@ def illustrate(fact: dict, title: str, chapeau: str = "", lock_seed: int = None)
                                           lock_override=lock_seed)
         if url:
             return {"image": url, "provider": provider, "generated": True,
-                    "detail": "FAL indisponible -> photo réelle (LoremFlickr) liée au sujet."}
+                    "detail": "FAL/Pollinations indisponibles -> photo réelle (LoremFlickr) liée au sujet."}
     except Exception as e:
         lf_err = f"LoremFlickr indisponible ({type(e).__name__})"
     # 2b) Picsum (photo générique gratuite, sans clé) — ultime repli pour éviter
@@ -170,12 +206,12 @@ def illustrate(fact: dict, title: str, chapeau: str = "", lock_seed: int = None)
         seed = int(_hl.sha256((fact.get("fact_id", "") or title).encode()).hexdigest()[:8], 16) % 100000
         picsum = f"https://picsum.photos/seed/{seed}/800/450"
         return {"image": picsum, "provider": "picsum", "generated": True,
-                "detail": f"{fal_err}; {lf_err} -> photo générique (Picsum) en repli."}
+                "detail": f"{fal_err}; {poll_err}; {lf_err} -> photo générique (Picsum) en repli."}
     except Exception as e:
         picsum_err = f"Picsum indisponible ({type(e).__name__})"
     # 3) Fallback OG du champion (photo réelle du site source)
     return {"image": og, "provider": "og_fallback", "generated": False,
-            "detail": f"{fal_err}; {lf_err}; {picsum_err} -> image OG du champion conservée."}
+            "detail": f"{fal_err}; {poll_err}; {lf_err}; {picsum_err} -> image OG du champion conservée."}
 
 
 def illustrate_all(facts: list) -> list:
