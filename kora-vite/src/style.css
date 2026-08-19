@@ -557,9 +557,9 @@ html.icons-ready .material-icons { visibility: visible; }
    incomplete s'etirent desormais pour occuper tout l'espace disponible au
    lieu de laisser un trou de la taille d'une carte manquante. */
 .fact-grid { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: stretch; }
-.fact-grid > .fact-card { flex: 1 1 100%; min-width: 0; }
+.fact-grid > .fact-card, .fact-grid > .draft-cell { flex: 1 1 100%; min-width: 0; }
 /* Tablette portrait (≥600px) : ~2 colonnes, même sans le rail desktop */
-@media (min-width: 600px) { .fact-grid > .fact-card { flex: 1 1 calc(50% - var(--space-4) / 2); } }
+@media (min-width: 600px) { .fact-grid > .fact-card, .fact-grid > .draft-cell { flex: 1 1 calc(50% - var(--space-4) / 2); } }
 
 /* ---- Filtres + groupes de faits (style Notion/PandaDoc) ---- */
 .filter-bar { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: var(--space-5); }
@@ -1381,7 +1381,7 @@ html.icons-ready .material-icons { visibility: visible; }
      design 2026-08-16). */
   .rail { position: fixed; left: 0; top: var(--topbar-h); bottom: 0; z-index: 21; padding: 8px var(--space-2) var(--space-4); gap: 2px; display: flex; flex-direction: column; background: var(--md-sys-color-surface); border-right: 1px solid var(--glass-border-strong); box-shadow: var(--shadow-rail); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
   .stat-row { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-  .fact-grid > .fact-card { flex: 1 1 calc(50% - var(--space-4) / 2); }
+  .fact-grid > .fact-card, .fact-grid > .draft-cell { flex: 1 1 calc(50% - var(--space-4) / 2); }
 }
 
 /* Desktop ≥1024px : bottomnav masquée (navigation clavier/souris). Largeur du
@@ -1506,12 +1506,12 @@ html.icons-ready .material-icons { visibility: visible; }
 @keyframes slideup { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 .force-mobile .rail { display: none !important; }
-@media (min-width: 1100px) { .fact-grid > .fact-card { flex: 1 1 calc(33.333% - var(--space-4) * 2 / 3); } }
+@media (min-width: 1100px) { .fact-grid > .fact-card, .fact-grid > .draft-cell { flex: 1 1 calc(33.333% - var(--space-4) * 2 / 3); } }
 .force-mobile .bottomnav { display: flex !important; }
 .force-mobile .view { padding: var(--space-4) !important; padding-top: calc(72px + var(--space-4)) !important; padding-bottom: 110px !important; max-width: 100% !important; }
 .force-mobile .fab { bottom: 88px !important; right: 20px !important; }
 .force-mobile .fab-menu { bottom: 162px !important; right: 20px !important; }
-.force-mobile .fact-grid > .fact-card { flex: 1 1 100% !important; }
+.force-mobile .fact-grid > .fact-card, .force-mobile .fact-grid > .draft-cell { flex: 1 1 100% !important; }
 .force-mobile .stat-row { grid-template-columns: repeat(2, 1fr) !important; }
 .force-mobile .stat-card:last-child { grid-column: 1 / -1; }
 
