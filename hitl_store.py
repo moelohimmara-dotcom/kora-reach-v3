@@ -644,7 +644,20 @@ def get_dashboard_stats() -> dict:
     """SOURCE UNIQUE DE VÉRITÉ (SSOT) pour tous les compteurs du dashboard.
     Calcule EN UNE SEULE requête SQL agrégée tous les états du cycle de vie,
     pour garantir que le tableau de bord, la sidebar et la base sont cohérents.
-    Remplace les recalculs divergents cotes front (cat.pending, s.trash, etc.)."""
+    Remplace les recalculs divergents cotes front (cat.pending, s.trash, etc.)
+
+    Invariant garanti (2026-08-19, bug corrigé — "Tous 86" mais somme des
+    filtres = 89) : pending + transmitted + rejected + drafts + trash ==
+    total_facts, TOUJOURS, par CONSTRUCTION (pending est calculé comme le
+    reste, pas comme une requête séparée qui peut diverger).
+    Root cause du bug : un article TRASHED dont la decision HITL est REJECTED
+    était compté à la fois dans 'trash' (tous les TRASHED, sans exception) ET
+    dans 'rejected' (via count_rejected(), qui inclut explicitement les
+    TRASHED+REJECTED) -> même article dans 2 catégories que le frontend
+    affiche comme mutuellement exclusives. Fix : 'trash' exclut désormais les
+    TRASHED dont la décision est REJECTED (ils ne comptent que dans 'rejected'),
+    et 'pending' absorbe tout le reste (catch-all, résiste à un nouveau statut
+    HITL qu'on oublierait d'ajouter ici demain)."""
     _init()
     con, _ = db.conn()
     try:
@@ -661,33 +674,47 @@ def get_dashboard_stats() -> dict:
                 key = row[0]
                 cnt = int(row[1] or 0)
             by_status[key] = cnt
-        pending = by_status.get("PENDING_REVIEW", 0)
-        transmitted = by_status.get("TRANSMITTED", 0)
-        edited = by_status.get("EDITED", 0)
-        trashed = by_status.get("TRASHED", 0)
-        rejected_status = by_status.get("REJECTED", 0)
         total_facts = sum(by_status.values())
-        # 2) Articles reellement en circulation (hors corbeille/rejetes) - Option C
+        edited = by_status.get("EDITED", 0)
+        # "Transmis" couvre TRANSMITTED et APPROVED (même catégorie côté front,
+        # voir factCategory() dans app.js).
+        transmitted = by_status.get("TRANSMITTED", 0) + by_status.get("APPROVED", 0)
+        trashed_total = by_status.get("TRASHED", 0)
+        rejected_status = by_status.get("REJECTED", 0)
+        # 2) Rejetes — délègue à count_rejected() (définition unique / SSOT) :
+        # statut REJECTED direct + TRASHED avec décision REJECTED.
+        rejected = count_rejected()
+        # 3) Corbeille EXCLUSIVE de Rejetés : on retire le chevauchement
+        # (TRASHED + décision REJECTED, déjà compté dans `rejected` ci-dessus)
+        # pour que les deux catégories ne comptent plus jamais le même article.
+        overlap_trashed_rejected = max(0, rejected - rejected_status)
+        trash = max(0, trashed_total - overlap_trashed_rejected)
+        # 4) Pending = TOUT LE RESTE (PENDING_REVIEW + TRANSMISSION_FAILED +
+        # RETRACTED + tout statut futur non explicitement traité ci-dessus).
+        # Calculé par SOUSTRACTION plutôt que par une requête dédiée : garantit
+        # que la somme des 5 catégories == total_facts par construction, quel
+        # que soit l'état du cycle de vie ajouté un jour sans mettre à jour
+        # cette fonction — l'invariant ne peut plus se briser silencieusement.
+        pending = total_facts - transmitted - rejected - edited - trash
+        # 5) Articles reellement en circulation (hors corbeille/rejetes) - Option C
         in_circulation = pending + transmitted + edited
-        # 3) Publies (table articles)
+        # 6) Publies (table articles)
         cur.execute("SELECT count(*) FROM articles WHERE lower(status) = 'published'")
         row = cur.fetchone()
         published = int((list(row.values())[0] if isinstance(row, dict) else row[0]) or 0)
-        # 4) Rejetes — on delegate a count_rejected() (definition unique / SSOT)
-        rejected = count_rejected()
-        # 5) Supprimes (audit)
+        # 7) Supprimes (audit)
         cur.execute("SELECT count(*) FROM audit_events WHERE action IN ('SUPPRIME', 'PURGE')")
         row = cur.fetchone()
         deleted = int((list(row.values())[0] if isinstance(row, dict) else row[0]) or 0)
         return {
             "total_facts": total_facts,        # tous les faits (sidebar)
             "articles": in_circulation,        # dashboard "Articles" (en circulation)
-            "pending": pending,               # a decider
-            "transmitted": transmitted,       # publies/transmis
+            "pending": pending,               # a decider (+ etats residuels)
+            "transmitted": transmitted,       # publies/transmis (+ approuves)
             "drafts": edited,                 # brouillons
-            "trash": trashed,                 # corbeille (TRASHED)
+            "trash": trash,                   # corbeille (TRASHED, hors rejetes)
             "rejected_status": rejected_status,  # facts au statut REJECTED (rare)
-            "rejected": rejected,             # rejetes (corbeille+decision)
+            "rejected": rejected,             # rejetes (statut REJECTED + corbeille rejetee)
             "published": published,           # articles publies
             "deleted": deleted,               # definitivement supprimes
         }
