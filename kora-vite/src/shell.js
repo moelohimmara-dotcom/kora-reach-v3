@@ -55,6 +55,7 @@ export const SHELL = `
     <div class="cycle-banner-row">
       ${ic("i-refresh")}
       <span id="cycleBannerText">Collecte des sources whitelist…</span>
+      <span class="cycle-banner-progress" id="cycleBannerProgress" hidden></span>
       <button class="btn btn-tonal btn-sm" id="cycleBannerCancel" style="margin-left:auto">Interrompre</button>
     </div>
   </div>
@@ -179,6 +180,7 @@ export const SHELL = `
       <span class="gl-orb-core">${ic("i-spark")}</span>
     </div>
     <div class="gl-text" id="globalLoaderText">Kora Agent explore les sources d'actualité…</div>
+    <div class="gl-progress" id="globalLoaderProgress" hidden></div>
     <div class="gl-patience" id="globalLoaderPatience" hidden>Ça prend un peu plus de temps que d'habitude — merci de patienter encore un instant.</div>
     <div class="gl-actions">
       <button class="btn btn-tonal" id="globalLoaderDismiss">Continuer à naviguer</button>

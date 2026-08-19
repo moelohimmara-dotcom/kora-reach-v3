@@ -24,6 +24,20 @@ CANCEL_FLAG = {"requested": False}
 def cancel_cycle():
     """Demande l'interruption du cycle en cours (arrêt propre après l'article en cours)."""
     CANCEL_FLAG["requested"] = True
+
+# Progression du cycle en cours (lue par /api/last -> loader plein écran
+# "Article X sur Y"). Un seul cycle actif à la fois (mutex fichier), un seul
+# writer -> pas besoin de lock, simple dict remplacé/lu par polling HTTP.
+CYCLE_PROGRESS = {"cycle_id": None, "current": 0, "total": 0}
+
+def get_progress() -> dict:
+    """Copie de l'état de progression du cycle en cours (0/0 si aucun)."""
+    return dict(CYCLE_PROGRESS)
+
+def _reset_progress(cid=None, total=0):
+    CYCLE_PROGRESS["cycle_id"] = cid
+    CYCLE_PROGRESS["current"] = 0
+    CYCLE_PROGRESS["total"] = total
 from hitl_store import fact_id_of
 from audit import log
 from illustrate import illustrate, illustrate_all
@@ -155,6 +169,7 @@ class ReachAgent:
         atexit.register(_release_cycle_lock)
         _init_state()  # (re)crée les tables si la DB a ete resetee
         cid = new_cycle()
+        _reset_progress(cid=cid, total=0)
         cycle_start = datetime.now(TZ)
         log(cid, "CYCLE_START", f"initiator={initiator} scope={scope_filter} whitelist_v={wl.WHITELIST_VERSION}", action="CYCLE")
         try:
@@ -228,6 +243,7 @@ class ReachAgent:
                            "l'information en temps reel.")
                 end_cycle(cid, "EMPTY")
                 _release_cycle_lock()
+                _reset_progress()
                 return {"status": "empty_or_stale", "message": msg,
                         "whitelist_version": wl.WHITELIST_VERSION,
                         "sources_ok": sources_ok, "total_items": len(items),
@@ -255,6 +271,7 @@ class ReachAgent:
                 # depuis un item deja publie.
                 end_cycle(cid, "EMPTY")
                 _release_cycle_lock()
+                _reset_progress()
                 msg = (f"Toutes les informations fraîches disponibles aujourd'hui ont déjà "
                        f"été traitées par Kora Agent ({skipped} info(s) déjà couverte(s) lors "
                        f"d'un cycle précédent). Revenez plus tard : Kora Agent vous préviendra "
@@ -287,14 +304,16 @@ class ReachAgent:
             clusters.sort(key=lambda c: max(score_item(i) for i in c), reverse=True)
             safety_cap = config.LIMITS.get("daily_article_limit", 10)
             limit = min(demand, len(clusters), safety_cap) if demand else min(len(clusters), safety_cap)
+            _reset_progress(cid=cid, total=limit)
             facts = []
-            for c in clusters[:limit]:
+            for idx, c in enumerate(clusters[:limit]):
                 if CANCEL_FLAG["requested"]:
                     # Interruption propre : on arrête après l'article en cours,
                     # on libère le flag et on rend les faits déjà générés.
                     CANCEL_FLAG["requested"] = False
                     log(cid, "CYCLE_CANCEL", "annulation demandee par l'utilisateur", action="CYCLE")
                     break
+                CYCLE_PROGRESS["current"] = idx + 1
                 champ, ctx = pick_champion(c)
                 fact = {"champion": champ, "contexts": ctx, "n_sources": len(c), "forced_stale": forced_stale, "cycle_id": cid}
                 written = write_article(fact)
@@ -315,6 +334,7 @@ class ReachAgent:
                 log(cid, "ILLU_WARN", f"{type(_ie).__name__}: {_ie}", "illustrate")
             end_cycle(cid, "OK")
             _release_cycle_lock()
+            _reset_progress()
             log(cid, "CYCLE_END", f"facts={len(facts)} clusters={len(clusters)}")
             return {
                 "status": "ok",
@@ -333,6 +353,7 @@ class ReachAgent:
             end_cycle(cid, "ERROR")
             log(cid, "CYCLE_ERROR", str(e)[:200])
             _release_cycle_lock()
+            _reset_progress()
             return {"error": str(e), "facts": []}
 
 
