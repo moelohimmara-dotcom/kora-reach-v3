@@ -106,7 +106,7 @@ function factMeta(f, status, compact) {
   const c = f.champion || {};
   const lvl = c.level || (c.guinee_filter ? 2 : 1);
   const st = status || f.status || "PENDING_REVIEW";
-  const stMap = { PENDING_REVIEW: "En attente", APPROVED: "Approuvé", REJECTED: "Rejeté", TRANSMITTED: "Transmis", EDITED: "Édité" };
+  const stMap = { PENDING_REVIEW: "En attente", APPROVED: "Approuvé", REJECTED: "Rejeté", TRANSMITTED: "Transmis", EDITED: "Édité", TRANSMISSION_FAILED: "Échec d'envoi" };
   const stLabel = stMap[st] || st || "En attente";
   const lvlLabel = compact
     ? (lvl === 1 ? "Niveau 1" : "Niveau 2")
@@ -131,6 +131,7 @@ function statusBadge(st) {
     TRANSMITTED: ["badge-transmitted", "Transmis"],
     EDITED: ["badge-pending", "Édité"],
     TRASHED: ["badge-rejected", "Corbeille"],
+    TRANSMISSION_FAILED: ["badge-rejected", "Échec d'envoi"],
   };
   const [k, t] = map[st] || ["badge-pending", st || "—"];
   return `<span class="badge ${k}">${t}</span>`;
@@ -1213,7 +1214,7 @@ function viewAudit(s) {
     if (/error|traceback|exception|attributeerror|keyerror|typeerror/i.test(d)) return "Erreur d'exécution (voir logs)";
     const pairs = {};
     (d.match(/(\w+)=([^\s]+)/g) || []).forEach(p => { const [k,v]=p.split("="); pairs[k]=v; });
-    const statusFr = { TRANSMITTED: "Transmis", APPROVED: "Approuvé", REJECTED: "Rejeté", EDITED: "Modifié", PENDING_REVIEW: "En attente" };
+    const statusFr = { TRANSMITTED: "Transmis", APPROVED: "Approuvé", REJECTED: "Rejeté", EDITED: "Modifié", PENDING_REVIEW: "En attente", TRANSMISSION_FAILED: "Échec d'envoi" };
     const parts = [];
     if (pairs.src) parts.push("source : " + pairs.src);
     const st = pairs.status || pairs.decision;

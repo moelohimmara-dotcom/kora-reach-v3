@@ -243,10 +243,16 @@ def list_facts() -> list:
         # B+C backend : hitl_facts.status EST la source de vérité (mirroré par decide()
         # et mark_transmitted()). On l'utilise directement — sauf si c'est PENDING_REVIEW
         # et qu'une décision HITL le précise (cas d'un fact décidé mais non mirroiré).
+        # Exclusion "RETRACTED" (2026-08-19, bug corrigé) : retract() garde
+        # volontairement hitl_decisions.status='RETRACTED' pour la traçabilité
+        # (même convention que REJECTED, voir decide()), mais hitl_facts.status
+        # est désormais mirroré à 'PENDING_REVIEW' par retract() lui-même -- sans
+        # cette exclusion, ce repli écrasait ce mirroring correct en réaffichant
+        # "RETRACTED", un statut que le frontend ne reconnaît même pas.
         _raw_status = d.get("status") or "PENDING_REVIEW"
         if _raw_status == "TRASHED":
             _eff_status = "TRASHED"
-        elif _raw_status == "PENDING_REVIEW" and d.get("d_status"):
+        elif _raw_status == "PENDING_REVIEW" and d.get("d_status") and d.get("d_status") != "RETRACTED":
             _eff_status = d["d_status"]
         else:
             _eff_status = _raw_status
@@ -325,8 +331,23 @@ def decide(fact_id: str, decision: str, decided_by: str,
                    VALUES ({p},{p},{p},{p},{p},{p},{p})""",
                 (fact_id, decision, decision, edited_text, final_text, decided_by, now))
         # Miroir du statut dans hitl_facts : list_facts() priorise hitl_facts.status,
-        # donc sans ça un fact EDITED/APPROVED/REJECTED/TRANSMITTED reste vu comme
-        # PENDING_REVIEW (rebound via hitl_decisions) -> compteurs instables.
+        # donc sans ça un fact EDITED/APPROVED/REJECTED/TRANSMITTED/PENDING_REVIEW
+        # reste affiche avec son ANCIEN statut (rebond via hitl_decisions non
+        # repercute) -> compteurs instables, et surtout : l'action semble reussir
+        # (decide() renvoie ok=True, hitl_decisions est bien mis a jour) mais RIEN
+        # ne change visuellement pour l'utilisateur.
+        #
+        # Bug corrige 2026-08-19 (rapporte en prod : "Remettre en attente" sur un
+        # brouillon disait avoir reussi mais l'article restait affiche comme
+        # brouillon) : cette liste blanche ("EDITED", "APPROVED", "TRANSMITTED")
+        # etait incomplete -- "PENDING_REVIEW" (utilise par finishDraft() cote
+        # frontend, EXPLICITEMENT autorise dans _ALLOWED["EDITED"] ci-dessus,
+        # commentaire "terminer l'edition, ramener a la normale") n'y figurait
+        # pas, donc decide() faisait tout SAUF la seule chose visible par
+        # l'utilisateur. Generalise a "toute decision sauf REJECTED" (qui a sa
+        # propre regle ci-dessus) au lieu d'une liste blanche a maintenir a la
+        # main a chaque nouvelle valeur -- exactement le genre d'oubli qui vient
+        # de se produire.
         if decision == "REJECTED":
             # Rejeter = envoyer DIRECTEMENT en corbeille (demande utilisateur 2026-08-14).
             # hitl_facts passe en TRASHED + trashed_at ; la décision HITL reste REJECTED
@@ -335,7 +356,7 @@ def decide(fact_id: str, decision: str, decided_by: str,
                 f"UPDATE hitl_facts SET status='TRASHED', trashed_at={p} "
                 f"WHERE fact_id={p} AND status <> 'TRASHED'",
                 (now, fact_id))
-        elif decision in ("EDITED", "APPROVED", "TRANSMITTED"):
+        else:
             cur.execute(f"UPDATE hitl_facts SET status={p} WHERE fact_id={p} AND status <> 'TRASHED'",
                         (decision, fact_id))
         con.commit()
@@ -383,9 +404,18 @@ def mark_transmission_failed(fact_id: str, provider: str, http_status: int) -> d
         cur.execute(
             f"UPDATE hitl_decisions SET status='TRANSMISSION_FAILED', provider={p}, http_status={p} WHERE fact_id={p}",
             (provider, http_status, fact_id))
+        # Bug corrige 2026-08-19 (meme categorie que decide()/retract() : le
+        # mirroir vers hitl_facts, source de verite pour list_facts(), manquait
+        # ici aussi -> un echec de transmission restait invisible, l'article
+        # affichait toujours son ancien statut "Approuve" comme si de rien
+        # n'etait, sans aucun signal qu'il fallait reessayer.
+        cur.execute(f"UPDATE hitl_facts SET status='TRANSMISSION_FAILED' WHERE fact_id={p} AND status <> 'TRASHED'",
+                    (fact_id,))
         con.commit()
     finally:
         con.close()
+    audit.log(None, "TRANSMIT_FAILED", f"fact={fact_id} provider={provider} http={http_status}",
+              fact_id=fact_id, action="ECHEC", editor="system")
     return {"ok": True, "fact_id": fact_id, "status": "TRANSMISSION_FAILED"}
 
 
@@ -403,6 +433,16 @@ def retract(fact_id: str, by: str) -> dict:
         cur.execute(
             f"UPDATE hitl_decisions SET status='RETRACTED', override_by={p}, override_at={p} WHERE fact_id={p}",
             (by, now, fact_id))
+        # Bug corrige 2026-08-19 (rapporte en prod : "Annuler la decision"
+        # semblait fonctionner mais rien ne changeait vraiment) : cette fonction
+        # ne touchait QUE hitl_decisions, jamais hitl_facts.status -- la source
+        # de verite lue par list_facts(). L'article restait donc affiche avec
+        # son statut APPROVED/TRANSMITTED d'origine. hitl_decisions.status
+        # reste volontairement 'RETRACTED' (tracabilite, meme convention que
+        # REJECTED dans decide()) ; c'est hitl_facts qui doit refleter l'etat
+        # reellement visible : de retour en attente de validation normale.
+        cur.execute(f"UPDATE hitl_facts SET status='PENDING_REVIEW' WHERE fact_id={p} AND status <> 'TRASHED'",
+                    (fact_id,))
         con.commit()
     finally:
         con.close()
