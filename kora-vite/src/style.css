@@ -547,19 +547,25 @@ html.icons-ready .material-icons { visibility: visible; }
 .stat .l { font-size: var(--t-label-xs); color: var(--md-sys-color-on-surface-variant); text-transform: uppercase; letter-spacing: .6px; margin-top: 5px; }
 .stat.alert .n { color: var(--md-sys-color-error); }
 
-/* Bug corrige 2026-08-19 (rapporte : "des trous dans la disposition des
-   articles") : chaque groupe de dates (factGroupsByDay, app.js) a sa PROPRE
-   grille -> des qu'un groupe ne compte pas un multiple exact du nombre de
-   colonnes (3 en desktop), la derniere ligne se terminait en laissant 1 ou 2
-   emplacements visuellement VIDES (grille CSS classique : les pistes de
-   colonnes restantes ne se remplissent jamais toutes seules). Passe de
-   `display:grid` a flexbox + `flex-grow:1` : les cartes d'une ligne
-   incomplete s'etirent desormais pour occuper tout l'espace disponible au
-   lieu de laisser un trou de la taille d'une carte manquante. */
+/* Historique de ce bloc (2026-08-19) :
+   1) A l'origine display:grid -> un groupe de dates (factGroupsByDay,
+      app.js) dont le nombre d'articles n'est pas un multiple exact du
+      nombre de colonnes laissait 1-2 emplacements visuellement VIDES en
+      fin de ligne (trou de la taille d'une carte manquante).
+   2) Corrige en passant a flexbox + flex-grow:1 : les cartes d'une ligne
+      incomplete s'etiraient pour combler l'espace -- MAIS rapporte
+      immediatement comme un nouveau bug : une carte SEULE en fin de
+      ligne (ex: 5 articles sur une grille a 2 colonnes) devenait deux
+      fois plus large que les autres, cassant l'uniformite attendue.
+   3) flex-grow desactive (0) : les cartes gardent desormais une taille
+      UNIFORME en toute circonstance, quitte a laisser a nouveau un peu
+      d'espace vide en fin de ligne incomplete -- priorite explicite de
+      l'utilisateur ("garder le meme format que les autres"), un compromis
+      assume plutot qu'un aller-retour sans fin entre les deux defauts. */
 .fact-grid { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: stretch; }
-.fact-grid > .fact-card, .fact-grid > .draft-cell { flex: 1 1 100%; min-width: 0; }
+.fact-grid > .fact-card, .fact-grid > .draft-cell { flex: 0 1 100%; min-width: 0; }
 /* Tablette portrait (≥600px) : ~2 colonnes, même sans le rail desktop */
-@media (min-width: 600px) { .fact-grid > .fact-card, .fact-grid > .draft-cell { flex: 1 1 calc(50% - var(--space-4) / 2); } }
+@media (min-width: 600px) { .fact-grid > .fact-card, .fact-grid > .draft-cell { flex: 0 1 calc(50% - var(--space-4) / 2); } }
 
 /* ---- Filtres + groupes de faits (style Notion/PandaDoc) ---- */
 .filter-bar { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: var(--space-5); }
@@ -1381,7 +1387,7 @@ html.icons-ready .material-icons { visibility: visible; }
      design 2026-08-16). */
   .rail { position: fixed; left: 0; top: var(--topbar-h); bottom: 0; z-index: 21; padding: 8px var(--space-2) var(--space-4); gap: 2px; display: flex; flex-direction: column; background: var(--md-sys-color-surface); border-right: 1px solid var(--glass-border-strong); box-shadow: var(--shadow-rail); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
   .stat-row { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-  .fact-grid > .fact-card, .fact-grid > .draft-cell { flex: 1 1 calc(50% - var(--space-4) / 2); }
+  .fact-grid > .fact-card, .fact-grid > .draft-cell { flex: 0 1 calc(50% - var(--space-4) / 2); }
 }
 
 /* Desktop ≥1024px : bottomnav masquée (navigation clavier/souris). Largeur du
@@ -1506,12 +1512,12 @@ html.icons-ready .material-icons { visibility: visible; }
 @keyframes slideup { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 .force-mobile .rail { display: none !important; }
-@media (min-width: 1100px) { .fact-grid > .fact-card, .fact-grid > .draft-cell { flex: 1 1 calc(33.333% - var(--space-4) * 2 / 3); } }
+@media (min-width: 1100px) { .fact-grid > .fact-card, .fact-grid > .draft-cell { flex: 0 1 calc(33.333% - var(--space-4) * 2 / 3); } }
 .force-mobile .bottomnav { display: flex !important; }
 .force-mobile .view { padding: var(--space-4) !important; padding-top: calc(72px + var(--space-4)) !important; padding-bottom: 110px !important; max-width: 100% !important; }
 .force-mobile .fab { bottom: 88px !important; right: 20px !important; }
 .force-mobile .fab-menu { bottom: 162px !important; right: 20px !important; }
-.force-mobile .fact-grid > .fact-card, .force-mobile .fact-grid > .draft-cell { flex: 1 1 100% !important; }
+.force-mobile .fact-grid > .fact-card, .force-mobile .fact-grid > .draft-cell { flex: 0 1 100% !important; }
 .force-mobile .stat-row { grid-template-columns: repeat(2, 1fr) !important; }
 .force-mobile .stat-card:last-child { grid-column: 1 / -1; }
 
