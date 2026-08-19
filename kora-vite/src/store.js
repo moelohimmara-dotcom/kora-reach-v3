@@ -75,8 +75,16 @@ export const Store = (() => {
     const fetchOpts = Object.assign({}, opts, { headers, credentials: "include" });
     // Timeout réseau : évite que le fetch reste en "pending" indéfiniment
     // (qui figeait le bouton "Connexion…" si le backend ne répond pas).
+    // 15s par défaut, mais certaines routes renvoient un payload bien plus
+    // lourd (ex: /api/hitl renvoie TOUS les faits avec le texte complet de
+    // chaque article -> peut légitimement dépasser 15s selon le réseau et
+    // la charge serveur du moment) -- corrigé 2026-08-19 (bug rapporté :
+    // bandeau rouge "signal is aborted without reason" juste après un
+    // cycle, le temps que /api/hitl recharge la liste complète).
     const ctrl = new AbortController();
-    const TIMEOUT_MS = (opts && opts.timeout) || 15000;
+    const HEAVY_TIMEOUT_PATHS = ["/api/hitl", "/api/hitl/trash"];
+    const defaultTimeout = HEAVY_TIMEOUT_PATHS.some(p => path.startsWith(p)) ? 45000 : 15000;
+    const TIMEOUT_MS = (opts && opts.timeout) || defaultTimeout;
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
     fetchOpts.signal = ctrl.signal;
     try {
@@ -88,6 +96,12 @@ export const Store = (() => {
       }
       return await res.json();
     } catch (e) {
+      // e.name === "AbortError" côté navigateur -> message technique brut
+      // ("signal is aborted without reason") qui ne dit rien à l'utilisateur.
+      // Message clair à la place, distinct d'une vraie panne réseau.
+      if (e.name === "AbortError") {
+        throw new Error("Le chargement a pris trop de temps (connexion lente ou serveur occupé). Réessaie.");
+      }
       throw new Error(e.message || "Réseau indisponible");
     }
   }
@@ -828,6 +842,10 @@ export const Store = (() => {
     _refreshTimer = setInterval(() => {
       if (document.visibilityState === "visible") {
         loadAll();
+        // Raccroche le suivi d'un cycle démarré ailleurs (autre appareil/
+        // onglet) pendant que cette session tournait déjà -- sinon son
+        // écran de progression n'apparaît jamais ici (voir _onVisibilityChange).
+        resumeCycleWatch();
       }
     }, intervalMs);
     // Recharge aussi quand l'onglet redevient visible
@@ -838,7 +856,18 @@ export const Store = (() => {
     document.removeEventListener("visibilitychange", _onVisibilityChange);
   }
   function _onVisibilityChange() {
-    if (document.visibilityState === "visible") loadAll();
+    if (document.visibilityState === "visible") {
+      loadAll();
+      // Bug rapporté 2026-08-19 : un cycle lancé depuis un autre appareil/
+      // onglet (ex: desktop) restait invisible sur mobile jusqu'au prochain
+      // tick des 30s -- loadAll() recharge bien les faits, mais ne raccroche
+      // jamais le SUIVI de progression (écran plein écran, "Article X sur
+      // Y") si le cycle a démarré APRÈS le chargement initial de CETTE
+      // session. resumeCycleWatch() est sans effet si aucun cycle ne tourne
+      // (un seul GET /api/last), donc sûr à appeler à chaque retour au
+      // premier plan.
+      resumeCycleWatch();
+    }
   }
 
   // Régénère UN article depuis les infos déjà acquises (aucun re-scrape).
