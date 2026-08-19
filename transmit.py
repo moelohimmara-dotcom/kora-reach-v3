@@ -325,6 +325,11 @@ def _to_postgres(fact: dict, final_text: str) -> dict:
     src_url = payload.get("source_url", "")
     con, mode = db.conn()
     if mode != "postgres":
+        # Bug corrige (revue de code 2026-08-19) : ce retour anticipe, avant
+        # le try/finally ci-dessous, laissait la connexion tout juste ouverte
+        # par db.conn() sans jamais la fermer -> fuite de connexion a chaque
+        # appel avec un provider force a 'postgres' sur un backend sqlite.
+        con.close()
         return {"status": "FAILED", "provider": "postgres", "http_status": 0,
                 "detail": "DATABASE_BACKEND n'est pas 'postgres'."}
     try:

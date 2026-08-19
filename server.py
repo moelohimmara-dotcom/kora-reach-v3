@@ -203,10 +203,17 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/root/config":
             if not self._require_root():
                 return
+            # Bug corrige (revue de code 2026-08-19) : lisait config.SOURCES,
+            # liste Python figee et obsolete depuis la migration de la
+            # whitelist en base (whitelist.py) -- contenait encore Google
+            # News (banni de la whitelist reelle le meme jour) et pas les 5
+            # sources ajoutees depuis. La console root affichait un decompte
+            # totalement decorrele des sources reellement actives.
+            entries = wl.all_entries()
             return self._send(200, {
                 "branding": settings.get_settings(),
-                "sources_actives": len([s for s in config.SOURCES if s.source_level in config.ACTIVE_LEVELS]),
-                "sources_total": len(config.SOURCES),
+                "sources_actives": len([s for s in entries if s.status == "active"]),
+                "sources_total": len(entries),
                 "limits": config.LIMITS,
             })
         self._send(404, {"error": "unknown endpoint"})
