@@ -987,20 +987,32 @@ function viewSettings(s) {
     <aside class="settings-panel" id="drawer-accounts" hidden>
       <div class="drawer-head"><button class="drawer-back" type="button" data-setback aria-label="Retour">${icon("i-chevron")}</button><h2>Comptes & habilitations</h2></div>
       <div class="drawer-body">
-        <p class="muted" style="margin:0 0 14px">Gère qui fait quoi. Le rôle « Avancé » donne accès à tous les réglages, la gestion des comptes et les actions sensibles. Le rôle « Normal » est limité à la génération et à la validation.</p>
+        <p class="muted" style="margin:0 0 14px">Gère qui fait quoi. « Propriétaire » a tous les droits, y compris gérer d'autres Propriétaires. « Avancé » gère comptes/sources/réglages. « Normal » (Éditeur) génère et valide en interne — l'envoi vers WordPress (brouillon ou officiel) est réservé à Propriétaire/Avancé, sauf délégation explicite ci-dessous.</p>
         <div class="setting-card">
           <div class="setting-card-head"><span class="meta-ic">${icon("i-users")}</span><div class="meta"><div class="name">Comptes existants</div><div class="sub">${(s.users || []).length} compte(s)</div></div></div>
           <div class="user-list" id="userList">
-            ${(s.users || []).map(u => `<div class="user-row" data-id="${esc(u.id)}">
+            ${(s.users || []).map(u => {
+              const role = u.role || "normal";
+              const isOwner = role === "owner";
+              const viewerIsOwner = (s.auth && s.auth.role === "owner");
+              // Un non-Propriétaire ne peut ni modifier ni supprimer un Propriétaire
+              // (garde-fou aussi cote serveur — voir auth.py set_role/delete_user).
+              const lockedForViewer = isOwner && !viewerIsOwner;
+              return `<div class="user-row" data-id="${esc(u.id)}">
               <div class="meta"><div class="name">${esc(u.username)}</div><div class="sub">${esc(u.email || "—")}</div></div>
               <div class="role-edit">
-                <select class="text-input role-select" data-id="${esc(u.id)}">
-                  <option value="normal" ${(u.role || "normal") === "normal" ? "selected" : ""}>Normal</option>
-                  <option value="advanced" ${(u.role || "normal") === "advanced" ? "selected" : ""}>Avancé</option>
+                <select class="text-input role-select" data-id="${esc(u.id)}" ${lockedForViewer ? "disabled title=\"Réservé aux Propriétaires\"" : ""}>
+                  <option value="normal" ${role === "normal" ? "selected" : ""}>Normal</option>
+                  <option value="advanced" ${role === "advanced" ? "selected" : ""}>Avancé</option>
+                  ${(viewerIsOwner || isOwner) ? `<option value="owner" ${isOwner ? "selected" : ""}>Propriétaire</option>` : ""}
                 </select>
-                <button class="btn btn-ghost btn-sm user-del" data-id="${esc(u.id)}">Retirer</button>
+                ${role === "normal" ? `<label class="mini-sheet-check" style="margin:0" title="Autoriser l'envoi vers WordPress (brouillon et officiel)">
+                  <input type="checkbox" class="wp-publish-toggle" data-id="${esc(u.id)}" ${u.wp_publish_allowed ? "checked" : ""}> Envoi WP
+                </label>` : ""}
+                <button class="btn btn-ghost btn-sm user-del" data-id="${esc(u.id)}" ${lockedForViewer ? "disabled title=\"Réservé aux Propriétaires\"" : ""}>Retirer</button>
               </div>
-            </div>`).join("")}
+            </div>`;
+            }).join("")}
           </div>
         </div>
         <div class="setting-card">
@@ -1009,7 +1021,7 @@ function viewSettings(s) {
             <div class="field"><span>Identifiant</span><input class="text-input" id="setNewUser" type="text" maxlength="40" placeholder="redacteur1"></div>
             <div class="field"><span>Email</span><input class="text-input" id="setNewEmail" type="email" maxlength="80" placeholder="redacteur@kora.reach"></div>
             <div class="field"><span>Mot de passe</span><span class="pw-wrap"><input class="text-input" id="setNewUserPw" type="password" maxlength="64" placeholder="••••••••" autocomplete="new-password"><button type="button" class="pw-toggle" data-pw="setNewUserPw" aria-label="Afficher le mot de passe">${icon("i-eye")}</button></span></div>
-            <div class="field"><span>Rôle</span><select class="text-input" id="setNewUserRole"><option value="normal" selected>Normal</option><option value="advanced">Avancé</option></select></div>
+            <div class="field"><span>Rôle</span><select class="text-input" id="setNewUserRole"><option value="normal" selected>Normal</option><option value="advanced">Avancé</option>${(s.auth && s.auth.role === "owner") ? `<option value="owner">Propriétaire</option>` : ""}</select></div>
           </div>
           <div class="actions"><button class="btn btn-primary" id="setAddUser">Créer le compte</button></div>
         </div>
@@ -1522,7 +1534,13 @@ function renderSheet(s) {
     // "Rejeter" ouvre la bulle de choix (corbeille vs suppression définitive)
     // au lieu de rejeter directement — évite une suppression accidentelle.
     if (b.dataset.decide === "REJECTED") { Store.openSheet({ type: "reject-confirm", fact: f }); renderSheet(Store.state); return; }
-    Store.decide(f.fact_id, b.dataset.decide); Store.closeSheet();
+    // Droit d'envoi WordPress (§3 du plan valide 2026-08-19) : un Éditeur non
+    // délégué voit son article rester "Approuvé" côté KORA (message clair
+    // plutôt qu'un envoi silencieusement bloqué).
+    Store.decide(f.fact_id, b.dataset.decide).then(r => {
+      if (r?.transmission?.status === "SKIPPED_NO_WP_RIGHT") snack(r.transmission.detail);
+    });
+    Store.closeSheet();
   });
   const rb = body.querySelector("[data-retract]");
   if (rb) rb.onclick = () => { Store.retract(f.fact_id); Store.closeSheet(); };
@@ -1748,6 +1766,8 @@ function bindAudit() {
   });
 }
 
+const ROLE_LABEL_FR = { owner: "Propriétaire", advanced: "Avancé", normal: "Normal", lecteur: "Lecteur" };
+
 function bindSettings() {
   const root = document.documentElement;
   const coral = document.getElementById("setCoral");
@@ -1904,7 +1924,7 @@ function bindSettings() {
     if (pw.length < 8) { snack("Mot de passe 8 caractères minimum"); return; }
     try {
       await Store.createUser(uname, email, pw, role);
-      snack("Compte créé" + (role === "advanced" ? " (Avancé)" : ""));
+      snack("Compte créé" + (ROLE_LABEL_FR[role] ? " (" + ROLE_LABEL_FR[role] + ")" : ""));
       await Store.loadUsers();
       render();
     } catch (e) { snack(e.message || "Erreur"); }
@@ -1914,9 +1934,25 @@ function bindSettings() {
     const newRole = sel.value;
     try {
       await Store.setRole(id, newRole);
-      snack("Rôle mis à jour : " + (newRole === "advanced" ? "Avancé" : "Normal"));
+      snack("Rôle mis à jour : " + (ROLE_LABEL_FR[newRole] || newRole));
       await Store.loadUsers();
-    } catch (e) { snack(e.message || "Erreur"); }
+      render();
+    } catch (e) {
+      snack(e.message || "Erreur");
+      await Store.loadUsers(); render();  // revert l'affichage au rôle réel (l'appel a échoué)
+    }
+  });
+  view.querySelectorAll(".wp-publish-toggle").forEach(cb => cb.onchange = async () => {
+    const id = cb.dataset.id;
+    const allowed = cb.checked;
+    try {
+      await Store.setWpPublish(id, allowed);
+      snack(allowed ? "Envoi WordPress autorisé pour ce compte" : "Envoi WordPress retiré pour ce compte");
+      await Store.loadUsers();
+    } catch (e) {
+      snack(e.message || "Erreur");
+      cb.checked = !allowed;  // revert l'affichage (l'appel a échoué)
+    }
   });
   view.querySelectorAll(".user-del").forEach(b => b.onclick = () => {
     const id = b.dataset.id;
@@ -2479,8 +2515,13 @@ function openTrashChoice() {
 }
 function doBulkApprove(wp_status) {
   Store.bulkAction("approve", { wp_status }).then(r => {
-    const fails = (r.results || []).filter(x => !x.ok).length;
-    snack(fails ? `${r.done}/${r.total} publié(s) · ${fails} échec(s)` : `${r.done}/${r.total} publié(s) sur WordPress`);
+    const results = r.results || [];
+    const fails = results.filter(x => !x.ok).length;
+    // Droit d'envoi WordPress (§3 du plan valide 2026-08-19) : distingue le
+    // cas "approuvé mais pas envoyé, faute de droit" d'un échec technique.
+    const skippedWp = results.filter(x => x.transmission?.status === "SKIPPED_NO_WP_RIGHT").length;
+    if (skippedWp) snack(`${r.done}/${r.total} approuvé(s), en attente d'envoi WordPress (droit non délégué)`);
+    else snack(fails ? `${r.done}/${r.total} publié(s) · ${fails} échec(s)` : `${r.done}/${r.total} publié(s) sur WordPress`);
   }).catch(e => snack("Erreur : " + e.message));
 }
 function doBulkTrash(definitive) {

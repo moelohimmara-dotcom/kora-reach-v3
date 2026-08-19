@@ -1544,7 +1544,15 @@ html.icons-ready .material-icons { visibility: visible; }
 .user-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--glass-bg); border: 1px solid var(--glass-border); }
 .user-row .name { font-weight: 600; font-size: var(--t-body); }
 .user-row .sub { font-size: var(--t-label-sm); color: var(--md-sys-color-on-surface-variant); }
-.role-edit { display: flex; align-items: center; gap: 8px; }
+.role-edit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* La case "Envoi WP" ajoute un 3e contrôle à la rangée (2026-08-19) : sur
+   mobile, la rangée passe en colonne pour eviter le meme debordement que
+   celui deja corrige sur la fiche article (Modifier/Regenerer/Rejeter). */
+@media (max-width: 600px) {
+  .user-row { flex-wrap: wrap; }
+  .role-edit { width: 100%; flex-direction: column; align-items: stretch; }
+  .role-edit .btn { width: 100%; }
+}
 .user-del, .role-select { height: var(--btn-h); }
 .user-del { white-space: nowrap; }
 

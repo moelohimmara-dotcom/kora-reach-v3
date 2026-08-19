@@ -85,6 +85,17 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return u["role"] if isinstance(u, dict) else (u[5] if len(u) > 5 else "normal")
 
+    def _can_publish_wp(self):
+        """Droit d'envoi WordPress de la session courante (2026-08-19,
+        restructuration rôles/permissions) — voir permissions.can_publish_wp()."""
+        sid = auth.read_cookie_sid(self.headers)
+        u = auth.get_session_user(sid) if sid else None
+        if not u:
+            return False
+        role = u["role"] if isinstance(u, dict) else "lecteur"
+        wp_flag = u.get("wp_publish_allowed") if isinstance(u, dict) else 0
+        return permissions.can_publish_wp(role, wp_flag)
+
     def _require_capability(self, capability):
         """Vérifie qu'un rôle a le droit d'effectuer `capability`, en lisant
         la table de vérité centralisée dans permissions.py (ADR-0004) au lieu
@@ -724,17 +735,28 @@ class Handler(BaseHTTPRequestHandler):
                 log(fid, "HITL_DECISION", f"decision={decision} by={EDITOR_NAME} wp={wp_status}", "hitl")
                 # A => Approuver déclenche la transmission (dry_run par défaut)
                 if decision == "APPROVED":
-                    fact = _fact_by_id(fid)
-                    if fact:
-                        tx = transmit.transmit(fact, final or fact.get("article", ""), wp_status=wp_status)
-                        if tx["status"] in ("TRANSMITTED", "DRY_RUN_OK"):
-                            mark_transmitted(fid, tx["provider"], tx["http_status"],
-                                            final or fact.get("article", ""))
-                        else:
-                            mark_transmission_failed(fid, tx["provider"], tx["http_status"])
-                        log(fid, "TRANSMISSION", f"mode={tx['provider']} status={tx['status']}",
-                            tx["provider"])
-                        res["transmission"] = tx
+                    # Droit d'envoi WordPress (§3 du plan valide 2026-08-19) :
+                    # réservé à Propriétaire/Administrateur, ou à un Éditeur
+                    # délégué explicitement (auth.set_wp_publish). Vérifié ICI,
+                    # côté serveur — jamais confié au seul choix affiché côté
+                    # interface. L'article reste "Approuvé" côté KORA (decide()
+                    # a déjà fait son travail ci-dessus), rien ne part vers
+                    # WordPress tant que ce droit manque.
+                    if not self._can_publish_wp():
+                        res["transmission"] = {"status": "SKIPPED_NO_WP_RIGHT",
+                            "detail": "Article approuvé, en attente d'envoi WordPress par un Propriétaire/Administrateur."}
+                    else:
+                        fact = _fact_by_id(fid)
+                        if fact:
+                            tx = transmit.transmit(fact, final or fact.get("article", ""), wp_status=wp_status)
+                            if tx["status"] in ("TRANSMITTED", "DRY_RUN_OK"):
+                                mark_transmitted(fid, tx["provider"], tx["http_status"],
+                                                final or fact.get("article", ""))
+                            else:
+                                mark_transmission_failed(fid, tx["provider"], tx["http_status"])
+                            log(fid, "TRANSMISSION", f"mode={tx['provider']} status={tx['status']}",
+                                tx["provider"])
+                            res["transmission"] = tx
             return self._send(200, res)
         if p.path == "/api/hitl/retract":
             fid = payload.get("fact_id")
@@ -747,20 +769,28 @@ class Handler(BaseHTTPRequestHandler):
             ids = payload.get("ids") or []
             action = payload.get("action")  # approve | draft | reject | trash | delete
             wp_status = payload.get("wp_status", "publish")
+            # Même garde-fou que /api/hitl/decide (§3 du plan valide 2026-08-19) :
+            # calculé une fois pour tout le lot, pas par fait (le droit ne change
+            # pas au milieu d'une même requête).
+            can_wp = self._can_publish_wp()
             results = []
             for fid in ids:
                 try:
                     if action == "approve":
                         r = decide(fid, "APPROVED", EDITOR_NAME)
                         if r.get("ok"):
-                            fact = _fact_by_id(fid)
-                            if fact:
-                                tx = transmit.transmit(fact, fact.get("article", ""), wp_status=wp_status)
-                                if tx["status"] in ("TRANSMITTED", "DRY_RUN_OK"):
-                                    mark_transmitted(fid, tx["provider"], tx["http_status"], fact.get("article", ""))
-                                else:
-                                    mark_transmission_failed(fid, tx["provider"], tx["http_status"])
-                                r["transmission"] = tx
+                            if not can_wp:
+                                r["transmission"] = {"status": "SKIPPED_NO_WP_RIGHT",
+                                    "detail": "Article approuvé, en attente d'envoi WordPress par un Propriétaire/Administrateur."}
+                            else:
+                                fact = _fact_by_id(fid)
+                                if fact:
+                                    tx = transmit.transmit(fact, fact.get("article", ""), wp_status=wp_status)
+                                    if tx["status"] in ("TRANSMITTED", "DRY_RUN_OK"):
+                                        mark_transmitted(fid, tx["provider"], tx["http_status"], fact.get("article", ""))
+                                    else:
+                                        mark_transmission_failed(fid, tx["provider"], tx["http_status"])
+                                    r["transmission"] = tx
                     elif action == "draft":
                         r = decide(fid, "EDITED", EDITOR_NAME)
                     elif action == "reject":
@@ -993,8 +1023,14 @@ class Handler(BaseHTTPRequestHandler):
             email = (payload.get("email") or "").strip().lower()
             pw = payload.get("password") or ""
             role = payload.get("role", "normal")
-            if role not in ("normal", "advanced", "lecteur"):
+            if role not in ("normal", "advanced", "lecteur", "owner"):
                 self._send(400, {"error": "role_invalide"})
+                return
+            # Q2 du plan valide (2026-08-19) : seul un Propriétaire peut créer
+            # un autre Propriétaire, jamais un Administrateur même s'il a par
+            # ailleurs le droit générique "creer_compte".
+            if role == "owner" and self._session_role() != "owner":
+                self._send(403, {"error": "reserve_aux_proprietaires"})
                 return
             if len(uname) < 3:
                 self._send(400, {"error": "username_too_short"})
@@ -1016,14 +1052,37 @@ class Handler(BaseHTTPRequestHandler):
             if not uid:
                 self._send(400, {"error": "id_requis"})
                 return
-            if new_role not in ("normal", "advanced", "lecteur"):
+            if new_role not in ("normal", "advanced", "lecteur", "owner"):
                 self._send(400, {"error": "role_invalide"})
                 return
             uname = auth.username_by_id(uid) or uid
             actor = self._actor_username()
-            r = auth.set_role(uid, new_role)
+            # Garde-fous Propriétaire appliqués dans auth.set_role() lui-même
+            # (defense-in-depth) : reserve_aux_proprietaires si l'acteur n'est
+            # pas owner et que la cible l'est (ou le deviendrait), et
+            # dernier_proprietaire_protege si c'est le dernier owner restant.
+            r = auth.set_role(uid, new_role, actor_role=self._session_role())
             if r.get("ok"):
                 auth.log_auth_event("role_changed", f"{uname} -> {new_role} by {actor}", self.client_address[0])
+            self._send(200 if r.get("ok") else 400, r)
+            return
+        if p.path == "/api/auth/users/wp-publish":
+            # Délégation individuelle du droit d'envoi WordPress (§3 du plan
+            # valide 2026-08-19) : Propriétaire/Administrateur l'ont deja par
+            # leur rôle, cet endpoint ne sert qu'à l'accorder/retirer à un
+            # Éditeur ('normal') précis, sans changer son rôle.
+            if not self._require_capability("gerer_droit_publication_wp"):
+                return
+            uid = payload.get("id")
+            allowed = bool(payload.get("allowed"))
+            if not uid:
+                self._send(400, {"error": "id_requis"})
+                return
+            uname = auth.username_by_id(uid) or uid
+            actor = self._actor_username()
+            r = auth.set_wp_publish(uid, allowed)
+            if r.get("ok"):
+                auth.log_auth_event("wp_publish_changed", f"{uname} -> {allowed} by {actor}", self.client_address[0])
             self._send(200 if r.get("ok") else 400, r)
             return
         if p.path == "/api/auth/reset":
@@ -1054,7 +1113,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": "cannot_delete_self"})
             uname = auth.username_by_id(uid) or uid
             actor = self._actor_username()
-            r = auth.delete_user(uid)
+            r = auth.delete_user(uid, actor_role=self._session_role())
             if r.get("ok"):
                 auth.log_auth_event("user_deleted", f"{uname} by {actor}", self.client_address[0])
             self._send(200 if r.get("ok") else 400, r)
