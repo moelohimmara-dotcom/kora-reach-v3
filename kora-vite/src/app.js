@@ -1533,6 +1533,9 @@ function renderSheet(s) {
       <div class="sheet-textwrap"><div class="sheet-text">${mdToHtml(bodyText || text)}</div></div>
       <div class="sheet-audit-note">${icon("i-audit")} Décision enregistrée dans l'historique · ${esc(f.n_sources || 1)} source(s) fusionnée(s)</div>
     </article>
+    ${(s.auth && s.auth.role === "lecteur") ? `
+    <p class="muted source-detail-footnote" style="margin:14px 0 0">${icon("i-lock")} Rôle Lecteur : consultation seule, aucune action possible sur cet article.</p>
+    ` : `
     <div class="sheet-actions">
       <button class="btn btn-primary" data-decide="APPROVED">${icon("i-send")} Approuver &amp; transmettre</button>
       <div class="sheet-actions-row">
@@ -1546,7 +1549,7 @@ function renderSheet(s) {
         <div class="regen-chips" id="regenChips"></div>
         <button class="btn btn-ghost btn-sm" data-regen-cancel="1">Annuler</button>
       </div>
-    </div>`;
+    </div>`}`;
   sheet.hidden = false; scrim.hidden = false;
 
   const closeBtn = body.querySelector("[data-close]");
@@ -2404,15 +2407,22 @@ function render() {
   // générique) — sinon "Lancer un cycle" se grise à tort pendant une simple
   // suppression/décision sans rapport (même bug racine que le loader plein écran).
   const cycleBusyGuard = !!s.ui.cycleBusy;
+  // Rôle Lecteur : consultation seule, le backend refuse deja /api/cycle
+  // (403 role_lecteur_lecture_seule) mais le bouton restait visuellement
+  // actif -> trompeur (constate en test reel). Meme traitement que les
+  // boutons de decision sur la fiche article.
+  const isLecteur = !!(s.auth && s.auth.role === "lecteur");
+  const cycleDisabled = cycleBusyGuard || isLecteur;
   const tc = document.getElementById("topbarCycle");
   if (tc) {
-    tc.disabled = cycleBusyGuard;
+    tc.disabled = cycleDisabled;
+    tc.title = isLecteur ? "Rôle Lecteur : consultation seule" : "Lancer un cycle";
     const lbl = tc.querySelector(".topbar-cta-label");
     if (lbl) lbl.textContent = cycleBusyGuard ? "En cours…" : "Lancer un cycle";
   }
-  document.querySelectorAll('[data-action="cycle-force"]').forEach(el => { el.disabled = cycleBusyGuard; });
+  document.querySelectorAll('[data-action="cycle-force"]').forEach(el => { el.disabled = cycleDisabled; });
   const fabCycle = document.querySelector('.fab-action[data-act="cycle"]');
-  if (fabCycle) { fabCycle.style.pointerEvents = cycleBusyGuard ? "none" : ""; fabCycle.classList.toggle("disabled", cycleBusyGuard); }
+  if (fabCycle) { fabCycle.style.pointerEvents = cycleDisabled ? "none" : ""; fabCycle.classList.toggle("disabled", cycleDisabled); }
   // État de vérité du système dans la barre de statut (prêt / en cours / erreur)
   const am = document.getElementById("agentMode");
   if (am) {
@@ -3244,8 +3254,14 @@ function boot() {
       renderAuth("invite", inviteToken);
     } else {
       Store.checkAuth().then((ok) => {
-        if (!ok) renderAuth("login");
-        else Store.loadAll();   // charge facts/health/sources dès la session validée
+        if (!ok) { renderAuth("login"); return; }
+        Store.loadAll();   // charge facts/health/sources dès la session validée
+        // Comptes/invitations : role deja connu ici (checkAuth resolu) -> pas
+        // d'appel pour rien (403 systematique) pour lecteur/editeur.
+        if (Store.state.auth && isAdvancedRole(Store.state.auth.role)) {
+          Store.loadUsers().catch(() => {});
+          Store.loadInvitations().catch(() => {});
+        }
       });
     }
   });
@@ -3260,8 +3276,9 @@ function boot() {
   Store.loadHealth();
   Store.loadSettings();
   Store.loadTrash().catch(() => {});
-  Store.loadUsers().catch(() => {});
-        Store.loadInvitations().catch(() => {});
+  // loadUsers/loadInvitations : voir le .then(checkAuth) ci-dessus, appelés
+  // une fois le rôle connu (pas ici -> Store.state.auth n'est pas encore
+  // résolu à ce point synchrone, le garde-fou serait toujours faux).
   Store.startAutoRefresh(30000);
 }
 
@@ -3488,8 +3505,10 @@ function bindAuth(mode, token) {
         }
         overlay.hidden = true;
         document.getElementById("app").style.display = "";
-        Store.loadUsers().catch(() => {});
-        Store.loadInvitations().catch(() => {});
+        if (Store.state.auth && isAdvancedRole(Store.state.auth.role)) {
+          Store.loadUsers().catch(() => {});
+          Store.loadInvitations().catch(() => {});
+        }
         Store.loadSettings();
         render();
         snack("Connecté");
@@ -3511,8 +3530,10 @@ function bindAuth(mode, token) {
         const r = await Store.verifyLoginTotp(token, code);
         overlay.hidden = true;
         document.getElementById("app").style.display = "";
-        Store.loadUsers().catch(() => {});
-        Store.loadInvitations().catch(() => {});
+        if (Store.state.auth && isAdvancedRole(Store.state.auth.role)) {
+          Store.loadUsers().catch(() => {});
+          Store.loadInvitations().catch(() => {});
+        }
         Store.loadSettings();
         render();
         snack(r.backupCodeUsed ? `Connecté (code de secours — ${r.backupCodesLeft} restant(s))` : "Connecté");
