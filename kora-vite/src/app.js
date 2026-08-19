@@ -1023,14 +1023,28 @@ function viewSettings(s) {
           </div>
         </div>
         <div class="setting-card">
-          <div class="setting-card-head"><span class="meta-ic">${icon("i-user-plus")}</span><div class="meta"><div class="name">Ajouter un compte</div><div class="sub">Identifiant (3+), email, mot de passe (8+), rôle.</div></div></div>
+          <div class="setting-card-head"><span class="meta-ic">${icon("i-user-plus")}</span><div class="meta"><div class="name">Inviter quelqu'un</div><div class="sub">Un lien à usage unique (72h) est envoyé par email — la personne choisit elle-même son identifiant et son mot de passe en l'acceptant.</div></div></div>
           <div class="field-row">
-            <div class="field"><span>Identifiant</span><input class="text-input" id="setNewUser" type="text" maxlength="40" placeholder="redacteur1"></div>
-            <div class="field"><span>Email</span><input class="text-input" id="setNewEmail" type="email" maxlength="80" placeholder="redacteur@kora.reach"></div>
-            <div class="field"><span>Mot de passe</span><span class="pw-wrap"><input class="text-input" id="setNewUserPw" type="password" maxlength="64" placeholder="••••••••" autocomplete="new-password"><button type="button" class="pw-toggle" data-pw="setNewUserPw" aria-label="Afficher le mot de passe">${icon("i-eye")}</button></span></div>
-            <div class="field"><span>Rôle</span><select class="text-input" id="setNewUserRole"><option value="normal" selected>Normal</option><option value="advanced">Avancé</option>${(s.auth && s.auth.role === "owner") ? `<option value="owner">Propriétaire</option>` : ""}</select></div>
+            <div class="field"><span>Email</span><input class="text-input" id="setInviteEmail" type="email" maxlength="80" placeholder="redacteur@kora.reach"></div>
+            <div class="field"><span>Rôle</span><select class="text-input" id="setInviteRole"><option value="normal" selected>Normal</option><option value="advanced">Avancé</option>${(s.auth && s.auth.role === "owner") ? `<option value="owner">Propriétaire</option>` : ""}</select></div>
           </div>
-          <div class="actions"><button class="btn btn-primary" id="setAddUser">Créer le compte</button></div>
+          <div class="actions"><button class="btn btn-primary" id="setInviteUser">Envoyer l'invitation</button></div>
+        </div>
+        <div class="setting-card">
+          <div class="setting-card-head"><span class="meta-ic">${icon("i-send")}</span><div class="meta"><div class="name">Invitations</div><div class="sub">${(s.invitations || []).filter(i => i.display_status === "pending").length} en attente</div></div></div>
+          <div class="user-list" id="inviteList">
+            ${!(s.invitations || []).length ? `<p class="muted" style="margin:0">Aucune invitation envoyée.</p>` : s.invitations.map(inv => {
+              const statusLabel = { pending: "En attente", accepted: "Acceptée", revoked: "Révoquée", expired: "Expirée" }[inv.display_status] || inv.display_status;
+              const statusVariant = { pending: "warning", accepted: "tertiary", revoked: "error", expired: "error" }[inv.display_status] || "";
+              return `<div class="user-row" data-token="${esc(inv.token)}">
+              <div class="meta"><div class="name">${esc(inv.email)}</div><div class="sub">${ROLE_LABEL_FR[inv.role] || inv.role} · ${chip(statusLabel, statusVariant)}</div></div>
+              ${inv.display_status === "pending" ? `<div class="role-edit">
+                <button class="btn btn-ghost btn-sm invite-resend" data-token="${esc(inv.token)}">Renvoyer</button>
+                <button class="btn btn-ghost btn-sm invite-revoke" data-token="${esc(inv.token)}">Révoquer</button>
+              </div>` : ""}
+            </div>`;
+            }).join("")}
+          </div>
         </div>
       </div>
     </aside>
@@ -1920,22 +1934,46 @@ function bindSettings() {
     await Store.logout();
     App.renderAuth("login", null, true);
   };
-  // Comptes : liste + ajout + suppression + changement de rôle (advanced only)
-  const addUser = document.getElementById("setAddUser");
-  if (addUser) addUser.onclick = async () => {
-    const uname = (document.getElementById("setNewUser")?.value || "").trim();
-    const email = (document.getElementById("setNewEmail")?.value || "").trim();
-    const pw = document.getElementById("setNewUserPw")?.value || "";
-    const role = (document.getElementById("setNewUserRole")?.value || "normal");
-    if (uname.length < 3) { snack("Identifiant 3 caractères minimum"); return; }
-    if (pw.length < 8) { snack("Mot de passe 8 caractères minimum"); return; }
+  // Comptes : liste + invitation + suppression + changement de rôle (advanced+)
+  const inviteBtn = document.getElementById("setInviteUser");
+  if (inviteBtn) inviteBtn.onclick = async () => {
+    const email = (document.getElementById("setInviteEmail")?.value || "").trim();
+    const role = (document.getElementById("setInviteRole")?.value || "normal");
+    if (!email || !email.includes("@")) { snack("Email invalide"); return; }
     try {
-      await Store.createUser(uname, email, pw, role);
-      snack("Compte créé" + (ROLE_LABEL_FR[role] ? " (" + ROLE_LABEL_FR[role] + ")" : ""));
-      await Store.loadUsers();
+      const r = await Store.inviteUser(email, role);
+      snack(r.email_sent ? "Invitation envoyée par email" : "Invitation créée (email non envoyé — SMTP non configuré, transmets le lien manuellement)");
+      document.getElementById("setInviteEmail").value = "";
+      await Store.loadInvitations();
       render();
     } catch (e) { snack(e.message || "Erreur"); }
   };
+  view.querySelectorAll(".invite-revoke").forEach(b => b.onclick = () => {
+    const token = b.dataset.token;
+    confirmAction({
+      title: "Révoquer cette invitation ?",
+      message: "Le lien envoyé par email ne fonctionnera plus.",
+      confirmLabel: "Révoquer",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          await Store.revokeInvitation(token);
+          snack("Invitation révoquée");
+          await Store.loadInvitations();
+          render();
+        } catch (e) { snack(e.message || "Erreur"); }
+      },
+    });
+  });
+  view.querySelectorAll(".invite-resend").forEach(b => b.onclick = async () => {
+    const token = b.dataset.token;
+    try {
+      await Store.resendInvitation(token);
+      snack("Invitation renvoyée (nouveau lien, l'ancien ne fonctionne plus)");
+      await Store.loadInvitations();
+      render();
+    } catch (e) { snack(e.message || "Erreur"); }
+  });
   view.querySelectorAll(".role-select").forEach(sel => sel.onchange = async () => {
     const id = sel.dataset.id;
     const newRole = sel.value;
@@ -3198,9 +3236,12 @@ function bind() {
 // Appelé UNE FOIS par main.js, jamais depuis render()/bind().
 function boot() {
   const resetToken = new URLSearchParams(location.search).get("reset");
+  const inviteToken = new URLSearchParams(location.search).get("invite");
   Store.loadSettings().then(() => {
     if (resetToken) {
       renderAuth("reset", resetToken);
+    } else if (inviteToken) {
+      renderAuth("invite", inviteToken);
     } else {
       Store.checkAuth().then((ok) => {
         if (!ok) renderAuth("login");
@@ -3220,6 +3261,7 @@ function boot() {
   Store.loadSettings();
   Store.loadTrash().catch(() => {});
   Store.loadUsers().catch(() => {});
+        Store.loadInvitations().catch(() => {});
   Store.startAutoRefresh(30000);
 }
 
@@ -3235,6 +3277,7 @@ function renderAuth(mode, token, force = false) {
     else if (mode === "mfa") overlay.innerHTML = viewMfa();
     else if (mode === "forgot") overlay.innerHTML = viewForgot();
     else if (mode === "reset") overlay.innerHTML = viewReset(token);
+    else if (mode === "invite") overlay.innerHTML = viewInvite(token);
     overlay.hidden = false;
     document.getElementById("app").style.display = "none";
     bindAuth(mode, token);
@@ -3362,6 +3405,40 @@ function viewReset(token) {
   </div>`;
 }
 
+// Écran public "définir mon mot de passe" (Phase 2, §4 du plan valide
+// 2026-08-19) — ouvert depuis le lien reçu par email, AUCUNE session requise
+// (la personne invitée n'a pas encore de compte). L'email/rôle affichés sont
+// chargés de façon asynchrone (bindAuth) : le formulaire est visible tout de
+// suite, avec un espace réservé le temps que /invitations/check réponde.
+function viewInvite(token) {
+  return `<div class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-mark">${icon("i-spark")}</div>
+      <h1 class="auth-title">Créer ton compte</h1>
+      <p class="auth-sub" id="inviteInfo">Vérification de l'invitation…</p>
+      <form id="authForm" autocomplete="off">
+        <label class="auth-field">Identifiant
+          <input class="text-input" id="inviteUser" type="text" autocomplete="username" placeholder="prenom.nom">
+        </label>
+        <label class="auth-field">Mot de passe
+          <span class="pw-wrap">
+            <input class="text-input" id="authNew" type="password" autocomplete="new-password" placeholder="••••••••">
+            <button type="button" class="pw-toggle" data-pw="authNew" aria-label="Afficher le mot de passe">${icon("i-eye")}</button>
+          </span>
+        </label>
+        <label class="auth-field">Confirmer
+          <span class="pw-wrap">
+            <input class="text-input" id="authNew2" type="password" autocomplete="new-password" placeholder="••••••••">
+            <button type="button" class="pw-toggle" data-pw="authNew2" aria-label="Afficher le mot de passe">${icon("i-eye")}</button>
+          </span>
+        </label>
+        <button class="btn btn-primary btn-block" id="authSubmit" type="submit">Créer mon compte</button>
+      </form>
+      <div class="auth-err" id="authErr"></div>
+    </div>
+  </div>`;
+}
+
 function bindPasswordToggles(root) {
   const scope = root || document;
   scope.querySelectorAll(".pw-toggle").forEach(btn => {
@@ -3412,6 +3489,7 @@ function bindAuth(mode, token) {
         overlay.hidden = true;
         document.getElementById("app").style.display = "";
         Store.loadUsers().catch(() => {});
+        Store.loadInvitations().catch(() => {});
         Store.loadSettings();
         render();
         snack("Connecté");
@@ -3434,6 +3512,7 @@ function bindAuth(mode, token) {
         overlay.hidden = true;
         document.getElementById("app").style.display = "";
         Store.loadUsers().catch(() => {});
+        Store.loadInvitations().catch(() => {});
         Store.loadSettings();
         render();
         snack(r.backupCodeUsed ? `Connecté (code de secours — ${r.backupCodesLeft} restant(s))` : "Connecté");
@@ -3467,6 +3546,34 @@ function bindAuth(mode, token) {
         setErr("");
         renderAuth("login", null, true);
         snack("Mot de passe réinitialisé. Connecte-toi.");
+      } catch (ex) { setErr(ex.message || "Erreur"); }
+    };
+  } else if (mode === "invite") {
+    const ROLE_LABEL_INVITE = { owner: "Propriétaire", advanced: "Administrateur", normal: "Éditeur", lecteur: "Lecteur" };
+    const info = overlay.querySelector("#inviteInfo");
+    const submitBtn = overlay.querySelector("#authSubmit");
+    Store.checkInvite(token).then(inv => {
+      if (info) info.textContent = `Tu es invité(e) à rejoindre KORA en tant que ${ROLE_LABEL_INVITE[inv.role] || inv.role} (${inv.email}).`;
+    }).catch(ex => {
+      if (info) info.textContent = "";
+      setErr(ex.message || "Invitation invalide ou expirée");
+      if (submitBtn) submitBtn.disabled = true;
+    });
+    if (form) form.onsubmit = async (e) => {
+      e.preventDefault();
+      setErr("");
+      const uname = overlay.querySelector("#inviteUser").value.trim();
+      const n1 = overlay.querySelector("#authNew").value;
+      const n2 = overlay.querySelector("#authNew2").value;
+      if (uname.length < 3) { setErr("Identifiant 3 caractères minimum"); return; }
+      if (n1.length < 8) { setErr("Le mot de passe doit faire au moins 8 caractères"); return; }
+      if (n1 !== n2) { setErr("Les mots de passe ne correspondent pas"); return; }
+      try {
+        await Store.acceptInvite(token, uname, n1);
+        history.replaceState(null, "", location.pathname);
+        setErr("");
+        renderAuth("login", null, true);
+        snack("Compte créé. Connecte-toi.");
       } catch (ex) { setErr(ex.message || "Erreur"); }
     };
   }

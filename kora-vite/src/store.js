@@ -25,6 +25,7 @@ export const Store = (() => {
     sources: [],
     sheet: null,
     trash: [],
+    invitations: [],       // invitations en attente/révoquées/acceptées (Phase 2)
     selection: {},        // { fact_id: true } — sélection multiple
     selectMode: false,    // mode sélection activé
     auth: { loggedIn: false, username: null, email: null, pending: true },
@@ -248,6 +249,49 @@ export const Store = (() => {
   async function setWpPublish(id, allowed) {
     const r = await api("/api/auth/users/wp-publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, allowed }) });
     if (r.ok) return true;
+    throw new Error(r.error || "Erreur");
+  }
+
+  // Invitations (Phase 2, §4 du plan valide 2026-08-19) — remplace la
+  // création directe de compte : la personne invitée choisit elle-même son
+  // mot de passe en acceptant, personne d'autre ne le connaît jamais.
+  async function inviteUser(email, role) {
+    const r = await api("/api/auth/invitations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, role }) });
+    if (r.ok) return r;
+    if (r.error === "email_invalide") throw new Error("Email invalide");
+    if (r.error === "role_invalide") throw new Error("Rôle invalide");
+    if (r.error === "reserve_aux_proprietaires") throw new Error("Réservé aux Propriétaires : seul un Propriétaire peut inviter en tant que Propriétaire");
+    throw new Error(r.error || "Erreur");
+  }
+  async function loadInvitations() {
+    const r = await api("/api/auth/invitations");
+    if (r.invitations) { setState({ invitations: r.invitations }); return r.invitations; }
+    return [];
+  }
+  async function revokeInvitation(token) {
+    const r = await api("/api/auth/invitations/revoke", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
+    if (r.ok) return true;
+    throw new Error(r.error || "Erreur");
+  }
+  async function resendInvitation(token) {
+    const r = await api("/api/auth/invitations/resend", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
+    if (r.ok) return true;
+    throw new Error(r.error || "Erreur");
+  }
+  // checkInvite/acceptInvite : PUBLIC (pas de session) -- ecran "definir mon
+  // mot de passe" ouvert depuis le lien recu par email.
+  async function checkInvite(token) {
+    const r = await api("/api/auth/invitations/check?token=" + encodeURIComponent(token));
+    if (r.email) return r;
+    throw new Error(r.error === "invitation_invalide_ou_expiree" ? "Invitation invalide ou expirée" : (r.error || "Erreur"));
+  }
+  async function acceptInvite(token, username, password) {
+    const r = await api("/api/auth/invitations/accept", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, username, password }) });
+    if (r.ok) return r;
+    if (r.error === "username_exists") throw new Error("Cet identifiant existe déjà");
+    if (r.error === "username_too_short") throw new Error("Identifiant trop court (3 min)");
+    if (r.error === "password_too_short") throw new Error("Mot de passe 8 caractères minimum");
+    if (r.error === "invitation_invalide_ou_expiree") throw new Error("Invitation invalide ou expirée — redemande une invitation");
     throw new Error(r.error || "Erreur");
   }
 
@@ -776,6 +820,7 @@ export const Store = (() => {
     checkAuth, login, logout, changePassword, saveAvatar, forgot, resetPassword,
     verifyLoginTotp, get2FAStatus, setup2FA, confirm2FA, disable2FA,
     loadUsers, createUser, setRole, deleteUser, setWpPublish,
+    inviteUser, loadInvitations, revokeInvitation, resendInvitation, checkInvite, acceptInvite,
     setSelectMode, toggleSelect, clearSelection, selectedIds,
     bulkAction, restoreFact, deleteForever, loadTrash, finishDraft,
     regenerate,

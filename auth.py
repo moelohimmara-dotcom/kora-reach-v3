@@ -331,6 +331,17 @@ def init():
             "CREATE TABLE IF NOT EXISTS kora_sessions ("
             "session_id TEXT PRIMARY KEY, user_id TEXT, expires_at TEXT)"
         )
+        # Invitations (Phase 2, 2026-08-19) : remplace la création directe de
+        # compte comme chemin normal (voir §4 du plan) — l'admin ne choisit
+        # plus jamais le mot de passe de quelqu'un d'autre. status :
+        # pending | accepted | revoked (expired se calcule depuis expires_at,
+        # pas stocké — évite un job de fond pour garder ça à jour).
+        cur.execute(
+            "CREATE TABLE IF NOT EXISTS kora_invitations ("
+            "token TEXT PRIMARY KEY, email TEXT, role TEXT, invited_by TEXT, "
+            "created_at TEXT, expires_at TEXT, status TEXT DEFAULT 'pending', "
+            "accepted_at TEXT, accepted_user_id TEXT)"
+        )
         con.commit()
     finally:
         con.close()
@@ -421,6 +432,190 @@ def add_user(username, password, email="", role="normal"):
         return {"ok": False, "error": "username_exists" if "unique" in str(e).lower() else str(e)}
     finally:
         con.close()
+
+
+# ----------------------------------------------------------------------------
+# Invitations (Phase 2, 2026-08-19) — voir §4 du plan de restructuration
+# roles/permissions valide : remplace la création directe de compte (l'admin
+# choisissait lui-même le mot de passe du nouveau compte) par un lien à usage
+# unique envoyé par email ; la personne invitée choisit ELLE-MÊME son mot de
+# passe en l'acceptant. Personne d'autre ne le connaît jamais.
+# ----------------------------------------------------------------------------
+INVITE_TTL_H = int(os.environ.get("KORA_INVITE_TTL_H", "72"))
+
+
+def create_invitation(email, role, invited_by):
+    """Crée une invitation à usage unique. `role` doit déjà avoir été validé
+    par l'appelant (Q2 : seul un Propriétaire peut inviter en tant que
+    Propriétaire — vérifié côté route, pas ici, même découpage que
+    set_role/delete_user pour les autres garde-fous)."""
+    if role not in ROLES:
+        return {"ok": False, "error": "role_invalide"}
+    email = (email or "").strip().lower()
+    if not email or "@" not in email:
+        return {"ok": False, "error": "email_invalide"}
+    token = _uid() + _uid()
+    now = datetime.now()
+    expires = (now + timedelta(hours=INVITE_TTL_H)).isoformat(timespec="seconds")
+    ph = db.placeholder()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(
+            f"INSERT INTO kora_invitations(token, email, role, invited_by, created_at, expires_at, status) "
+            f"VALUES({ph},{ph},{ph},{ph},{ph},{ph},'pending')",
+            (token, email, role, invited_by, now.isoformat(timespec="seconds"), expires),
+        )
+        con.commit()
+    finally:
+        con.close()
+    sent = _send_invite_email(email, token, role)
+    if not sent:
+        # Fail-closed comme forgot_password() : on loggue le lien pour que
+        # l'inviteur puisse le transmettre manuellement si le SMTP n'est pas
+        # configuré (dev local, ou panne SMTP ponctuelle).
+        print(f"[auth] INVITE LINK (SMTP non configuré): "
+              f"https://{os.environ.get('KORA_PUBLIC_HOST','213-156-135-139.sslip.io')}"
+              f"/kora-v2/?invite={token}")
+    return {"ok": True, "token": token, "email_sent": sent, "expires_at": expires}
+
+
+def list_invitations():
+    """Toutes les invitations, les plus récentes d'abord — le statut 'expired'
+    (calculé, pas stocké) est déterminé côté appelant en comparant expires_at
+    à maintenant, pour rester correct sans job de fond."""
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute("SELECT * FROM kora_invitations ORDER BY created_at DESC")
+        return [dict(r) for r in cur.fetchall()]
+    finally:
+        con.close()
+
+
+def revoke_invitation(token):
+    ph = db.placeholder()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(f"UPDATE kora_invitations SET status='revoked' WHERE token={ph} AND status='pending'", (token,))
+        con.commit()
+        return {"ok": True}
+    finally:
+        con.close()
+
+
+def resend_invitation(token):
+    """Régénère un nouveau jeton + une nouvelle expiration (72h) pour la même
+    invitation et renvoie l'email — l'ancien lien devient inutilisable."""
+    ph = db.placeholder()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(f"SELECT * FROM kora_invitations WHERE token={ph} AND status='pending'", (token,))
+        inv = cur.fetchone()
+        if not inv:
+            return {"ok": False, "error": "invitation_introuvable"}
+        inv = dict(inv)
+        new_token = _uid() + _uid()
+        expires = (datetime.now() + timedelta(hours=INVITE_TTL_H)).isoformat(timespec="seconds")
+        cur.execute(
+            f"UPDATE kora_invitations SET token={ph}, expires_at={ph} WHERE token={ph}",
+            (new_token, expires, token),
+        )
+        con.commit()
+    finally:
+        con.close()
+    sent = _send_invite_email(inv["email"], new_token, inv["role"])
+    if not sent:
+        print(f"[auth] INVITE LINK (SMTP non configuré): "
+              f"https://{os.environ.get('KORA_PUBLIC_HOST','213-156-135-139.sslip.io')}"
+              f"/kora-v2/?invite={new_token}")
+    return {"ok": True, "token": new_token, "email_sent": sent}
+
+
+def get_invitation(token):
+    """Retourne l'invitation si le jeton est valide (pending, non expiré),
+    None sinon — utilisé par l'écran 'définir mon mot de passe'."""
+    ph = db.placeholder()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(f"SELECT * FROM kora_invitations WHERE token={ph}", (token,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        inv = dict(row)
+        if inv.get("status") != "pending":
+            return None
+        if inv.get("expires_at") and datetime.now().isoformat(timespec="seconds") > inv["expires_at"]:
+            return None
+        return inv
+    finally:
+        con.close()
+
+
+def accept_invitation(token, username, password):
+    """Crée le compte avec le rôle défini par l'invitation, choisi et validé
+    par la personne invitée elle-même (identifiant + mot de passe) — jamais
+    par la personne qui a invité. Jeton à usage unique : consommé même en
+    cas d'échec de création (username déjà pris, etc.) pour éviter un
+    réessai automatisé en boucle sur le même lien."""
+    inv = get_invitation(token)
+    if not inv:
+        return {"ok": False, "error": "invitation_invalide_ou_expiree"}
+    username = (username or "").strip()
+    if len(username) < 3:
+        return {"ok": False, "error": "username_too_short"}
+    if len(password or "") < 8:
+        return {"ok": False, "error": "password_too_short"}
+    r = add_user(username, password, inv["email"], role=inv["role"])
+    if not r.get("ok"):
+        return r
+    ph = db.placeholder()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(
+            f"UPDATE kora_invitations SET status='accepted', accepted_at={ph}, accepted_user_id={ph} WHERE token={ph}",
+            (datetime.now().isoformat(timespec="seconds"), r["id"], token),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return {"ok": True, "id": r["id"], "role": inv["role"]}
+
+
+def _send_invite_email(to_addr, token, role):
+    host = os.environ.get("SMTP_HOST")
+    if not host:
+        return False
+    try:
+        port = int(os.environ.get("SMTP_PORT", "587"))
+        user = os.environ.get("SMTP_USER", "")
+        pw = os.environ.get("SMTP_PASS", "")
+        frm = os.environ.get("SMTP_FROM", user)
+        link = (f"https://{os.environ.get('KORA_PUBLIC_HOST','213-156-135-139.sslip.io')}"
+                f"/kora-v2/?invite={token}")
+        role_label = {"owner": "Propriétaire", "advanced": "Administrateur", "normal": "Éditeur", "lecteur": "Lecteur"}.get(role, role)
+        msg = MIMEText(
+            "Bonjour,\n\nVous êtes invité(e) à rejoindre KORA Reach en tant que "
+            f"{role_label}.\nCliquez sur ce lien pour créer votre compte "
+            f"(valable {INVITE_TTL_H}h) :\n{link}\n\n"
+            "Si vous ne vous attendiez pas à cette invitation, ignorez ce message.",
+            "plain", "utf-8")
+        msg["Subject"] = "Invitation à rejoindre KORA Reach"
+        msg["From"] = frm
+        msg["To"] = to_addr
+        with smtplib.SMTP(host, port, timeout=15) as s:
+            s.starttls()
+            if user and pw:
+                s.login(user, pw)
+            s.sendmail(frm, [to_addr], msg.as_string())
+        return True
+    except Exception as e:
+        print(f"[auth] SMTP error (invite): {e}")
+        return False
 
 
 def _get_user_by_username(username):

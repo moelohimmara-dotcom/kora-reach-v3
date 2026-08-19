@@ -57,6 +57,7 @@ CAPABILITIES = {
     "voir_transmetteur": "advanced",          # GET /api/settings/transmitter
     "gerer_droit_publication_wp": "advanced",  # POST /api/auth/users/wp-publish (déléguer à un Éditeur)
     "gerer_proprietaires": "owner",           # créer/rétrograder un Propriétaire — jamais un Administrateur
+    "gerer_invitations": "advanced",          # POST /api/auth/invitations (+ revoke/resend) — Phase 2
 }
 
 
