@@ -482,6 +482,16 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/seed_demo":
             if not self._require_capability("action_demo"):
                 return
+            # VERROU (2026-08-19) : ce endpoint écrit directement dans LAST_CYCLE
+            # (result/ts) SANS passer par le verrou fichier de reach_agent -> sans
+            # ce garde-fou, l'appeler pendant qu'un VRAI cycle tourne pouvait
+            # écraser silencieusement son résultat pour un observateur qui lirait
+            # /api/last entre-temps. Un cycle réel en cours doit être la seule
+            # chose que "Interrompre" peut affecter, jamais une action annexe.
+            with _LAST_LOCK:
+                if LAST_CYCLE["running"]:
+                    return self._send(429, {"error": "cycle_en_cours",
+                                            "detail": "Un cycle réel est en cours : la démo attendra sa fin."})
             # DEV/démo : injecte des faits cohérents (générés via la logique reconçue)
             # dans LAST_CYCLE pour peupler le dashboard HITL sans collecte réseau.
             # Imports locaux pour autonomie (évite dépendance aux imports de niveau module).
