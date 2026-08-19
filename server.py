@@ -609,9 +609,9 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0) or 0)
         if length:
             raw = self.rfile.read(length)
-        else:
-            # Aucun Content-Length (ex: Transfer-Encoding: chunked via proxy) :
-            # on lit tout ce qui arrive jusqu'à fermeture de la connexion.
+        elif (self.headers.get("Transfer-Encoding", "") or "").lower() == "chunked":
+            # Transfer-Encoding: chunked (proxy) sans Content-Length : seul cas
+            # legitime ou il reste un corps a lire sans longueur connue a l'avance.
             raw = b""
             try:
                 while True:
@@ -621,6 +621,16 @@ class Handler(BaseHTTPRequestHandler):
                     raw += chunk
             except Exception:
                 pass
+        else:
+            # Bug corrige 2026-08-19 (trouve en testant /api/cycle/cancel) :
+            # sans Content-Length NI Transfer-Encoding: chunked, la requete N'A
+            # PAS de corps (RFC 7230) -- le fallback "lire jusqu'a fermeture"
+            # ci-dessus BLOQUAIT INDEFINIMENT le thread sur une connexion
+            # keep-alive (rfile.read() attend un EOF qui ne vient jamais tant
+            # que le client, lui, attend une reponse). Reproduit avec un simple
+            # `curl -X POST url` sans -d (aucune donnee -> pas de Content-Length
+            # envoye par curl) : thread bloque pour de bon, jamais liberé.
+            raw = b""
         try:
             payload = json.loads(raw or b"{}")
         except Exception:
