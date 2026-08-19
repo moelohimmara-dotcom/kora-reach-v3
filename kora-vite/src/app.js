@@ -167,7 +167,11 @@ function evolutionChart(s) {
   // Axe X : labels de jours
   let xlabels = "";
   ordered.forEach((d, i) => {
-    const lbl = d.label && d.label.length > 10 ? d.label.slice(0, 6) : (d.label || "");
+    // Troncature + ellipse (au lieu d'une coupe brute sans indicateur, ex.
+    // "Aujourd'hui" -> "Aujour" ressemblait a un bug plutot qu'a un
+    // raccourci volontaire — corrige 2026-08-19).
+    const raw = d.label || "";
+    const lbl = raw.length > 10 ? raw.slice(0, 6) + "…" : raw;
     xlabels += `<text x="${x(i)}" y="${H - padY + 16}" class="ev-axis-x">${esc(lbl)}</text>`;
   });
 
@@ -643,7 +647,15 @@ function trashCard(f, s) {
   </article>`;
 }
 function viewTrash(s) {
-  const items = s.trash || [];
+  // /api/hitl/trash renvoie TOUS les TRASHED (avec d_status/decision joints,
+  // expres — voir list_trashed() cote backend) : au frontend de separer ceux
+  // dont la decision HITL est REJECTED, qui appartiennent a "Rejetés" (deja
+  // comptes ainsi dans s.stats.rejected/trash depuis le correctif 2026-08-19)
+  // -- meme regle que factCategory() pour les cartes de la vue Articles. Sans
+  // ce filtre, le titre "Corbeille (N)" affichait un nombre superieur au badge
+  // de la barre laterale (13 vs 10), ces articles etant deja comptes ailleurs.
+  const isRejectedDecision = (f) => f.rejected || f.decision === "REJECTED" || f.d_status === "REJECTED";
+  const items = (s.trash || []).filter(f => !isRejectedDecision(f));
   if (!items.length) return stateBox("i-trash", "Corbeille vide", "Les articles supprimés restent ici 11 jours, puis sont purgés automatiquement. Restaure-les ou supprime-les définitivement.", false);
   return `<div class="section-title">Corbeille (${items.length})</div>
     <p class="muted" style="margin-bottom:16px">Restauration possible pendant 11 jours. Au-delà, suppression définitive automatique.</p>
