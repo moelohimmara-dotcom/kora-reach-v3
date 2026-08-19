@@ -553,6 +553,18 @@ def write_article(fact: Dict, dry_run: bool = None) -> Dict:
         try:
             art = call_fn()
             if not art:
+                # _call_nvidia/_call_ollama_cloud avalent leurs exceptions en
+                # interne et rendent None plutôt que de lever (pour permettre
+                # la cascade vers le provider suivant) -> sans ceci, le
+                # disjoncteur (llm_circuit_fail) ne voyait jamais ces échecs
+                # individuels, seulement ceux qui s'échappaient jusqu'ici
+                # (tokenrouter/litellm, qui lèvent vraiment). Corrigé
+                # 2026-08-19 (diagnostic prod) : une réponse vide compte
+                # désormais comme un échec pour le disjoncteur au même titre
+                # qu'une exception -- le detail est déjà loggé côté provider
+                # ([LLM_NVIDIA_ERROR]/[LLM_NVIDIA_WARN]/[LLM_OLLAMA_ERROR]).
+                last_err = f"{model_name}: réponse vide"
+                llm_circuit_fail(last_err)
                 continue
             art = _finalize_article(art, fact, lt)
             llm_circuit_ok()
