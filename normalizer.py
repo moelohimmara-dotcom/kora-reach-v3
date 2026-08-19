@@ -62,6 +62,14 @@ def normalize_dates(published_at: str, cycle_start: datetime):
         return dt, "FUTURE", False   # date future -> anomalie
     if dt < lower:
         return dt, "STALE", False    # hors fenêtre 24h + grace
+    # Garde-fou explicite 2026-08-19 (demande directe : aucune information ne
+    # datant pas de l'actualité fraîche en cours ne doit être collectée).
+    # Redondant avec la fenêtre 24h ci-dessus dans l'immense majorité des cas
+    # (24h ne peut normalement pas franchir une frontière d'année), SAUF
+    # autour du 1er janvier -> couvre ce cas limite explicitement, et rend la
+    # règle "année en cours" vérifiable telle quelle plutôt qu'implicite.
+    if dt.year != cycle_start.year:
+        return dt, "STALE", False
     return dt, "OK", True
 
 

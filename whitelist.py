@@ -109,10 +109,11 @@ _SEED: List[WhitelistEntry] = [
     WhitelistEntry("france24_afrique", "France24 Afrique", "INTL",
         "https://www.france24.com/fr/afrique/rss", ("www.france24.com", "france24.com"),
         "rss", guinee_filter=True, responsible="edito"),
-    WhitelistEntry("google_news_guinee", "Google News Guinée", "INTL",
-        "https://news.google.com/rss/search?q=Guin%C3%A9e&hl=fr&gl=GN&ceid=GN:fr",
-        ("news.google.com",), "gnews", guinee_filter=True,
-        allowed_redirects=("news.google.com",), responsible="edito"),
+    # Google News Guinée retiré du seed le 2026-08-19 sur demande explicite
+    # (agrégateur, pas un média identifiable — republiait des articles sous
+    # une date fraîche alors que le contenu original pouvait être ancien).
+    # Voir retire de la base en prod via update_entry(status="retired") +
+    # migration idempotente _retire_google_news() plus bas.
 ]
 
 # Marqueur de génération de gouvernance (statique, PAS calculé depuis la base
@@ -161,6 +162,19 @@ def init():
                     (e.id, e.name, e.category, e.entry_url, json.dumps(list(e.allowed_domains)),
                      e.vector_primary, e.vector_secondary, json.dumps(list(e.allowed_redirects)),
                      "true" if e.guinee_filter else "false", e.responsible, e.version, e.status, now, now))
+            con.commit()
+        else:
+            # Migration idempotente 2026-08-19 : Google News banni sur
+            # demande explicite (agrégateur, pas un média guinéen vérifié —
+            # pouvait republier un article ancien sous une date fraîche).
+            # Ne touche que les bases déjà seedées (n>0) où l'entrée
+            # existe encore active ; sans effet si déjà retirée/absente.
+            p = _ph()
+            cur.execute(
+                f"UPDATE whitelist_sources SET status={p}, updated_at={p} "
+                f"WHERE id={p} AND status={p}",
+                ("retired", datetime.now().isoformat(timespec="seconds"),
+                 "google_news_guinee", "active"))
             con.commit()
     finally:
         con.close()
