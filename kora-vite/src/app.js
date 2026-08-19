@@ -260,12 +260,20 @@ function viewCockpit(s) {
         <section class="system-section sources-section" data-nav="sources" role="button" tabindex="0" aria-label="Voir la gouvernance des sources">
           <h2 class="section-title">Sources</h2>
           <div class="source-chips">
-            ${sources.length ? (() => {
+            ${(() => {
+              // Ce widget est un aperçu rapide des sources RÉELLEMENT utilisées
+              // pour la collecte, pas la page de gouvernance complète (qui, elle,
+              // liste tout y compris les sources suspendues/retirées -- voir
+              // viewSources). Une source retirée (ex: Google News, banni le
+              // 2026-08-19) n'a rien à faire ici : elle ne génère plus rien,
+              // l'afficher à l'identique des sources actives serait trompeur.
+              const activeOnly = sources.filter(s => (s.status || "active") === "active");
+              if (!activeOnly.length) return '<span class="source-chip empty">Aucune source</span>';
               // Guinee7 isolée en fin de liste (demande : séparée des autres sources)
-              const others = sources.filter(s => !/guin[ée]e?\\s*7/i.test(s.name || s.id || ""));
-              const guinee7 = sources.filter(s => /guin[ée]e?\\s*7/i.test(s.name || s.id || ""));
+              const others = activeOnly.filter(s => !/guin[ée]e?\\s*7/i.test(s.name || s.id || ""));
+              const guinee7 = activeOnly.filter(s => /guin[ée]e?\\s*7/i.test(s.name || s.id || ""));
               return [...others, ...guinee7].map(src => sourceStatusChip(src)).join("");
-            })() : '<span class="source-chip empty">Aucune source</span>'}
+            })()}
           </div>
         </section>
         <section class="system-section cycle-section">
