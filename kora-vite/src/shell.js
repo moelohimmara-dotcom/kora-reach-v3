@@ -169,9 +169,21 @@ export const SHELL = `
   </div>
 
   <div class="snackbar" id="snackbar" hidden></div>
-  <div class="global-loader" id="globalLoader" hidden>
-    <div class="wave"><i></i><i></i><i></i><i></i><i></i></div>
-    <span id="globalLoaderText">Agent en cours…</span>
+  <!-- Écran plein écran "cycle en cours" (wireframe 3.3 étendu) : animation
+       centrée + messages chaleureux personnifiés, fermable vers le bandeau
+       compact #cycleBanner sans interrompre le cycle en arrière-plan. -->
+  <div class="global-loader" id="globalLoader" hidden role="status" aria-live="polite">
+    <div class="gl-orb">
+      <span class="gl-orb-ring"></span>
+      <span class="gl-orb-ring gl-orb-ring-2"></span>
+      <span class="gl-orb-core">${ic("i-spark")}</span>
+    </div>
+    <div class="gl-text" id="globalLoaderText">Kora Agent explore les sources d'actualité…</div>
+    <div class="gl-patience" id="globalLoaderPatience" hidden>Ça prend un peu plus de temps que d'habitude — merci de patienter encore un instant.</div>
+    <div class="gl-actions">
+      <button class="btn btn-tonal" id="globalLoaderDismiss">Continuer à naviguer</button>
+      <button class="btn btn-outline" id="globalLoaderCancel">Interrompre</button>
+    </div>
   </div>
 
   <!-- Barre d'action de sélection multiple -->

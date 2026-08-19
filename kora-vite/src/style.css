@@ -624,7 +624,7 @@ html.icons-ready .material-icons { visibility: visible; }
    Cible les boutons de l'app, les selects de rôle et les pastilles de filtre. */
 .btn, .btn-primary, .btn-secondary, .btn-error, .btn-danger, .btn-tonal, .btn-ghost,
 .btn-danger-ghost, .btn-outline, .btn-sm, .role-select, .user-del, .filter-pill,
-.topbar-cta, .icon-btn, .fab-action, .quiz-ans, .settings-nav-item {
+.topbar-cta, .icon-btn, .fab-action, .settings-nav-item {
   min-height: var(--btn-h);
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   box-sizing: border-box; line-height: 1;
@@ -838,11 +838,46 @@ html.icons-ready .material-icons { visibility: visible; }
 }
 @keyframes snackin { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
-.global-loader { position: fixed; inset: 0; z-index: var(--z-loader); background: var(--md-sys-color-surface); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-4); color: var(--md-sys-color-on-surface); font-weight: 700; }
-.wave { display: flex; align-items: center; gap: 6px; height: 48px; }
-.wave i { width: 6px; height: 100%; background: linear-gradient(var(--coral), var(--bordeaux)); border-radius: 3px; animation: wave 1s ease-in-out infinite; }
-.wave i:nth-child(2){animation-delay:.1s}.wave i:nth-child(3){animation-delay:.2s}.wave i:nth-child(4){animation-delay:.3s}.wave i:nth-child(5){animation-delay:.4s}
-@keyframes wave { 0%,100%{transform:scaleY(.3)} 50%{transform:scaleY(1)} }
+/* Écran "cycle en cours" plein écran (wireframe 3.3 étendu, 2026-08-19) —
+   animation centrée équilibrée + message chaleureux personnifié, inspiré des
+   écrans d'attente des outils IA grand public (ChatGPT, Notion AI...) plutôt
+   qu'une barre de progression neutre. */
+.global-loader {
+  position: fixed; inset: 0; z-index: var(--z-loader);
+  background: color-mix(in srgb, var(--md-sys-color-surface) 96%, var(--coral) 4%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-5); padding: 32px; text-align: center;
+}
+.gl-orb { position: relative; width: 104px; height: 104px; display: grid; place-items: center; }
+.gl-orb-ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--coral) 55%, transparent);
+  animation: gl-pulse 2.6s ease-out infinite;
+}
+.gl-orb-ring-2 { animation-delay: 1.3s; }
+.gl-orb-core {
+  position: relative; z-index: 1; width: 56px; height: 56px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--coral), var(--bordeaux));
+  box-shadow: 0 0 32px color-mix(in srgb, var(--coral) 45%, transparent);
+  animation: gl-breathe 2.6s ease-in-out infinite;
+}
+.gl-orb-core .ic { width: 26px; height: 26px; color: #fff; }
+@keyframes gl-pulse {
+  0% { transform: scale(.85); opacity: .9; }
+  100% { transform: scale(1.55); opacity: 0; }
+}
+@keyframes gl-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gl-orb-ring { animation: none; opacity: .5; }
+  .gl-orb-core { animation: none; }
+}
+.gl-text { font-size: 17px; font-weight: 700; color: var(--md-sys-color-on-surface); max-width: 40ch; }
+.gl-patience { font-size: 13.5px; color: var(--md-sys-color-on-surface-variant); max-width: 38ch; }
+.gl-actions { display: flex; gap: 10px; margin-top: 4px; }
 
 /* ---- Sélection multiple + barre d'action ---- */
 .toolbar-row { display: flex; justify-content: flex-end; margin: 6px 2px 12px; }

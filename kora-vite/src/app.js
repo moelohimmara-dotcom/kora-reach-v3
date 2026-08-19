@@ -1299,6 +1299,48 @@ let _editingActive = false;
 // dans render()) — évite de reconstruire le HTML des Paramètres à chaque poll.
 let _lastRenderedRoute = null;
 
+// ============================================================================
+// ÉCRAN "CYCLE EN COURS" — plein écran chaleureux + repli en bandeau compact
+// (wireframe 3.3, étendu à la demande utilisateur du 2026-08-19 : messages
+// personnifiés façon "Kora Agent fait X…", à la manière des écrans d'attente
+// des outils IA grand public, plutôt qu'une barre de progression neutre).
+// ============================================================================
+const CYCLE_MESSAGES = [
+  "Kora Agent explore les sources d'actualité…",
+  "Kora Agent trie les informations les plus fraîches…",
+  "Kora Agent rédige l'article…",
+  "Kora Agent choisit le visuel qui correspond le mieux…",
+  "Kora Agent relit et peaufine les derniers détails…",
+];
+const CYCLE_PATIENCE_MS = 45000; // au-delà, message de patience supplémentaire
+let _wasBusy = false;
+let _loaderDismissed = false;
+let _cycleMsgTimer = null;
+let _cycleMsgIdx = 0;
+let _cycleStartedAt = 0;
+function updateCycleMessage() {
+  const msg = CYCLE_MESSAGES[_cycleMsgIdx % CYCLE_MESSAGES.length];
+  _cycleMsgIdx++;
+  const glText = document.getElementById("globalLoaderText");
+  if (glText) glText.textContent = msg;
+  const cbText = document.getElementById("cycleBannerText");
+  if (cbText) cbText.textContent = msg;
+  const patience = document.getElementById("globalLoaderPatience");
+  if (patience) patience.hidden = (Date.now() - _cycleStartedAt) < CYCLE_PATIENCE_MS;
+}
+function startCycleMessages() {
+  _cycleMsgIdx = 0;
+  _cycleStartedAt = Date.now();
+  _loaderDismissed = false;
+  updateCycleMessage();
+  clearInterval(_cycleMsgTimer);
+  _cycleMsgTimer = setInterval(updateCycleMessage, 5000);
+}
+function stopCycleMessages() {
+  clearInterval(_cycleMsgTimer);
+  _cycleMsgTimer = null;
+}
+
 function renderSheet(s) {
   _editingActive = false;
   const sh = s.sheet;
@@ -2193,24 +2235,34 @@ function render() {
   }
   const amDot = document.querySelector("#agentStatus .dot");
   if (amDot) amDot.className = "dot " + (busy ? "dot-busy" : (s.health && s.health.status === "error" ? "dot-err" : "dot-ready"));
+  // Écran plein écran chaleureux (wireframe 3.3, étendu à la demande) +
+  // bandeau compact de repli. Transition busy=false->true : (ré)affiche le
+  // plein écran et relance la rotation de messages. busy=true->false : coupe
+  // tout, réinitialise l'état "fermé" pour le prochain cycle.
+  if (busy && !_wasBusy) startCycleMessages();
+  if (!busy && _wasBusy) stopCycleMessages();
+  _wasBusy = busy;
   const gl = document.getElementById("globalLoader");
-  if (gl) {
-    const t = document.getElementById("globalLoaderText");
-    if (t) t.textContent = s.ui.overlay || "Agent en cours…";
-  }
-  // Bandeau cycle en cours (wireframe 3.3) : étape + progression + interruption.
   const cb = document.getElementById("cycleBanner");
-  if (cb) {
-    cb.hidden = !busy;
-    const cbText = document.getElementById("cycleBannerText");
-    if (cbText) cbText.textContent = s.ui.overlay || "Collecte des sources whitelist…";
-    const cbCancel = document.getElementById("cycleBannerCancel");
-    if (cbCancel) cbCancel.onclick = () => confirmAction({
+  if (gl) gl.hidden = !(busy && !_loaderDismissed);
+  if (cb) cb.hidden = !(busy && _loaderDismissed);
+  if (busy) {
+    const glDismiss = document.getElementById("globalLoaderDismiss");
+    if (glDismiss) glDismiss.onclick = () => {
+      _loaderDismissed = true;
+      if (gl) gl.hidden = true;
+      if (cb) cb.hidden = false;
+    };
+    const cancelHandler = () => confirmAction({
       title: "Interrompre le cycle ?",
       message: "L'arrêt survient après l'article en cours, pas instantanément.",
       confirmLabel: "Interrompre",
       onConfirm: () => Store.cancelCycle(),
     });
+    const glCancel = document.getElementById("globalLoaderCancel");
+    if (glCancel) glCancel.onclick = cancelHandler;
+    const cbCancel = document.getElementById("cycleBannerCancel");
+    if (cbCancel) cbCancel.onclick = cancelHandler;
   }
   // Ne pas ré-exécuter renderSheet pendant l'édition (sinon le poll périodique
   // écrase le brouillon en cours) — sauf si le panneau a été fermé entre-temps
