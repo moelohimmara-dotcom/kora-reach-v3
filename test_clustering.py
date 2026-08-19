@@ -24,7 +24,7 @@ items = [
      "source_level": 1, "source": "Mosaique"},
 ]
 
-clusters = cluster(items, thr=0.5)
+clusters = cluster(items)  # seuil par defaut (0.35, Jaccard reel — voir clusterer.py)
 assert len(clusters) == 2, f"ERREUR: {len(clusters)} clusters (attendu 2)"
 c = clusters[0]
 assert len(c) == 3, f"ERREUR: le fait match n'a fusionné que {len(c)} sources"

@@ -1,12 +1,31 @@
-"""clusterer.py — fingerprint + clustering par sujet (sans LLM)."""
+"""clusterer.py — fingerprint + clustering par sujet (sans LLM).
+
+Refonte 2026-08-19 (diagnostic P0 §1) : l'ancienne version comparait des
+ensembles d'entités tronqués arbitrairement aux 5 premiers (ordre alphabétique
+-> perdait des entités distinctives comme des noms de joueurs) et divisait par
+min(len(a), len(b)) au lieu de l'union -> un article pouvait être "similaire à
+100%" simplement parce qu'il était un sous-ensemble d'un autre, même sur un
+fait totalement différent (deux articles guinéens partagent quasi toujours
+"guinée"/"conakry"). Corrections apportées :
+  1. Comparaison sur l'ENSEMBLE COMPLET des entités (plus de cap arbitraire).
+  2. Vrai indice de Jaccard (intersection / union), pas intersection / min.
+  3. Plancher absolu (>=2 entités partagées) pour éviter qu'un seul mot
+     générique commun ("guinée") ne suffise à fusionner deux faits distincts.
+  4. Nettoyage des artefacts de regex sur les titres à tiret ("Mali-Guinée"
+     capturait auparavant "mali-" au lieu de "mali").
+"""
 import re
-from collections import defaultdict
 
 # Mots porteurs : noms propres (capitalisés) + entités Guinée + scores
 _STOP = set("la le les un une des du de ce sa se au en à par pour sur dans avec "
             "des son sa ses leur leurs que qui quoi dont comme buts deux trois "
             "score final face face au équipe équipes match amical première mi temps "
             "public nombreux spectateurs stade septembre samedi dimanche".split())
+
+# Plancher absolu d'entités communes exigé pour fusionner (indépendant du ratio
+# Jaccard) : évite qu'un seul mot générique partagé ("guinée", "conakry", quasi
+# toujours présent dans ce corpus) suffise à fusionner deux faits distincts.
+_MIN_SHARED_ENTITIES = 2
 
 def _entities(text: str) -> set:
     """Extrait les tokens distinctifs : noms propres et entités Guinée.
@@ -15,8 +34,11 @@ def _entities(text: str) -> set:
     toks = set()
     # noms propres : Majuscule + minuscules (ex. Sylla, Conakry, Mali)
     for m in re.findall(r"\b[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ'-]+\b", text):
-        ml = m.lower()
-        if ml not in _STOP:
+        # strip("-'") : "Mali-Guinée" fait matcher "Mali-" (tiret capturé en
+        # fin de token car autorisé dans la classe de caractères) -> sans ce
+        # nettoyage "mali-" != "mali" et le lien avec les autres items est perdu.
+        ml = m.lower().strip("-'")
+        if len(ml) > 1 and ml not in _STOP:
             toks.add(ml)
     # scores sportifs type 2-1 / 3-0
     for m in re.findall(r"\b\d-\d\b", text):
@@ -30,43 +52,43 @@ def _entities(text: str) -> set:
     return toks
 
 def fingerprint(text: str, n: int = 5) -> str:
-    """Empreinte = entités distinctives triées (pas tous les mots)."""
+    """Empreinte lisible = n entités distinctives triées (usage log/debug
+    uniquement — la comparaison de similarité utilise l'ensemble complet)."""
     return " ".join(sorted(_entities(text))[:n])
 
-def _sim_entities(a: str, b: str) -> float:
-    sa, sb = _entities(a), _entities(b)
-    if not sa or not sb:
+def _sim(es: set, c_union: set) -> float:
+    """Vrai indice de Jaccard : intersection / union (pas / min)."""
+    if not es or not c_union:
         return 0.0
-    return len(sa & sb) / min(len(sa), len(sb))  # Jaccard sur le plus petit
+    inter = es & c_union
+    if len(inter) < _MIN_SHARED_ENTITIES:
+        return 0.0
+    return len(inter) / len(es | c_union)
 
-def _ent_set(text: str, n: int = 5) -> set:
-    """Ensemble réduit (n) d'entités distinctives — pour comparaison de similarité."""
-    return set(sorted(_entities(text))[:n])
+def _key_of(it: dict) -> str:
+    return it["title"] + " " + it.get("raw_content", "")[:300]
 
-def cluster(items: list, thr: float = 0.5) -> list:
+def cluster(items: list, thr: float = 0.35) -> list:
     """Regroupe les items par ENTITÉS communes (même fait). 1 fait = 1 cluster.
-    Seuil 0.5 : partage >=50% des entités distinctives = même sujet.
-    Compare les ensembles réduits d'entités (pas le texte brut, qui dilue).
-    CORRECTION : compare le nouvel item contre l'UNION des entités de TOUS les
-    membres du cluster (pas seulement le premier), pour un regroupement correct."""
-    clusters = []
+    Compare le nouvel item contre l'UNION des entités de TOUS les membres du
+    cluster (pas seulement le premier), avec un vrai Jaccard (intersection sur
+    union) et un plancher absolu d'entités partagées (voir _MIN_SHARED_ENTITIES).
+    Seuil par défaut abaissé (0.5 -> 0.35) car un Jaccard sur union est
+    structurellement plus strict qu'un Jaccard sur min (l'ancien calcul)."""
+    clusters = []       # list[list[item]]
+    cluster_ents = []   # union d'entités courante, parallèle à `clusters`
     for it in items:
-        key = it["title"] + " " + it.get("raw_content", "")[:300]
-        es = _ent_set(key)
+        es = _entities(_key_of(it))
         placed = False
-        for c in clusters:
-            # Union des entités de tous les membres du cluster
-            c_union = set()
-            for cm in c:
-                cmkey = cm["title"] + " " + cm.get("raw_content", "")[:300]
-                c_union |= _ent_set(cmkey)
-            denom = min(len(es), len(c_union)) or 1
-            if len(es & c_union) / denom >= thr:
-                c.append(it)
+        for idx, c_union in enumerate(cluster_ents):
+            if _sim(es, c_union) >= thr:
+                clusters[idx].append(it)
+                cluster_ents[idx] = c_union | es
                 placed = True
                 break
         if not placed:
             clusters.append([it])
+            cluster_ents.append(es)
     return clusters
 
 def score_item(it: dict) -> float:
