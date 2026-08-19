@@ -1200,7 +1200,11 @@ html.icons-ready .material-icons { visibility: visible; }
   .cockpit-grid.stats-row { grid-template-columns: repeat(4, 1fr); }
 }
 @media (min-width: 900px) {
-  .cockpit-grid.system-row { grid-template-columns: repeat(3, 1fr); }
+  /* 2 sections depuis le retrait du bloc "Santé système" (2026-08-19,
+     déplacé exclusivement dans la Console Root) : Sources + Contrôle cycle
+     se partagent la largeur à parts égales plutôt que de laisser un vide
+     à la place du 3e bloc retiré. */
+  .cockpit-grid.system-row { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* StatCard — Variantes & états */
@@ -1282,15 +1286,6 @@ html.icons-ready .material-icons { visibility: visible; }
 .system-section { background: var(--neu-base); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-border-strong); border-radius: var(--radius-lg); padding: var(--space-4); box-shadow: var(--glass-shadow); }
 .section-title { margin: 0 0 var(--space-3); font-family: var(--font-display); font-size: var(--t-title-md); font-weight: 700; color: var(--md-sys-color-on-surface); }
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin: 0 0 var(--space-3); }
-.health-pill { display: flex; flex-direction: column; gap: var(--space-2); }
-.health-pill.loading { min-height: 60px; }
-.health-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.health-item { font-size: var(--t-label-sm); font-weight: 600; padding: var(--space-2) var(--space-3); border-radius: var(--radius-pill); background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--md-sys-color-on-surface-variant); white-space: nowrap; }
-.health-item.free { background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); border-color: transparent; }
-.health-item.busy { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); border-color: transparent; }
-.health-item.ok { background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); border-color: transparent; }
-.health-item.degraded { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); border-color: transparent; }
-.health-item.version { font-family: var(--font-mono); font-size: var(--t-label-xs); background: var(--glass-bg); color: var(--md-sys-color-on-surface-variant); }
 
 /* Source Chips */
 .source-chips { display: flex; flex-direction: column; gap: var(--space-2); }
@@ -1343,8 +1338,6 @@ html.icons-ready .material-icons { visibility: visible; }
   .stat-value { font-size: 1.375rem; } /* 22px (~0.69x desktop, affinage suite feedback 'trop gros') */
   .stat-label { font-size: 12px; }     /* 12px (ratio desktop, plancher lisible) */
   .stat-icon { width: 18px; height: 18px; display: block; margin: 0 auto 16px; align-self: center; }
-  .health-row { flex-direction: column; }
-  .health-item { text-align: center; }
   .cycle-actions { flex-direction: column; }
   .cycle-actions md-filled-button,
   .cycle-actions md-outlined-button { width: 100%; }

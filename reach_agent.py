@@ -232,20 +232,34 @@ class ReachAgent:
                                 rejected_intl += 1
                                 log(cid, "REJECT_INTL", f"{motif} | {n['title'][:60]}", "")
                                 continue
-                        if n.get("date_status") in ("UNRELIABLE", "FUTURE"):
+                        if n.get("date_status") in ("UNRELIABLE", "FUTURE", "OLD_YEAR"):
                             anomalies += 1
                             log(cid, "DATE_ANOMALY", f"{n['date_status']} | {n['url'][:80]}", "")
                         items.append(n)
 
             actual = [i for i in items if i.get("actual")]
             stale = [i for i in items if not i.get("actual")]
-            # FENETRE STRICTE 24h — NEVER d'elargissement a 48h/72h.
-            # Un article n'est genere QUE si une source a publie une info
-            # FRAICHE (< 24h). Sinon : on n'invente rien et on l'informe.
-            pool = actual
-            forced_stale = False
+            # FENETRE STRICTE 24h — NEVER d'elargissement a 48h/72h EN USAGE
+            # NORMAL (automatique). Un article n'est genere QUE si une source
+            # a publie une info FRAICHE (< 24h). Sinon : on n'invente rien et
+            # on l'informe.
+            #
+            # Bouton "Forcer (hors 24h)" (2026-08-19, activé sur demande
+            # explicite — était accepté par l'API mais jamais lu ici, donc
+            # sans aucun effet) : action MANUELLE et volontaire d'un compte
+            # advanced+, bypass UNIQUEMENT la fenêtre glissante de 24h
+            # (status "STALE") — jamais les anomalies FUTURE/UNRELIABLE
+            # (dates absentes ou incohérentes -> qualité de donnée douteuse,
+            # jamais publiable) ni OLD_YEAR (info d'une année révolue -> irait
+            # à l'encontre de la règle de fraîcheur "actualité 2026" demandée
+            # par ailleurs). Chaque fact issu de ce bypass est marqué
+            # forced_stale=True (voir plus bas) pour rester visible/traçable
+            # dans l'UI ("Hors fenêtre 48h").
+            bypassable_stale = [i for i in items if i.get("date_status") == "STALE"] if force else []
+            pool = actual + bypassable_stale
             log(cid, "COLLECT_DONE",
-                f"items={len(items)} actual={len(actual)} rejected_intl={rejected_intl} anomalies={anomalies}")
+                f"items={len(items)} actual={len(actual)} force={force} bypassed_stale={len(bypassable_stale)} "
+                f"rejected_intl={rejected_intl} anomalies={anomalies}")
 
             if not pool:
                 # Aucune source n'a publie d'info fraiche dans les 24h.
@@ -334,7 +348,12 @@ class ReachAgent:
                     break
                 CYCLE_PROGRESS["current"] = idx + 1
                 champ, ctx = pick_champion(c)
-                fact = {"champion": champ, "contexts": ctx, "n_sources": len(c), "forced_stale": forced_stale, "cycle_id": cid}
+                # Par fact, pas globalement au cycle : seul un item réellement
+                # bypassé (STALE, jamais présent hors "Forcer") doit porter le
+                # tag "Hors fenêtre 48h" -- un cycle forcé peut très bien
+                # mélanger des faits frais normaux et des faits bypassés.
+                fact_forced_stale = champ.get("date_status") == "STALE"
+                fact = {"champion": champ, "contexts": ctx, "n_sources": len(c), "forced_stale": fact_forced_stale, "cycle_id": cid}
                 written = write_article(fact)
                 fact["article"] = written["article"]
                 fact["image"] = written["image"]
