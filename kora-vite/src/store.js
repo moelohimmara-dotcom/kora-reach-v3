@@ -8,7 +8,14 @@ const BASE = "/kora-v2";  // nginx route /kora-v2/api -> backend Python (port 87
 export const Store = (() => {
   const state = {
     route: "cockpit",
-    ui: { loading: false, error: null, busy: false, overlay: null, theme: "dark", rail: "expanded", factFilter: "all" },
+    // busy : indicateur GÉNÉRIQUE (petit statut "agent occupé" dans le topbar) —
+    // posé par TOUTE action en cours (suppression, décision, restauration...).
+    // cycleBusy : vrai UNIQUEMENT pendant un cycle de génération (startCycle) —
+    // c'est lui qui pilote l'écran plein écran #globalLoader/#cycleBanner.
+    // Bug corrigé 2026-08-19 : le loader plein écran lisait "busy" (générique)
+    // au lieu de "cycleBusy" -> une simple suppression déclenchait l'écran
+    // "Kora Agent explore les sources..." alors qu'aucun cycle n'était lancé.
+    ui: { loading: false, error: null, busy: false, cycleBusy: false, overlay: null, theme: "dark", rail: "expanded", factFilter: "all" },
     health: null,
     lastCycle: null,
     facts: [],
@@ -359,19 +366,19 @@ export const Store = (() => {
   // LOGIQUE-METIER-REACH.md §7). force : ignore la fenêtre 24h.
   // Signature objet (et non positionnelle) pour éviter les appels ambigus.
   async function startCycle({ demand, force = false } = {}) {
-    setState({ ui: { ...state.ui, busy: true, overlay: force ? "Génération forcée (hors fenêtre 24h)…" : "Collecte des sources whitelist…", progress: null } });
+    setState({ ui: { ...state.ui, busy: true, cycleBusy: true, overlay: force ? "Génération forcée (hors fenêtre 24h)…" : "Collecte des sources whitelist…", progress: null } });
     try {
       await api("/api/cycle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ demand, force }) });
       for (let i = 0; i < 120; i++) {
         await wait(3000);
         const r = await api("/api/last");
         const p = r.progress || null;
-        setState({ lastCycle: r, ui: { ...state.ui, busy: true, progress: p } });
+        setState({ lastCycle: r, ui: { ...state.ui, busy: true, cycleBusy: true, progress: p } });
         if (!r.running && r.result) {
           // Recharge depuis l'API HITL (facts avec fact_id valide) plutôt que
           // r.result.facts (sans fact_id) -> sinon le clic carte casse.
           await loadHITL();
-          setState({ lastCycle: r, ui: { ...state.ui, busy: false, overlay: null, progress: null } });
+          setState({ lastCycle: r, ui: { ...state.ui, busy: false, cycleBusy: false, overlay: null, progress: null } });
           return;
         }
         const label = p && p.total > 0
@@ -379,8 +386,8 @@ export const Store = (() => {
           : "Cycle en cours… (" + i * 3 + "s)";
         setState({ ui: { ...state.ui, overlay: label, progress: p } });
       }
-      setState({ ui: { ...state.ui, busy: false, overlay: null, progress: null } });
-    } catch (e) { setState({ ui: { ...state.ui, busy: false, overlay: null, progress: null, error: e.message } }); }
+      setState({ ui: { ...state.ui, busy: false, cycleBusy: false, overlay: null, progress: null } });
+    } catch (e) { setState({ ui: { ...state.ui, busy: false, cycleBusy: false, overlay: null, progress: null, error: e.message } }); }
   }
   async function seed() {
     // Le backend n'expose pas /api/seed_demo ; on lance un cycle de démo
