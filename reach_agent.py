@@ -470,7 +470,16 @@ class ReachAgent:
                 fact_forced_stale = champ.get("date_status") == "STALE"
                 fact = {"champion": champ, "contexts": ctx, "n_sources": len(c), "forced_stale": fact_forced_stale, "cycle_id": cid}
                 _t0 = datetime.now(TZ).timestamp()
-                written = write_article(fact)
+                # Bug corrige 2026-08-19 (rapporte : "Interrompre" restait
+                # sans effet plusieurs minutes) : avant ce correctif, le SEUL
+                # point de controle de CANCEL_FLAG etait ici, ENTRE deux
+                # articles -- avec ~400s/article en moyenne observes en prod
+                # (jusqu'a 4 appels LLM sequentiels par article), un clic sur
+                # "Interrompre" pendant la generation de l'article en cours
+                # n'avait litteralement AUCUN effet avant que celui-ci ne
+                # finisse. should_cancel est revérifié entre CHAQUE passe LLM
+                # a l'interieur de write_article() (voir writer.py).
+                written = write_article(fact, should_cancel=lambda: CANCEL_FLAG["requested"])
                 _elapsed = datetime.now(TZ).timestamp() - _t0
                 # Alimente l'estimation de temps affichée au lancement d'un
                 # cycle (2026-08-19, demande explicite) : moyenne mobile
@@ -481,6 +490,17 @@ class ReachAgent:
                     pass
                 _CYCLE_ELAPSED["done"] += 1
                 _update_progress_eta()
+                # Annulation detectee EN COURS de generation (status="cancelled",
+                # voir writer.py) : written["article"] est vide, ce fact n'a
+                # aucun contenu publiable -> on ne l'ajoute PAS a facts (un
+                # article vide dans les resultats serait pire qu'un article en
+                # moins) et on sort de la boucle immediatement, sans attendre
+                # le prochain tour (CANCEL_FLAG deja consomme ici, pas besoin
+                # que le garde-fou en tete de boucle le refasse).
+                if written.get("status") == "cancelled":
+                    CANCEL_FLAG["requested"] = False
+                    log(cid, "CYCLE_CANCEL", "annulation prise en compte en cours d'article", action="CYCLE")
+                    break
                 fact["article"] = written["article"]
                 fact["image"] = written["image"]
                 fact["gen_model"] = written["model"]

@@ -3271,6 +3271,23 @@ function bind() {
 // Boot unique : chargement initial + auth + routing + auto-refresh.
 // Appelé UNE FOIS par main.js, jamais depuis render()/bind().
 function boot() {
+  // Reprise optimiste (2026-08-19, bug rapporté : retour d'un onglet resté
+  // longtemps en arrière-plan -> la page, rechargée entièrement par le
+  // navigateur [Chrome décharge les onglets inactifs sous pression mémoire],
+  // s'affichait un instant SANS l'écran de progression avant que
+  // resumeCycleWatch() [aller-retour réseau] ne le rétablisse -- perçu comme
+  // "revenu au tableau de bord puis reparti en génération", plusieurs fois de
+  // suite sur un onglet qui se fait décharger à répétition). Lu de façon
+  // SYNCHRONE, avant même que Store.state.route ne soit résolu ci-dessous :
+  // si un cycle tournait avant ce rechargement, l'écran de progression
+  // s'affiche PAR ANTICIPATION dès le tout premier rendu, sans attendre la
+  // confirmation réseau. resumeCycleWatch() (plus bas) corrige ensuite si le
+  // cycle s'est en réalité terminé entre-temps.
+  if (Store.wasCycleActiveBeforeLoad()) {
+    Store.state.ui.cycleBusy = true;
+    Store.state.ui.busy = true;
+    Store.state.ui.overlay = "Reconnexion au cycle en cours…";
+  }
   const resetToken = new URLSearchParams(location.search).get("reset");
   const inviteToken = new URLSearchParams(location.search).get("invite");
   Store.loadSettings().then(() => {
