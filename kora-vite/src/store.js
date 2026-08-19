@@ -545,10 +545,21 @@ export const Store = (() => {
   // le backend génère TOUS les faits frais et uniques du cycle, voir
   // LOGIQUE-METIER-REACH.md §7). force : ignore la fenêtre 24h.
   // Signature objet (et non positionnelle) pour éviter les appels ambigus.
+  // Fenêtre "requête de lancement en vol" (2026-08-19, revue de code) :
+  // entre le clic et la réponse du serveur à POST /api/cycle, ce dernier n'a
+  // pas encore forcément enregistré running=true -- si resumeCycleWatch()
+  // (déclenché toutes les 30s ou à chaque retour au premier plan, ex.
+  // l'utilisateur change d'onglet juste après avoir cliqué) interroge
+  // /api/last pile dans cette fenêtre, il verrait à tort running=false et
+  // effacerait l'état optimiste que startCycle() vient de poser -> flash de
+  // l'écran de progression juste après son apparition.
+  let _startingCycle = false;
   async function startCycle({ demand, force = false } = {}) {
+    _startingCycle = true;
     setState({ ui: { ...state.ui, busy: true, cycleBusy: true, overlay: force ? "Génération forcée (hors fenêtre 24h)…" : "Collecte des sources whitelist…", progress: null, launchEstimate: null } });
     try {
       const started = await api("/api/cycle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ demand, force }) });
+      _startingCycle = false;
       if (started && started.error) {
         // cycle_en_cours (un cycle tourne déjà, p.ex. lancé avant un F5) :
         // pas une vraie erreur -> on se raccorde simplement à CE cycle réel
@@ -565,6 +576,7 @@ export const Store = (() => {
         setState({ ui: { ...state.ui, launchEstimate: started.estimate } });
       }
     } catch (e) {
+      _startingCycle = false;
       setState({ ui: { ...state.ui, busy: false, cycleBusy: false, overlay: null, progress: null, error: e.message } });
       return;
     }
@@ -579,7 +591,44 @@ export const Store = (() => {
   async function resumeCycleWatch() {
     try {
       const r = await api("/api/last");
-      if (r && r.running) _watchCycle();
+      if (r && r.running) {
+        _watchCycle();
+      } else if (state.ui.cycleBusy && !_startingCycle) {
+        // Bug corrigé (revue de code 2026-08-19, trouvé avant mise en prod,
+        // en 2 passes) :
+        // 1) le marqueur optimiste posé par boot() ("Reconnexion au cycle en
+        //    cours…", voir wasCycleActiveBeforeLoad) peut rester vrai à tort
+        //    si _watchCycle() n'a jamais eu la chance de le nettoyer
+        //    normalement (onglet fermé/tué en dur pendant un cycle, crash) --
+        //    sans correction ici, rien d'autre ne le fait, et l'écran
+        //    "Reconnexion..." resterait affiché indéfiniment à CHAQUE
+        //    chargement, jusqu'à ce que l'utilisateur relance un cycle.
+        // 2) MAIS resumeCycleWatch() est aussi appelé toutes les 30s
+        //    (startAutoRefresh) et à chaque retour au premier plan de
+        //    l'onglet, pas seulement au boot -- corriger ui.busy/overlay
+        //    SANS CONDITION aurait pu écraser l'indicateur d'une action SANS
+        //    RAPPORT en cours au même instant (decide/retract/restore...,
+        //    qui posent aussi ui.busy/overlay). Le `else if (state.ui.
+        //    cycleBusy)` limite la correction au SEUL cas où l'UI croit
+        //    ACTUELLEMENT qu'un cycle tourne alors que le serveur dit le
+        //    contraire -- jamais touché si cycleBusy est déjà faux (ui.busy
+        //    générique laissé intact pour toute autre action).
+        // 3) `!_startingCycle` : ferme une 2e fenêtre de course -- entre le
+        //    clic sur "Lancer un cycle" et la réponse du serveur à
+        //    POST /api/cycle, ce dernier peut ne pas avoir ENCORE enregistré
+        //    running=true. Si resumeCycleWatch() interroge /api/last pile
+        //    dans cette fenêtre (ex. l'utilisateur change d'onglet juste
+        //    après avoir cliqué), il verrait à tort running=false et
+        //    effacerait l'état optimiste que startCycle() vient de poser --
+        //    flash de l'écran de progression juste après son apparition.
+        // `lastCycle: r` (comme _watchCycle() à sa propre sortie) : sans ça,
+        // state.lastCycle pouvait rester bloqué sur un {running:true} perimé
+        // d'un poll precedent, ce qui aurait laisse les boutons du panneau
+        // "Contrôle cycle" (app.js, cycleControl()/lastCycle?.running)
+        // grisés à tort malgré cycleBusy correctement remis à false ici.
+        _clearCycleActive();
+        setState({ lastCycle: r, ui: { ...state.ui, busy: false, cycleBusy: false, overlay: null, progress: null } });
+      }
     } catch (e) { /* silencieux : un échec ici ne doit jamais bloquer le boot */ }
   }
   // Interruption d'un cycle en cours (wireframe 3.3). Coopérative côté backend
