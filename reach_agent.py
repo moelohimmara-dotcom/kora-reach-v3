@@ -246,26 +246,47 @@ class ReachAgent:
                 seen_urls.add(uh); seen_titles.append(i["title"])
                 uniq.append(i)
 
+            if not uniq:
+                # Le pool "frais" (<24h) n'est pas vide, mais TOUT a deja ete
+                # traite lors d'un cycle precedent aujourd'hui (dedup inter-
+                # cycles). Regle metier : on ne regenere JAMAIS un article deja
+                # produit -> on informe l'utilisateur qu'il n'y a rien de NOUVEAU
+                # pour l'instant, plutot que de forcer un article de secours
+                # depuis un item deja publie.
+                end_cycle(cid, "EMPTY")
+                _release_cycle_lock()
+                msg = (f"Toutes les informations fraîches disponibles aujourd'hui ont déjà "
+                       f"été traitées par Kora Agent ({skipped} info(s) déjà couverte(s) lors "
+                       f"d'un cycle précédent). Revenez plus tard : Kora Agent vous préviendra "
+                       f"dès qu'une nouvelle actualité sera publiée.")
+                log(cid, "CYCLE_END", f"uniq_empty skipped={skipped}", action="CYCLE")
+                return {"status": "empty_or_stale", "message": msg,
+                        "whitelist_version": wl.WHITELIST_VERSION,
+                        "sources_ok": sources_ok, "total_items": len(items),
+                        "rejected_intl": rejected_intl, "date_anomalies": anomalies,
+                        "skipped_dup": skipped, "facts": []}
+
             clusters = cluster(uniq, config.LIMITS["cluster_sim_threshold"])
 
-            # ANGLE MORT (Option A) : si pool (actu <24h) non vide mais que le
-            # clustering/dedup renvoie 0 cluster, on ne rend JAMAIS un cycle
-            # "vide alors qu'il y avait de l'actu". On genere AU MOINS 1 article
-            # de secours depuis le meilleur item du pool (le plus recent / le
-            # mieux score), en contournant la dedup inter-cycles.
-            if not clusters and pool:
-                best = sorted(
-                    pool,
-                    key=lambda i: (i.get("title", "") or ""),
-                    reverse=False,
-                )[0]
-                clusters = [[best]]
-                log(cid, "FALLBACK_ONE",
-                    f"0 cluster mais pool={len(pool)} -> 1 article de secours "
-                    f"depuis {best.get('source')} ({best.get('title','')[:50]})")
+            # Garde-fou defensif : cluster() ne peut structurellement pas renvoyer
+            # 0 cluster pour une liste uniq non vide (tout item non place demarre
+            # son propre cluster) -> filet de securite pour ne jamais perdre un item.
+            if not clusters and uniq:
+                clusters = [[it] for it in uniq]
+                log(cid, "FALLBACK_SINGLETONS",
+                    f"clustering n'a produit aucun groupe -> {len(uniq)} clusters singleton")
 
-            # REGLE METIER : 1 cycle = 1 article (génération unique et verrouillée)
-            limit = 1
+            # REGLE METIER (LOGIQUE-METIER-REACH.md §7, retablie 2026-08-19) :
+            # Kora Agent genere TOUS les articles issus des faits FRAIS et
+            # uniques collectes lors du cycle (un cluster = un fait = un
+            # article), meme si cela prend du temps. N = min(demande explicite,
+            # nb clusters disponibles, garde-fou quotidien). Les clusters les
+            # plus pertinents (score du champion) sont generes en premier, afin
+            # qu'une interruption utilisateur laisse toujours les faits les plus
+            # importants deja traites.
+            clusters.sort(key=lambda c: max(score_item(i) for i in c), reverse=True)
+            safety_cap = config.LIMITS.get("daily_article_limit", 10)
+            limit = min(demand, len(clusters), safety_cap) if demand else min(len(clusters), safety_cap)
             facts = []
             for c in clusters[:limit]:
                 if CANCEL_FLAG["requested"]:

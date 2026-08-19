@@ -644,8 +644,12 @@ class Handler(BaseHTTPRequestHandler):
             if reach_agent.agent.is_busy:
                 return self._send(429, {"error": "cycle_en_cours"})
             scope = payload.get("scope")
-            # REGLE METIER : 1 cycle = 1 article (génération unique et verrouillée)
-            demand = 1
+            # REGLE METIER (2026-08-19) : Kora Agent genere TOUS les articles issus
+            # des faits FRAIS et uniques collectes lors du cycle, pas un seul.
+            # demand optionnel (payload) permet de plafonner explicitement une
+            # demande ciblee ; sinon reach_agent applique le garde-fou quotidien
+            # (config.LIMITS["daily_article_limit"]) sur le nombre de clusters.
+            demand = payload.get("demand")
             initiator = payload.get("initiator", "dashboard")
             # Détache le cycle en arrière-plan (il peut durer 1-2 min en prod)
             def _run():
