@@ -94,7 +94,23 @@ export const Store = (() => {
       if (!ct.includes("application/json")) {
         throw new Error("Réponse non-JSON du serveur (code " + res.status + ")");
       }
-      return await res.json();
+      const data = await res.json();
+      // Bug corrige 2026-08-19 (rapporte : "j'ai annule la decision, l'article
+      // est repasse en attente MAIS le bandeau rouge d'erreur restait affiche").
+      // ui.error est un bandeau GLOBAL peuple par ~14 sites d'appel differents
+      // (voir renderErrorBanner, app.js) -- mais RIEN ne le nettoyait jamais
+      // sur un succes ulterieur, seulement via les boutons Reessayer/Fermer du
+      // bandeau lui-meme. Une erreur passee (meme totalement sans rapport,
+      // ex. un cycle precedent) restait donc collee a l'ecran indefiniment,
+      // masquant le fait qu'une action ulterieure (comme "Annuler la
+      // decision") avait en realite parfaitement reussi. Centralise ici,
+      // dans le point de passage UNIQUE de tout appel reussi, plutot que
+      // d'ajouter "error: null" a la main sur chacun des 14 sites (fragile,
+      // le prochain ajoute en oubliera un).
+      if (state.ui && state.ui.error) {
+        setState({ ui: { ...state.ui, error: null } });
+      }
+      return data;
     } catch (e) {
       // e.name === "AbortError" côté navigateur -> message technique brut
       // ("signal is aborted without reason") qui ne dit rien à l'utilisateur.
