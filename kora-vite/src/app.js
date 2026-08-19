@@ -2306,15 +2306,20 @@ function render() {
   if (cs) cs.onclick = () => Store.seed();
   // Verrou visuel : on ne peut PAS relancer un cycle tant que le précédent n'est pas fini.
   const busy = !!s.ui.busy;
+  // Les boutons de LANCEMENT de cycle ne doivent se désactiver que si un cycle
+  // tourne déjà (cycleBusy), pas pour n'importe quelle action en cours (busy
+  // générique) — sinon "Lancer un cycle" se grise à tort pendant une simple
+  // suppression/décision sans rapport (même bug racine que le loader plein écran).
+  const cycleBusyGuard = !!s.ui.cycleBusy;
   const tc = document.getElementById("topbarCycle");
   if (tc) {
-    tc.disabled = busy;
+    tc.disabled = cycleBusyGuard;
     const lbl = tc.querySelector(".topbar-cta-label");
-    if (lbl) lbl.textContent = busy ? "En cours…" : "Lancer un cycle";
+    if (lbl) lbl.textContent = cycleBusyGuard ? "En cours…" : "Lancer un cycle";
   }
-  document.querySelectorAll('[data-action="cycle-force"]').forEach(el => { el.disabled = busy; });
+  document.querySelectorAll('[data-action="cycle-force"]').forEach(el => { el.disabled = cycleBusyGuard; });
   const fabCycle = document.querySelector('.fab-action[data-act="cycle"]');
-  if (fabCycle) { fabCycle.style.pointerEvents = busy ? "none" : ""; fabCycle.classList.toggle("disabled", busy); }
+  if (fabCycle) { fabCycle.style.pointerEvents = cycleBusyGuard ? "none" : ""; fabCycle.classList.toggle("disabled", cycleBusyGuard); }
   // État de vérité du système dans la barre de statut (prêt / en cours / erreur)
   const am = document.getElementById("agentMode");
   if (am) {
@@ -2325,16 +2330,23 @@ function render() {
   const amDot = document.querySelector("#agentStatus .dot");
   if (amDot) amDot.className = "dot " + (busy ? "dot-busy" : (s.health && s.health.status === "error" ? "dot-err" : "dot-ready"));
   // Écran plein écran chaleureux (wireframe 3.3, étendu à la demande) +
-  // bandeau compact de repli. Transition busy=false->true : (ré)affiche le
-  // plein écran et relance la rotation de messages. busy=true->false : coupe
-  // tout, réinitialise l'état "fermé" pour le prochain cycle.
-  if (busy && !_wasBusy) startCycleMessages();
-  if (!busy && _wasBusy) stopCycleMessages();
-  _wasBusy = busy;
+  // bandeau compact de repli. Piloté par cycleBusy (PAS busy — bug corrigé
+  // 2026-08-19 : busy est un indicateur générique posé par TOUTE action en
+  // cours, y compris une suppression/décision/restauration sans aucun rapport
+  // avec un cycle de génération. Le loader plein écran affichait donc à tort
+  // "Kora Agent explore les sources..." lors d'une simple suppression. Seul
+  // cycleBusy — vrai uniquement pendant Store.startCycle() — doit déclencher
+  // cet écran). Transition false->true : (ré)affiche le plein écran et relance
+  // la rotation de messages. true->false : coupe tout, réinitialise l'état
+  // "fermé" pour le prochain cycle.
+  const cycleBusy = !!s.ui.cycleBusy;
+  if (cycleBusy && !_wasBusy) startCycleMessages();
+  if (!cycleBusy && _wasBusy) stopCycleMessages();
+  _wasBusy = cycleBusy;
   const gl = document.getElementById("globalLoader");
   const cb = document.getElementById("cycleBanner");
-  if (gl) gl.hidden = !(busy && !_loaderDismissed);
-  if (cb) cb.hidden = !(busy && _loaderDismissed);
+  if (gl) gl.hidden = !(cycleBusy && !_loaderDismissed);
+  if (cb) cb.hidden = !(cycleBusy && _loaderDismissed);
   // Indicateur "Article X sur Y" (backend : reach_agent.CYCLE_PROGRESS, exposé
   // par /api/last). N'apparaît que si le backend a déjà déterminé le nombre
   // de faits à générer (total > 0) — avant ça, on reste sur le message chaleureux seul.
@@ -2344,7 +2356,7 @@ function render() {
   if (glProg) { glProg.hidden = !progTxt; glProg.textContent = progTxt; }
   const cbProg = document.getElementById("cycleBannerProgress");
   if (cbProg) { cbProg.hidden = !progTxt; cbProg.textContent = progTxt; }
-  if (busy) {
+  if (cycleBusy) {
     const glDismiss = document.getElementById("globalLoaderDismiss");
     if (glDismiss) glDismiss.onclick = () => {
       _loaderDismissed = true;
@@ -2828,7 +2840,7 @@ function bind() {
   if (leftDrawer) {
     leftDrawer.querySelectorAll("[data-route]").forEach(n => {
       n.onclick = () => {
-        if (Store.state.ui.busy) { snack("Génération en cours…"); return; }
+        if (Store.state.ui.cycleBusy) { snack("Génération en cours…"); return; }
         closeLeftDrawer();
         navigate(n.dataset.route);
       };
@@ -2842,7 +2854,7 @@ function bind() {
   $$("[data-route]").forEach(n => n.onclick = () => {
     // Pendant une génération (busy), la génération est prioritaire : on reste
     // sur l'écran de génération et on ignore la navigation vers un autre écran.
-    if (Store.state.ui.busy) { snack("Génération en cours…"); return; }
+    if (Store.state.ui.cycleBusy) { snack("Génération en cours…"); return; }
     if (railEl) railEl.classList.remove("open");
     const sc = document.getElementById("railScrim");
     if (sc) sc.hidden = true;
@@ -2939,7 +2951,7 @@ function bind() {
   if (rightDrawer) {
     rightDrawer.querySelectorAll("[data-route]").forEach(n => {
       n.onclick = () => {
-        if (Store.state.ui.busy) { snack("Génération en cours…"); return; }
+        if (Store.state.ui.cycleBusy) { snack("Génération en cours…"); return; }
         closeRightDrawer();
         navigate(n.dataset.route);
       };
