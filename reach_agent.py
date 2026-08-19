@@ -48,6 +48,7 @@ from alt_sources import alt_fetch
 import os
 import json
 import atexit
+import threading
 
 # Lock fichier cross-process pour /api/cycle (fonctionne sur multi-worker).
 # Le mutex precedent etait en memoire (instance unique) -> ne protegeait pas
@@ -66,7 +67,35 @@ _CYCLE_LOCK_PATH = os.environ.get(
     "KORA_CYCLE_LOCK_PATH",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), ".kora_cycle.lock"),
 )
-_MUTEX_TTL_SEC = 300
+# Bug corrige 2026-08-19 (incident prod : 2 cycles concurrents sur le meme
+# process, faits generes en double) : 300s (5 min) etait bien trop court
+# face a un cycle reel de plusieurs articles (chaque article passe par 2-3
+# appels LLM sequentiels -- generation, extension si besoin, relecture --
+# largement de quoi depasser 5 min a 3-5 articles, et jusqu'a
+# daily_article_limit=10 dans le pire cas). Une fois le TTL depasse alors
+# que le cycle tournait TOUJOURS reellement, /api/health rapportait a tort
+# "libre", ce qui permettait a un nouveau /api/cycle de "voler" le verrou
+# (voir le vrai bug de race ci-dessous) pendant que le premier tournait
+# encore. 3600s (1h) couvre large ; le bouton root "Forcer la liberation du
+# mutex" reste l'echappatoire manuelle si un cycle plante vraiment.
+_MUTEX_TTL_SEC = 3600
+
+# Bug corrige 2026-08-19 (meme incident) : le serveur est un seul PROCESS
+# multi-THREADS (pas multi-process) -- la source du bug n'etait donc pas
+# une vraie race inter-process mais une race INTRA-process, plus subtile :
+# _acquire_cycle_lock() creait le fichier vide (O_CREAT|O_EXCL) PUIS
+# ecrivait son contenu (pid/ts) en 2 etapes distinctes. Un 2e thread
+# arrivant EXACTEMENT entre les deux lisait un fichier VIDE, le prenait
+# pour un lock corrompu, le supprimait, et recreait le sien -- pendant que
+# le 1er thread finissait d'ecrire dans son propre fd, dorénavant orphelin
+# (fichier deplace sous ses pieds). Resultat observe : 2 lignes "cycles"
+# RUNNING creees a 24ms d'intervalle, 2 cycles reels tournant en parallele,
+# partageant (et se marchant dessus) le meme CYCLE_PROGRESS global.
+# Ce verrou en memoire (100% atomique, aucune fenetre de race possible en
+# Python) ferme cette fenetre pour de bon : SEULE l'ecriture du fichier
+# reste utile pour la resilience inter-process/redemarrage, plus pour
+# l'exclusion elle-meme (assuree ici, avant meme de toucher au fichier).
+_CYCLE_THREAD_GATE = threading.Lock()
 
 
 def _pid_alive(pid):
@@ -82,55 +111,78 @@ def _pid_alive(pid):
     return True
 
 
-def _acquire_cycle_lock():
-    """Tente d'acquerir le lock fichier.
+def _try_file_lock():
+    """Tente d'acquerir le verrou FICHIER (utile inter-process/redemarrage —
+    le verrou en memoire ci-dessus couvre deja l'exclusion intra-process).
 
-    Retourne True si acquis, False si deja occupe (et non perime).
-    Cree le fichier avec O_EXCL (atomique) pour garantir l'exclusion.
+    Ecriture ATOMIQUE : contenu (pid/ts) ecrit d'abord dans un fichier
+    temporaire prive, puis publie au chemin final via os.link() (echoue avec
+    FileExistsError si deja pris, comme O_EXCL, mais SANS jamais laisser un
+    lecteur concurrent observer un fichier vide/partiel -- c'est cette
+    fenetre-la, entre la creation vide et l'ecriture du contenu, qui causait
+    la race du 2026-08-19 : un fichier vide etait lu comme "corrompu",
+    supprime, et recree par un 2e thread pendant que le 1er finissait
+    d'ecrire dans un fd desormais orphelin).
     """
+    payload = json.dumps({"pid": os.getpid(), "ts": datetime.now(TZ).timestamp()}).encode()
+    tmp_path = f"{_CYCLE_LOCK_PATH}.{os.getpid()}.{threading.get_ident()}.tmp"
     try:
-        fd = os.open(_CYCLE_LOCK_PATH, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
-    except FileExistsError:
-        # Le lock existe deja -> verifier validite (PID vivant + TTL)
+        with open(tmp_path, "wb") as f:
+            f.write(payload)
         try:
-            with open(_CYCLE_LOCK_PATH, "r") as f:
-                data = json.load(f)
-            pid = data.get("pid")
-            ts = data.get("ts", 0)
-            # Stale si PID mort OU TTL depasse
-            if not _pid_alive(pid) or (datetime.now(TZ).timestamp() - ts) >= _MUTEX_TTL_SEC:
+            os.link(tmp_path, _CYCLE_LOCK_PATH)
+        except FileExistsError:
+            # Deja pris par quelqu'un d'autre -> verifier validite (PID mort/TTL depasse)
+            try:
+                with open(_CYCLE_LOCK_PATH, "r") as f:
+                    data = json.load(f)
+                pid = data.get("pid")
+                ts = data.get("ts", 0)
+                if not _pid_alive(pid) or (datetime.now(TZ).timestamp() - ts) >= _MUTEX_TTL_SEC:
+                    try:
+                        os.remove(_CYCLE_LOCK_PATH)
+                    except OSError:
+                        pass
+                    return _try_file_lock()
+            except (json.JSONDecodeError, OSError):
                 try:
                     os.remove(_CYCLE_LOCK_PATH)
                 except OSError:
                     pass
-                return _acquire_cycle_lock()
-        except (json.JSONDecodeError, OSError):
-            try:
-                os.remove(_CYCLE_LOCK_PATH)
-            except OSError:
-                pass
-            return _acquire_cycle_lock()
-        return False  # Lock valide et non perime -> refus
-    except PermissionError as e:
-        # Distinct des autres OSError : un vrai probleme d'ecriture ne doit
-        # JAMAIS se faire passer pour "cycle deja en cours" (message trompeur
-        # pour l'utilisateur qui masquerait le vrai probleme) -> log explicite.
-        print(f"[CYCLE_LOCK_PERMISSION_ERROR] impossible d'ecrire {_CYCLE_LOCK_PATH}: {e}")
-        return False
-    except OSError as e:
-        print(f"[CYCLE_LOCK_ERROR] {_CYCLE_LOCK_PATH}: {e}")
-        return False
-    # Lock acquis : ecrire PID + timestamp pour proprio/diagnostic
-    try:
-        payload = json.dumps({"pid": os.getpid(), "ts": datetime.now(TZ).timestamp()})
-        os.write(fd, payload.encode())
+                return _try_file_lock()
+            return False  # Lock valide et non perime -> refus
+        except PermissionError as e:
+            print(f"[CYCLE_LOCK_PERMISSION_ERROR] impossible d'ecrire {_CYCLE_LOCK_PATH}: {e}")
+            return False
+        except OSError as e:
+            print(f"[CYCLE_LOCK_ERROR] {_CYCLE_LOCK_PATH}: {e}")
+            return False
+        return True
     finally:
-        os.close(fd)
-    return True
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+
+
+def _acquire_cycle_lock():
+    """Verrou combine : d'abord le verrou en memoire (exclusion intra-process,
+    instantanee et sans aucune fenetre de race possible), puis le verrou
+    fichier (exclusion inter-process/redemarrage). Retourne True si acquis
+    dans son ensemble, False sinon -- dans ce cas le verrou memoire, s'il
+    avait ete pris, est relache immediatement (rien a nettoyer côté fichier)."""
+    if not _CYCLE_THREAD_GATE.acquire(blocking=False):
+        return False
+    ok = _try_file_lock()
+    if not ok:
+        _CYCLE_THREAD_GATE.release()
+    return ok
 
 
 def _release_cycle_lock():
-    """Libere le lock fichier uniquement si on en est le proprietaire."""
+    """Libere le lock fichier uniquement si on en est le proprietaire, PUIS le
+    verrou memoire (dans cet ordre : tant que le fichier existe encore, un
+    autre process/thread doit continuer a le voir comme occupe)."""
     try:
         with open(_CYCLE_LOCK_PATH, "r") as f:
             data = json.load(f)
@@ -138,20 +190,29 @@ def _release_cycle_lock():
             os.remove(_CYCLE_LOCK_PATH)
     except (OSError, json.JSONDecodeError):
         pass
+    if _CYCLE_THREAD_GATE.locked():
+        _CYCLE_THREAD_GATE.release()
 
 
 def force_release_cycle_lock():
-    """Libère le verrou de cycle SANS vérifier le PID propriétaire (wireframe
-    12.5 — action critique console root). _release_cycle_lock() refuse
-    volontairement de toucher au lock d'un autre process ; celle-ci est
-    l'échappatoire manuelle explicite pour un cycle bloqué au-delà du TTL
-    (300s) qu'on ne veut pas attendre. Retourne True si un lock a été
-    effectivement supprimé, False s'il n'y en avait pas."""
+    """Libère le verrou de cycle (fichier + mémoire) SANS vérifier le PID
+    propriétaire (wireframe 12.5 — action critique console root).
+    _release_cycle_lock() refuse volontairement de toucher au lock d'un
+    autre process ; celle-ci est l'échappatoire manuelle explicite pour un
+    cycle bloqué au-delà du TTL (1h) qu'on ne veut pas attendre. Retourne
+    True si un lock (fichier et/ou mémoire) a été effectivement supprimé,
+    False s'il n'y en avait pas."""
+    file_released = False
     try:
         os.remove(_CYCLE_LOCK_PATH)
-        return True
+        file_released = True
     except OSError:
-        return False
+        pass
+    mem_released = False
+    if _CYCLE_THREAD_GATE.locked():
+        _CYCLE_THREAD_GATE.release()
+        mem_released = True
+    return file_released or mem_released
 
 
 def _is_cycle_locked():
