@@ -477,15 +477,43 @@ export const Store = (() => {
     const min = Math.round(sec / 60);
     return min <= 1 ? "≈ 1 min restante" : `≈ ${min} min restantes`;
   }
+  // Bug corrigé 2026-08-19 (rapporté : l'écran de progression "revient au
+  // tableau de bord" tout seul en pleine génération, sans plantage) : le
+  // plafond de suivi était fixé à 240 tours × 3s = 12 min -- calibré à une
+  // époque où un article prenait ~1-2 min. Depuis l'ajout de l'auto-critique
+  // (jusqu'à 4 appels LLM séquentiels/article), la moyenne observée en prod
+  // est de ~400s/article ; un cycle de 10 articles peut légitimement dépasser
+  // 1h. Passé 12 min, ce suivi abandonnait alors que le cycle tournait
+  // TOUJOURS réellement côté serveur -> l'écran de progression disparaissait
+  // sans raison visible, exactement comme un retour au tableau de bord.
+  // Aligné sur _MUTEX_TTL_SEC (reach_agent.py, 3600s) : le serveur lui-même
+  // ne considère jamais un cycle légitime au-delà de cette durée.
+  const _WATCH_MAX_ITER = 1300; // 1300 × 3s ≈ 65 min, marge au-dessus de 3600s
+  // Marqueur de reprise optimiste (2026-08-19) : un onglet resté longtemps en
+  // arrière-plan peut être DÉCHARGÉ par le navigateur (Chrome le fait sous
+  // pression mémoire, d'autant plus probable avec des dizaines d'onglets
+  // ouverts) -- au retour, la page se recharge ENTIÈREMENT depuis zéro. Entre
+  // ce rechargement et la réponse de resumeCycleWatch() (un aller-retour
+  // réseau), la page s'affiche brièvement SANS l'écran de progression --
+  // perçu à tort comme "revenu au tableau de bord avant de repartir en
+  // génération". Ce marqueur, lu de façon SYNCHRONE dès le tout premier
+  // rendu (voir boot(), app.js), affiche l'écran de progression par
+  // anticipation avant même la confirmation réseau ; resumeCycleWatch()
+  // corrige ensuite si le cycle s'est en réalité terminé entre-temps.
+  const _CYCLE_MARK_KEY = "kora-cycle-active";
+  function _markCycleActive() { try { localStorage.setItem(_CYCLE_MARK_KEY, "1"); } catch (e) {} }
+  function _clearCycleActive() { try { localStorage.removeItem(_CYCLE_MARK_KEY); } catch (e) {} }
+  function wasCycleActiveBeforeLoad() { try { return localStorage.getItem(_CYCLE_MARK_KEY) === "1"; } catch (e) { return false; } }
   let _watching = false;
   async function _watchCycle() {
     if (_watching) return;
     _watching = true;
     try {
-      for (let i = 0; i < 240; i++) {
+      for (let i = 0; i < _WATCH_MAX_ITER; i++) {
         const r = await api("/api/last");
         const p = r.progress || null;
         if (!r.running) {
+          _clearCycleActive();
           // Le cycle est déjà terminé (ou n'a jamais démarré) : recharge
           // depuis l'API HITL (facts avec fact_id valide) plutôt que
           // r.result.facts (sans fact_id) -> sinon le clic carte casse.
@@ -493,6 +521,7 @@ export const Store = (() => {
           setState({ lastCycle: r, ui: { ...state.ui, busy: false, cycleBusy: false, overlay: null, progress: null } });
           return;
         }
+        _markCycleActive();
         const etaTxt = p && p.eta_seconds != null ? _formatEta(p.eta_seconds) : "";
         const label = p && p.total > 0
           ? `Article ${p.current || 1} sur ${p.total}…` + (etaTxt ? ` (${etaTxt})` : "")
@@ -500,9 +529,11 @@ export const Store = (() => {
         setState({ lastCycle: r, ui: { ...state.ui, busy: true, cycleBusy: true, overlay: label, progress: p } });
         await wait(3000);
       }
-      // Dépassement du plafond de suivi (~12 min) : le cycle peut continuer
-      // légitimement côté serveur (aucun impact), on arrête juste de le
-      // suivre ici pour ne pas boucler indéfiniment. Un F5 relance le suivi.
+      // Dépassement du plafond de suivi (~65 min, voir ci-dessus) : le cycle
+      // peut continuer légitimement côté serveur (aucun impact), on arrête
+      // juste de le suivre ici pour ne pas boucler indéfiniment. Un F5 ou un
+      // retour au premier plan relance le suivi (resumeCycleWatch).
+      _clearCycleActive();
       setState({ ui: { ...state.ui, busy: false, cycleBusy: false, overlay: null, progress: null } });
     } catch (e) {
       setState({ ui: { ...state.ui, busy: false, cycleBusy: false, overlay: null, progress: null, error: e.message } });
@@ -950,6 +981,7 @@ export const Store = (() => {
     loadHealth, loadLast, loadHITL, loadAudit, loadSources, addSource, updateSource, loadSettings, applySettings,
     startCycle, resumeCycleWatch, cancelCycle, decide, retract, setRoute, openSheet, closeSheet, wait,
     formatEta: _formatEta,
+    wasCycleActiveBeforeLoad,
     getFactFilter, setFactFilter,
     getTheme, setTheme, initTheme,
     getRailMode, setRailMode, initRailMode, applyRailMode,

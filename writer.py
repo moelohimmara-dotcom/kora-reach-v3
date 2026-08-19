@@ -554,7 +554,7 @@ def _call_litellm(provider: str, key: str, messages: List[Dict], max_tokens: int
     return resp.choices[0].message.content
 
 
-def _finalize_article(art: str, fact: Dict, lt: Dict) -> Dict:
+def _finalize_article(art: str, fact: Dict, lt: Dict, should_cancel=None) -> Dict:
     """Post-traitement UNIFORME appliqué à tout article, quel que soit le
     provider qui l'a généré (avant 2026-08-19 : TokenRouter/litellm sautaient
     la relecture et l'extension conditionnelle, contrairement à Nvidia/Ollama
@@ -564,26 +564,53 @@ def _finalize_article(art: str, fact: Dict, lt: Dict) -> Dict:
        conjugaison, cohérence sémantique/logique — demande explicite
        2026-08-19 : contrôle qualité AVANT la sortie du texte final).
     3. Validation anti-injection + sanitisation des liens externes.
-    Retourne {"article", "flags", "critique_issues", "critique_report"}."""
-    if len(art.split()) < lt.get("target", 879):
+    Retourne {"article", "flags", "critique_issues", "critique_report"}.
+
+    `should_cancel` (2026-08-19, bug rapporté : "Interrompre" mettait
+    plusieurs minutes à agir) : callable optionnel, revérifié ENTRE chaque
+    passe LLM. Avant ce correctif, le seul point de contrôle de
+    l'interruption était entre deux ARTICLES (reach_agent.py) -- avec
+    jusqu'à 4 appels LLM séquentiels par article (génération, extension,
+    auto-critique, correction, ~400s en moyenne observé en prod), cliquer
+    "Interrompre" pouvait rester sans effet visible plusieurs minutes.
+    Chaque étape ci-dessous est un article COMPLET et publiable en soi
+    (l'étape suivante ne fait qu'affiner, jamais produire un texte
+    partiel/cassé) -- s'arrêter tôt ne peut jamais laisser un article
+    tronqué. La passe LLM déjà EN COURS au moment du clic va tout de même
+    à son terme (impossible d'interrompre un appel HTTP bloquant sans
+    complexité disproportionnée) ; seul le déclenchement de la PASSE
+    SUIVANTE est évité."""
+    _cancelled = should_cancel() if should_cancel else False
+    if not _cancelled and len(art.split()) < lt.get("target", 879):
         art = _ensure_min_length(art, fact, lt, max_attempts=1)
-    review = _self_review_pass(art)
-    art = review["article"]
+        _cancelled = should_cancel() if should_cancel else False
+    if not _cancelled:
+        review = _self_review_pass(art)
+        art = review["article"]
+        issues, report = review["issues_found"], review["critique"]
+    else:
+        issues, report = 0, ""
     _v = validate_article(art, fact)
     if _v["flags"]:
         print("[INJECTION_BLOCKED]", "; ".join(_v["flags"]))
     return {"article": _v["article"], "flags": _v["flags"],
-            "critique_issues": review["issues_found"], "critique_report": review["critique"]}
+            "critique_issues": issues, "critique_report": report}
 
 
-def write_article(fact: Dict, dry_run: bool = None) -> Dict:
+def write_article(fact: Dict, dry_run: bool = None, should_cancel=None) -> Dict:
     """Génère l'article de synthèse pour un fact. Retourne dict avec article + image.
 
     Cascade de providers (2026-08-19, diagnostic P1 §4 : les 4 chemins étaient
     quasi dupliqués avec un post-traitement incohérent selon le provider actif
     -> unifiés ici en une seule boucle qui applique _finalize_article() à
     TOUS, dans le même ordre de priorité qu'avant (Nvidia -> Ollama Cloud ->
-    TokenRouter -> groq/cerebras/openrouter via litellm)."""
+    TokenRouter -> groq/cerebras/openrouter via litellm).
+
+    `should_cancel` (2026-08-19) : callable optionnel sans argument, revérifié
+    entre chaque passe LLM (voir _finalize_article) pour que "Interrompre"
+    agisse en secondes plutôt qu'en minutes sur un article multi-passes. Pas
+    de couplage à reach_agent.py ici (éviterait un import circulaire, celui-ci
+    important déjà write_article) : l'appelant fournit le callback."""
     if dry_run is None:
         # dry-run si aucune clé LLM dispo (Ollama Cloud, TokenRouter, ou providers litellm)
         has_llm = (
@@ -630,6 +657,16 @@ def write_article(fact: Dict, dry_run: bool = None) -> Dict:
 
     last_err = None
     for model_name, call_fn in attempts:
+        # Revérifié à CHAQUE tentative de fournisseur (2026-08-19) : si le
+        # 1er provider échoue et que "Interrompre" a été demandé pendant ce
+        # temps, on n'enchaîne pas 3 tentatives de repli supplémentaires
+        # (Ollama, TokenRouter, litellm) pour rien -- on sort proprement et
+        # tôt, sans article pour ce fact plutôt qu'un texte de secours généré
+        # après coup.
+        if should_cancel and should_cancel():
+            return {"article": "", "image": image, "image_meta": image_meta,
+                    "model": "cancelled", "status": "cancelled",
+                    "error": "Génération interrompue par l'éditeur."}
         try:
             art = call_fn()
             if not art:
@@ -646,7 +683,7 @@ def write_article(fact: Dict, dry_run: bool = None) -> Dict:
                 last_err = f"{model_name}: réponse vide"
                 llm_circuit_fail(last_err)
                 continue
-            fin = _finalize_article(art, fact, lt)
+            fin = _finalize_article(art, fact, lt, should_cancel=should_cancel)
             llm_circuit_ok()
             return {"article": fin["article"], "image": image, "image_meta": image_meta,
                     "model": model_name, "status": "ok",
