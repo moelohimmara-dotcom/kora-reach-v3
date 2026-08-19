@@ -817,6 +817,15 @@ html.icons-ready .material-icons { visibility: visible; }
   .sheet-handle { display: none; }
   /* barre d'actions collante : cibles tactiles ≥44px */
   .sheet-actions .btn { min-height: 44px; padding: 12px 18px; font-size: var(--t-label); }
+  /* Bug corrige 2026-08-19 : Modifier/Regenerer/Rejeter en ligne (flex:1)
+     debordaient hors ecran sur mobile ("Rejeter" coupe) -- flex:1 seul ne
+     retrecit pas un item sous sa largeur de contenu naturelle (min-width:auto
+     par defaut), donc 3 boutons + icones + libelles ne rentraient jamais dans
+     ~390px une fois le padding agrandi ci-dessus pour le tactile. Empile-les
+     en pleine largeur, comme "Approuver" et "Annuler la decision" juste a
+     cote -- coherent, et garantit qu'aucune largeur de texte ne peut deborder. */
+  .sheet-actions-row { flex-direction: column; }
+  .sheet-actions-row .btn { width: 100%; }
   .sheet-close { width: 44px; height: 44px; }
   /* le corps laisse de la place sous les boutons sticky (pas de chevauchement) */
   .sheet-textwrap { padding-bottom: 16px; }
