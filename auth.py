@@ -121,19 +121,60 @@ def list_users():
     con, _ = db.conn()
     try:
         cur = con.cursor()
-        cur.execute(f"SELECT id, username, email, role, created_at, active, totp_enabled FROM kora_users ORDER BY username")
+        cur.execute(f"SELECT id, username, email, role, created_at, active, totp_enabled, wp_publish_allowed FROM kora_users ORDER BY username")
         return cur.fetchall()
     finally:
         con.close()
 
 
-def set_role(uid, role):
+ROLES = ("lecteur", "normal", "advanced", "owner")
+
+
+def get_role(uid):
+    ph = db.placeholder()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(f"SELECT role FROM kora_users WHERE id={ph}", (uid,))
+        r = cur.fetchone()
+        return _row_get(r, "role") if r else None
+    finally:
+        con.close()
+
+
+def count_owners():
+    """Nombre de comptes Propriétaire — sert de garde-fou anti-verrouillage
+    (2026-08-19) : on ne doit JAMAIS pouvoir supprimer/rétrograder le dernier."""
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute("SELECT COUNT(*) AS n FROM kora_users WHERE role='owner'")
+        row = cur.fetchone()
+        return row["n"] if isinstance(row, dict) else row[0]
+    finally:
+        con.close()
+
+
+def set_role(uid, role, actor_role=None):
     """Change le rôle d'un compte (advanced/root-only côté serveur).
     'lecteur' (12.1) : lecture seule, ajouté pour la hiérarchie de rôles
     attribuée par la console root, sans renommer 'normal'/'advanced' déjà
-    utilisés ailleurs dans le code (évite une migration risquée)."""
-    if role not in ("normal", "advanced", "lecteur"):
+    utilisés ailleurs dans le code (évite une migration risquée).
+
+    'owner' (2026-08-19, restructuration rôles/permissions) : garde-fous
+    appliqués ICI (pas seulement côté route serveur) pour que l'invariant ne
+    puisse JAMAIS être violé, quel que soit l'appelant :
+      - seul un Propriétaire (actor_role='owner') peut promouvoir/rétrograder
+        un Propriétaire (Q2 du plan validé) ;
+      - le DERNIER Propriétaire ne peut jamais être rétrogradé (verrouillage
+        total de l'instance sinon)."""
+    if role not in ROLES:
         return {"ok": False, "error": "role_invalide"}
+    current = get_role(uid)
+    if (current == "owner" or role == "owner") and actor_role != "owner":
+        return {"ok": False, "error": "reserve_aux_proprietaires"}
+    if current == "owner" and role != "owner" and count_owners() <= 1:
+        return {"ok": False, "error": "dernier_proprietaire_protege"}
     ph = db.placeholder()
     con, _ = db.conn()
     try:
@@ -212,13 +253,38 @@ def set_avatar(uid, data_url):
         con.close()
 
 
-def delete_user(uid):
+def delete_user(uid, actor_role=None):
+    """Supprime un compte. Garde-fous Propriétaire (2026-08-19), même logique
+    que set_role() : un Administrateur ne peut jamais supprimer un
+    Propriétaire, et le dernier Propriétaire ne peut jamais être supprimé."""
+    current = get_role(uid)
+    if current == "owner":
+        if actor_role != "owner":
+            return {"ok": False, "error": "reserve_aux_proprietaires"}
+        if count_owners() <= 1:
+            return {"ok": False, "error": "dernier_proprietaire_protege"}
     ph = db.placeholder()
     con, _ = db.conn()
     try:
         cur = con.cursor()
         cur.execute(f"DELETE FROM kora_sessions WHERE user_id={ph}", (uid,))
         cur.execute(f"DELETE FROM kora_users WHERE id={ph}", (uid,))
+        con.commit()
+        return {"ok": True}
+    finally:
+        con.close()
+
+
+def set_wp_publish(uid, allowed):
+    """Délégation individuelle du droit d'envoi WordPress (2026-08-19) —
+    voir §3 du plan de restructuration. Propriétaire/Administrateur l'ont
+    implicitement via leur rôle (voir permissions.can_publish_wp) ; ce
+    drapeau ne sert qu'à l'accorder à un Éditeur précis, sans changer son rôle."""
+    ph = db.placeholder()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(f"UPDATE kora_users SET wp_publish_allowed={ph} WHERE id={ph}", (1 if allowed else 0, uid))
         con.commit()
         return {"ok": True}
     finally:
@@ -290,17 +356,31 @@ def init():
         # code valide) — évite un verrouillage si l'appli d'auth n'a pas reçu
         # le bon secret.
         for col, ctype in (("totp_secret", "TEXT"), ("totp_enabled", "INTEGER DEFAULT 0"), ("totp_backup_codes", "TEXT"),
-                           ("active", "INTEGER DEFAULT 1")):
+                           ("active", "INTEGER DEFAULT 1"), ("wp_publish_allowed", "INTEGER DEFAULT 0")):
             try:
                 cur.execute(f"ALTER TABLE kora_users ADD COLUMN {col} {ctype}")
                 con.commit()
             except Exception:
                 con.rollback()  # colonne déjà présente
-        # S'assure que l'admin défini dans .env est bien 'advanced' (même s'il pré-existait)
+        # Restructuration rôles/permissions (2026-08-19, plan valide) : l'admin
+        # defini dans .env devient le premier Propriétaire ("user 1") — un
+        # niveau AU-DESSUS de 'advanced', distinct de la console root (root_auth.py,
+        # ADR-0002, jamais touchee ici). Idempotent : ne fait rien si deja 'owner'
+        # ou si un AUTRE compte a deja ete promu proprietaire entre-temps (evite
+        # d'ecraser une promotion manuelle faite depuis l'UI).
         admin_user = os.environ.get("ADMIN_USER", "admin").strip()
         ph = db.placeholder()
-        cur.execute(f"UPDATE kora_users SET role='advanced' WHERE username={ph}", (admin_user,))
-        con.commit()
+        cur.execute(f"SELECT role FROM kora_users WHERE username={ph}", (admin_user,))
+        row = cur.fetchone()
+        cur_role = _row_get(row, "role") if row else None
+        if row and cur_role != "owner":
+            cur.execute("SELECT COUNT(*) AS n FROM kora_users WHERE role='owner'")
+            orow = cur.fetchone()
+            n_owners = orow["n"] if isinstance(orow, dict) else orow[0]
+            if n_owners == 0:
+                cur.execute(f"UPDATE kora_users SET role='owner' WHERE username={ph}", (admin_user,))
+                con.commit()
+                print(f"[auth] '{admin_user}' promu premier Propriétaire (role=owner)")
     finally:
         con.close()
     # Crée l'admin au 1er lancement (idempotent : ne crée que si vide)
@@ -315,8 +395,8 @@ def init():
             pw = os.environ.get("ADMIN_PASS", "").strip()
             email = os.environ.get("ADMIN_EMAIL", "").strip()
             if pw:
-                add_user(user, pw, email, role="advanced")
-                print(f"[auth] admin '{user}' créé depuis .env (role=advanced)")
+                add_user(user, pw, email, role="owner")
+                print(f"[auth] admin '{user}' créé depuis .env (role=owner, premier Propriétaire)")
             else:
                 print("[auth] ATTENTION: ADMIN_PASS non défini -> aucun compte créé")
     finally:
@@ -405,14 +485,14 @@ def get_session_user(sid):
             return None
         uid = s["user_id"] if isinstance(s, dict) else (s[1] if len(s) > 1 else s[0])
         # Renvoie TOUJOURS un dict (mode-agnostique SQLite/Postgres)
-        cur.execute(f"SELECT id, username, email, role, created_at, avatar_data FROM kora_users WHERE id={ph}", (uid,))
+        cur.execute(f"SELECT id, username, email, role, created_at, avatar_data, wp_publish_allowed FROM kora_users WHERE id={ph}", (uid,))
         row = cur.fetchone()
         if not row:
             return None
         if isinstance(row, dict):
             return row
         # tuple -> dict (ordre de la SELECT ci-dessus)
-        cols = ["id", "username", "email", "role", "created_at", "avatar_data"]
+        cols = ["id", "username", "email", "role", "created_at", "avatar_data", "wp_publish_allowed"]
         return dict(zip(cols, row))
     finally:
         con.close()

@@ -230,12 +230,24 @@ export const Store = (() => {
     const r = await api("/api/auth/users/role", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, role }) });
     if (r.ok) return true;
     if (r.error === "role_invalide") throw new Error("Rôle invalide");
+    if (r.error === "reserve_aux_proprietaires") throw new Error("Réservé aux Propriétaires : seul un Propriétaire peut créer/rétrograder un autre Propriétaire");
+    if (r.error === "dernier_proprietaire_protege") throw new Error("Impossible : c'est le dernier Propriétaire, il doit toujours en rester au moins un");
     throw new Error(r.error || "Erreur");
   }
   async function deleteUser(id) {
     const r = await api("/api/auth/users", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
     if (r.ok) return true;
     if (r.error === "cannot_delete_self") throw new Error("Vous ne pouvez pas supprimer votre propre compte");
+    if (r.error === "reserve_aux_proprietaires") throw new Error("Réservé aux Propriétaires : seul un Propriétaire peut retirer un autre Propriétaire");
+    if (r.error === "dernier_proprietaire_protege") throw new Error("Impossible : c'est le dernier Propriétaire, il doit toujours en rester au moins un");
+    throw new Error(r.error || "Erreur");
+  }
+  // Délégation individuelle du droit d'envoi WordPress (§3 du plan valide
+  // 2026-08-19) — Propriétaire/Avancé l'ont déjà via leur rôle, sert à
+  // l'accorder/retirer à un Éditeur ('normal') précis.
+  async function setWpPublish(id, allowed) {
+    const r = await api("/api/auth/users/wp-publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, allowed }) });
+    if (r.ok) return true;
     throw new Error(r.error || "Erreur");
   }
 
@@ -419,6 +431,7 @@ export const Store = (() => {
       try { await loadTrash(); } catch (_) {}
       try { await loadStats(); } catch (_) {}
       setState({ ui: { ...state.ui, busy: false, overlay: null } });
+      return r;
     } catch (e) { setState({ ui: { ...state.ui, busy: false, overlay: null, error: e.message } }); }
   }
 
@@ -762,7 +775,7 @@ export const Store = (() => {
     getRail, setRail,
     checkAuth, login, logout, changePassword, saveAvatar, forgot, resetPassword,
     verifyLoginTotp, get2FAStatus, setup2FA, confirm2FA, disable2FA,
-    loadUsers, createUser, setRole, deleteUser,
+    loadUsers, createUser, setRole, deleteUser, setWpPublish,
     setSelectMode, toggleSelect, clearSelection, selectedIds,
     bulkAction, restoreFact, deleteForever, loadTrash, finishDraft,
     regenerate,
