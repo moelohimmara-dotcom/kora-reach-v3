@@ -652,22 +652,24 @@ function viewTrash(s) {
 function viewSources(s) {
   const src = s.sources || [];
   if (!src.length) return stateBox("i-sources", "Sources en chargement…", "Récupération de la liste de sources autorisées.", !!s.ui.loading);
+  const isAdvanced = (s.auth && s.auth.role === "advanced");
   // Toutes les sources nationales guinéennes regroupees dans UN seul bloc parent ; internationales supprimees (demande utilisateur)
   const gn = src.filter(e => e.category === "GN_NAT");
   // e.guinea_filter (pas "guinee_filter") et e.vector (pas "vector_primary") :
   // les deux noms de champs réellement renvoyés par /api/whitelist (server.py).
-  // Ligne cliquable -> détail en lecture seule (wireframe 7.2).
+  // Ligne cliquable -> détail (wireframe 7.2, gouvernance ouverte à l'UI 2026-08-19).
   const srcRow = (e) => `
-    <button type="button" class="list-row src-row" data-source-detail="${esc(e.id)}">
+    <button type="button" class="list-row src-row ${e.status !== "active" ? "src-row-suspended" : ""}" data-source-detail="${esc(e.id)}">
       <span class="meta-ic">${icon(e.guinea_filter ? "i-shield" : "i-sources")}</span>
       <div class="meta">
-        <div class="name">${esc(e.name)} ${e.guinea_filter ? chip("Filtre Guinée", "warning", "i-shield") : ""}</div>
+        <div class="name">${esc(e.name)} ${e.guinea_filter ? chip("Filtre Guinée", "warning", "i-shield") : ""} ${e.status !== "active" ? chip("Suspendue", "error") : ""}</div>
         <div class="sub">${esc(e.category)} · ${esc(e.vector)} · ${esc(e.entry_url)}</div>
       </div>
       ${icon("i-chevron-right", "src-row-chevron")}
     </button>`;
   return `<div class="section-title">Gouvernance des sources (${gn.length})</div>
-    <p class="muted" style="margin-bottom:16px">Whitelist figée G1 — aucune découverte automatique. Toute cible hors liste est refusée.</p>
+    <p class="muted" style="margin-bottom:16px">Ajout et suspension gérés depuis cet écran (advanced) — chaque modification est tracée dans le journal d'audit.</p>
+    ${isAdvanced ? `<button type="button" class="btn btn-primary" id="addSourceBtn" style="margin-bottom:16px">${icon("i-plus")}<span>Ajouter une source</span></button>` : ""}
     <section class="fact-group">
       <div class="group-head"><span class="group-ic">${icon("i-level1")}</span><h3 class="group-title">Sources nationales guinéennes</h3><span class="group-count">${gn.length}</span></div>
       ${gn.map(srcRow).join("") || `<div class="muted" style="padding:8px 0">Aucune source nationale.</div>`}
@@ -678,17 +680,21 @@ function bindSources() {
     const src = (Store.state.sources || []).find(e => e.id === b.dataset.sourceDetail);
     if (src) { Store.openSheet({ type: "source-detail", source: src }); renderSheet(Store.state); }
   });
+  const addBtn = document.getElementById("addSourceBtn");
+  if (addBtn) addBtn.onclick = () => { Store.openSheet({ type: "add-source" }); renderSheet(Store.state); };
 }
-// Détail d'une source (wireframe 7.2) : lecture seule, gouvernance figée par
-// le CDC (G1 — whitelist versionnée en code, jamais modifiable depuis l'UI).
+// Détail d'une source (wireframe 7.2, gouvernance ouverte à l'UI 2026-08-19) :
+// advanced peut activer/suspendre depuis cet écran, tracé en audit côté serveur.
 function renderSourceDetail(s) {
   const sh = s.sheet;
   const e = sh.source;
+  const isAdvanced = (s.auth && s.auth.role === "advanced");
   const body = document.getElementById("sheetBody");
   const sheet = document.getElementById("sheet");
   const scrim = document.getElementById("sheetScrim");
   const domains = (e.domains || []);
   const vectors = [e.vector, e.vector_secondary].filter(Boolean).join(" · secours : ") || "—";
+  const active = e.status === "active";
   body.innerHTML = `
     <div class="reject-confirm source-detail">
       <div class="reject-confirm-head">
@@ -698,7 +704,7 @@ function renderSourceDetail(s) {
       <div class="source-detail-badges">
         ${chip(e.category === "GN_NAT" ? "Nationale guinéenne" : esc(e.category), "primary")}
         ${e.guinea_filter ? chip("Filtre Guinée exigé", "warning", "i-shield") : ""}
-        ${chip(e.status === "active" ? "Active" : esc(e.status), e.status === "active" ? "tertiary" : "error")}
+        ${chip(active ? "Active" : esc(e.status), active ? "tertiary" : "error")}
       </div>
       <div class="source-detail-field">
         <div class="source-detail-label">URL d'entrée</div>
@@ -718,17 +724,99 @@ function renderSourceDetail(s) {
           <div class="source-detail-value">${esc(e.responsible || "—")}</div>
         </div>
         <div class="source-detail-field">
-          <div class="source-detail-label">Version whitelist</div>
+          <div class="source-detail-label">Version</div>
           <div class="source-detail-value">${esc(e.version || "—")}</div>
         </div>
       </div>
-      <p class="muted source-detail-footnote">${icon("i-lock")} Gouvernance figée par le CDC (G1) — aucune modification possible depuis cet écran.</p>
+      ${isAdvanced ? `
+        <p class="muted source-detail-footnote">${icon("i-shield")} Chaque activation/suspension est tracée dans le journal d'audit.</p>
+        <button class="btn ${active ? "btn-outline" : "btn-primary"} btn-block" id="sourceToggleBtn">${active ? "Suspendre cette source" : "Réactiver cette source"}</button>
+      ` : `<p class="muted source-detail-footnote">${icon("i-lock")} Réservé au rôle avancé.</p>`}
       <button class="btn btn-tonal btn-block" data-source-detail-close="1">Fermer</button>
     </div>`;
   sheet.hidden = false; scrim.hidden = false;
   const closeBtn = body.querySelector("[data-source-detail-close]");
   closeBtn.onclick = () => Store.closeSheet();
+  const toggleBtn = document.getElementById("sourceToggleBtn");
+  if (toggleBtn) toggleBtn.onclick = () => confirmAction({
+    title: active ? "Suspendre cette source ?" : "Réactiver cette source ?",
+    message: active
+      ? "Kora Agent arrêtera de collecter des articles depuis cette source dès le prochain cycle."
+      : "Kora Agent reprendra la collecte depuis cette source dès le prochain cycle.",
+    confirmLabel: active ? "Suspendre" : "Réactiver",
+    danger: active,
+    onConfirm: async () => {
+      try {
+        await Store.updateSource(e.id, { status: active ? "suspended" : "active" });
+        Store.closeSheet();
+        snack(active ? "Source suspendue." : "Source réactivée.");
+      } catch (err) { snack("Erreur : " + (err.message || "échec de la mise à jour.")); }
+    },
+  });
   closeBtn.focus();
+}
+// Ajout d'une source (2026-08-19) : formulaire minimal (nom, URL d'entrée,
+// domaines autorisés, catégorie, vecteur, filtre Guinée). L'id est dérivé du
+// nom (slug), modifiable si besoin d'un identifiant plus stable.
+function renderAddSourceSheet(s) {
+  const body = document.getElementById("sheetBody");
+  const sheet = document.getElementById("sheet");
+  const scrim = document.getElementById("sheetScrim");
+  body.innerHTML = `
+    <div class="reject-confirm add-source">
+      <div class="reject-confirm-head">
+        ${icon("i-plus", "ic-l")}
+        <h2 class="sheet-title">Ajouter une source</h2>
+      </div>
+      <label class="form-field">
+        <span>Nom éditorial</span>
+        <input type="text" id="asName" placeholder="Ex : Le Nouveau Média" />
+      </label>
+      <label class="form-field">
+        <span>URL d'entrée</span>
+        <input type="text" id="asUrl" placeholder="https://exemple.com/" />
+      </label>
+      <label class="form-field">
+        <span>Domaines autorisés (séparés par une virgule)</span>
+        <input type="text" id="asDomains" placeholder="exemple.com, www.exemple.com" />
+      </label>
+      <div class="form-row">
+        <label class="form-field">
+          <span>Catégorie</span>
+          <select id="asCategory"><option value="GN_NAT">Nationale guinéenne</option><option value="INTL">Internationale</option></select>
+        </label>
+        <label class="form-field">
+          <span>Vecteur de collecte</span>
+          <select id="asVector"><option value="html">HTML (page + sitemap)</option><option value="rss">RSS</option></select>
+        </label>
+      </div>
+      <label class="mini-sheet-check"><input type="checkbox" id="asGuineeFilter" /> Filtre Guinée strict requis (médias internationaux)</label>
+      <p class="muted source-detail-footnote">${icon("i-shield")} L'ajout est tracé dans le journal d'audit.</p>
+      <div class="mini-sheet-actions">
+        <button class="btn btn-primary" id="asSubmit">Ajouter</button>
+        <button class="btn btn-ghost" id="asCancel">Annuler</button>
+      </div>
+    </div>`;
+  sheet.hidden = false; scrim.hidden = false;
+  const cancelBtn = document.getElementById("asCancel");
+  cancelBtn.onclick = () => Store.closeSheet();
+  document.getElementById("asSubmit").onclick = async () => {
+    const name = document.getElementById("asName").value.trim();
+    const entry_url = document.getElementById("asUrl").value.trim();
+    const domains = document.getElementById("asDomains").value.split(",").map(d => d.trim()).filter(Boolean);
+    const category = document.getElementById("asCategory").value;
+    const vector_primary = document.getElementById("asVector").value;
+    const guinee_filter = document.getElementById("asGuineeFilter").checked;
+    if (!name || !entry_url || !domains.length) { snack("Erreur : nom, URL et au moins un domaine sont requis."); return; }
+    const id = name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "").slice(0, 30) || ("source" + Date.now());
+    try {
+      await Store.addSource({ id, name, entry_url, allowed_domains: domains, category, vector_primary,
+        vector_secondary: vector_primary === "html" ? "sitemap" : "", guinee_filter });
+      Store.closeSheet();
+      snack("Source ajoutée.");
+    } catch (err) { snack("Erreur : " + (err.message || "échec de l'ajout.")); }
+  };
+  document.getElementById("asName").focus();
 }
 function viewSettings(s) {
   const theme = Store.getTheme();
@@ -1351,6 +1439,7 @@ function renderSheet(s) {
   if (sh.type === "reject-confirm") return renderRejectConfirm(s);
   if (sh.type === "confirm") return renderConfirmSheet(s);
   if (sh.type === "source-detail") return renderSourceDetail(s);
+  if (sh.type === "add-source") return renderAddSourceSheet(s);
   const f = sh.fact; const c = f.champion || {};
   const img = imgSrc(f);
   const ph = placeholderSvg(Store.getTheme());

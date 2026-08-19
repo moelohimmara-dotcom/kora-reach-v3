@@ -1,18 +1,24 @@
 """whitelist.py — gouvernance des sources versionnée (G1 du CDC).
 
-Matrice des 12 sources autorisées avec :
-- identifiant interne stable
-- domaines/sous-domaines autorisés (liste fermée)
-- URL d'entrée
-- vecteur prioritaire/secondaire
-- redirections autorisées (liste fermée)
-- responsable + date + version
-Aucune découverte de domaine automatique. Toute cible hors liste = refusée,
-y compris après redirection.
+Refonte 2026-08-19 (diagnostic P2 §8, gestion via UI demandée explicitement) :
+la whitelist était figée en dur dans ce fichier (liste Python), modifiable
+uniquement par un commit Git. Elle est désormais stockée en base (table
+`whitelist_sources`, via db.py — SQLite en dev, Postgres en prod) et
+gérable depuis l'interface (advanced) : ajout, modification, activation/
+suspension d'une source. La piste d'audit qu'assurait le commit Git est
+reprise par audit.log() sur chaque mutation (voir server.py, capacité
+"gerer_sources").
+
+Principe inchangé (G1) : aucune découverte de domaine automatique. Toute
+cible hors liste des domaines autorisés d'une source = refusée, y compris
+après redirection (is_allowed()).
 """
-from dataclasses import dataclass, field
-from typing import List, Set
+from dataclasses import dataclass
+from typing import List, Optional
 from urllib.parse import urlparse
+import json
+from datetime import datetime
+import db
 
 
 @dataclass(frozen=True)
@@ -23,11 +29,11 @@ class WhitelistEntry:
     entry_url: str               # URL d'entrée
     allowed_domains: tuple       # domaines + sous-domaines autorisés (fermé)
     vector_primary: str          # "rss" | "html" | "gnews"
-    vector_secondary: str = ""   # "sitemap" | "" 
+    vector_secondary: str = ""   # "sitemap" | ""
     allowed_redirects: tuple = ()  # redirections explicitement autorisées
     guinee_filter: bool = False  # INTL: mention Guinée exigée
     responsible: str = "edito"   # responsable validation
-    version: str = "2026-08-02"  # version whitelist
+    version: str = "2026-08-02"  # version de CETTE entrée (bump à chaque édition)
     status: str = "active"       # active | suspended | retired
 
     @property
@@ -50,8 +56,11 @@ class WhitelistEntry:
         return 1 if self.category == "GN_NAT" else 2
 
 
-# Version figée de la whitelist (G1). Domaines listés explicitement.
-WHITELIST: List[WhitelistEntry] = [
+# Amorce de seed (utilisée UNE fois, si la table est vide — premier démarrage
+# ou migration depuis l'ancienne whitelist figée en code). Après le premier
+# seed, la base est la seule source de vérité : modifier cette liste n'a
+# ensuite plus aucun effet.
+_SEED: List[WhitelistEntry] = [
     WhitelistEntry("mosaique", "Mosaique Guinée", "GN_NAT",
         "https://mosaiqueguinee.com/", ("mosaiqueguinee.com",),
         "html", "sitemap", responsible="edito"),
@@ -76,9 +85,6 @@ WHITELIST: List[WhitelistEntry] = [
     WhitelistEntry("visionguinee", "Vision Guinee", "GN_NAT",
         "https://www.visionguinee.info/", ("www.visionguinee.info", "visionguinee.info"),
         "html", "sitemap", responsible="edito"),
-    # --- Ajouts 2026-08-19 : verifies actifs (HTTP 200 + publication recente
-    # sur sitemap/homepage) ET presents au registre HAC (Haute Autorite de la
-    # Communication, regulateur guineen) des organes de presse en ligne.
     WhitelistEntry("aminata", "Aminata", "GN_NAT",
         "https://aminata.com/", ("aminata.com", "www.aminata.com"),
         "html", "", responsible="edito", version="2026-08-19"),
@@ -106,20 +112,192 @@ WHITELIST: List[WhitelistEntry] = [
     WhitelistEntry("google_news_guinee", "Google News Guinée", "INTL",
         "https://news.google.com/rss/search?q=Guin%C3%A9e&hl=fr&gl=GN&ceid=GN:fr",
         ("news.google.com",), "gnews", guinee_filter=True,
-        # 2026-08-19 : etait a False -> la requete "Guinée" seule ne garantit PAS
-        # que la Guinée soit le SUJET (peut matcher Guinée-Bissau/Equatoriale ou
-        # une mention accessoire/diaspora hors-sujet). Regle metier explicite :
-        # un media international (RFI/BBC/France24/Google News) n'est retenu que
-        # si la Guinée (CNRD, president Doumbouya, actualite nationale ou
-        # diaspora liee) est bien le sujet — jamais une simple mention en passant.
         allowed_redirects=("news.google.com",), responsible="edito"),
 ]
 
-WHITELIST_VERSION = "2026-08-19"
-_ACTIVE_DOMAINS: Set[str] = set()
-for _e in WHITELIST:
-    _ACTIVE_DOMAINS.update(_e.allowed_domains)
-    _ACTIVE_DOMAINS.update(_e.allowed_redirects)
+# Marqueur de génération de gouvernance (statique, PAS calculé depuis la base
+# à l'import — voir incident 2026-08-18 : ne jamais faire de travail DB au
+# chargement du module). Le suivi fin par source vit dans le champ `version`
+# de chaque entrée, mis à jour à chaque édition via l'UI.
+WHITELIST_VERSION = "2026-08-19-db"
+
+_initialized = False
+
+
+def _ph():
+    return db.placeholder()
+
+
+def init():
+    """(Ré)crée la table si besoin + seed initial si vide. Idempotent
+    process-wide (même garde que hitl_store/state_store — voir incident
+    2026-08-18 : ne pas re-exécuter CREATE/seed à chaque appel)."""
+    global _initialized
+    if _initialized:
+        return
+    con, mode = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute("""CREATE TABLE IF NOT EXISTS whitelist_sources (
+            id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL,
+            entry_url TEXT NOT NULL, allowed_domains TEXT NOT NULL,
+            vector_primary TEXT NOT NULL, vector_secondary TEXT DEFAULT '',
+            allowed_redirects TEXT DEFAULT '[]', guinee_filter TEXT DEFAULT 'false',
+            responsible TEXT DEFAULT 'edito', version TEXT, status TEXT DEFAULT 'active',
+            created_at TEXT, updated_at TEXT)""")
+        con.commit()
+        cur.execute("SELECT COUNT(*) AS n FROM whitelist_sources")
+        row = cur.fetchone()
+        n = row["n"] if isinstance(row, dict) else row[0]
+        if n == 0:
+            now = datetime.now().isoformat(timespec="seconds")
+            p = _ph()
+            for e in _SEED:
+                cur.execute(
+                    f"""INSERT INTO whitelist_sources
+                       (id,name,category,entry_url,allowed_domains,vector_primary,vector_secondary,
+                        allowed_redirects,guinee_filter,responsible,version,status,created_at,updated_at)
+                       VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p})""",
+                    (e.id, e.name, e.category, e.entry_url, json.dumps(list(e.allowed_domains)),
+                     e.vector_primary, e.vector_secondary, json.dumps(list(e.allowed_redirects)),
+                     "true" if e.guinee_filter else "false", e.responsible, e.version, e.status, now, now))
+            con.commit()
+    finally:
+        con.close()
+    _initialized = True
+
+
+def _row_to_entry(row) -> WhitelistEntry:
+    r = dict(row)
+    return WhitelistEntry(
+        id=r["id"], name=r["name"], category=r["category"], entry_url=r["entry_url"],
+        allowed_domains=tuple(json.loads(r["allowed_domains"] or "[]")),
+        vector_primary=r["vector_primary"], vector_secondary=r.get("vector_secondary") or "",
+        allowed_redirects=tuple(json.loads(r.get("allowed_redirects") or "[]")),
+        guinee_filter=(str(r.get("guinee_filter")).lower() == "true"),
+        responsible=r.get("responsible") or "edito", version=r.get("version") or "",
+        status=r.get("status") or "active",
+    )
+
+
+def all_entries() -> List[WhitelistEntry]:
+    """Toutes les sources, quel que soit leur statut (pour l'écran de gestion)."""
+    init()
+    con, mode = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute("SELECT * FROM whitelist_sources ORDER BY category, name")
+        return [_row_to_entry(r) for r in cur.fetchall()]
+    finally:
+        con.close()
+
+
+def active_entries() -> List[WhitelistEntry]:
+    init()
+    con, mode = db.conn()
+    try:
+        cur = con.cursor()
+        p = _ph()
+        cur.execute(f"SELECT * FROM whitelist_sources WHERE status={p} ORDER BY category, name", ("active",))
+        return [_row_to_entry(r) for r in cur.fetchall()]
+    finally:
+        con.close()
+
+
+def get_entry(source_id: str) -> WhitelistEntry:
+    init()
+    con, mode = db.conn()
+    try:
+        cur = con.cursor()
+        p = _ph()
+        cur.execute(f"SELECT * FROM whitelist_sources WHERE id={p}", (source_id,))
+        row = cur.fetchone()
+        if not row:
+            raise KeyError(f"Source {source_id} absente de la whitelist")
+        return _row_to_entry(row)
+    finally:
+        con.close()
+
+
+def get_entry_by_source(source_name: str) -> Optional[WhitelistEntry]:
+    """Retourne l'entrée whitelist dont le nom/domaine correspond au 'source'
+    d'un article (ex. 'mosaiqueguinee.com', 'RFI Guinée'). None si aucune."""
+    if not source_name:
+        return None
+    s = source_name.lower()
+    for e in all_entries():
+        if s in e.name.lower():
+            return e
+        for d in e.allowed_domains:
+            if s in d.lower():
+                return e
+    return None
+
+
+def add_entry(data: dict) -> WhitelistEntry:
+    """Ajoute une nouvelle source (capacité 'gerer_sources', advanced —
+    voir server.py). `data['id']` doit être unique et stable (slug)."""
+    init()
+    sid = (data.get("id") or "").strip()
+    if not sid:
+        raise ValueError("id requis (identifiant stable, ex: 'nouveausite')")
+    now = datetime.now().isoformat(timespec="seconds")
+    version = data.get("version") or now[:10]
+    con, mode = db.conn()
+    try:
+        cur = con.cursor()
+        p = _ph()
+        cur.execute(f"SELECT 1 FROM whitelist_sources WHERE id={p}", (sid,))
+        if cur.fetchone():
+            raise ValueError(f"Source '{sid}' existe déjà")
+        cur.execute(
+            f"""INSERT INTO whitelist_sources
+               (id,name,category,entry_url,allowed_domains,vector_primary,vector_secondary,
+                allowed_redirects,guinee_filter,responsible,version,status,created_at,updated_at)
+               VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p})""",
+            (sid, data.get("name", sid), data.get("category", "GN_NAT"), data.get("entry_url", ""),
+             json.dumps(data.get("allowed_domains", [])), data.get("vector_primary", "html"),
+             data.get("vector_secondary", ""), json.dumps(data.get("allowed_redirects", [])),
+             "true" if data.get("guinee_filter") else "false", data.get("responsible", "edito"),
+             version, data.get("status", "active"), now, now))
+        con.commit()
+    finally:
+        con.close()
+    return get_entry(sid)
+
+
+def update_entry(source_id: str, patch: dict) -> WhitelistEntry:
+    """Modifie une source existante (statut, domaines, vecteur, filtre...).
+    Bump automatique du champ `version` à la date du jour (piste d'audit
+    granulaire par source, en plus de audit.log() côté server.py)."""
+    init()
+    current = get_entry(source_id)  # lève KeyError si absent
+    now = datetime.now().isoformat(timespec="seconds")
+    fields = {
+        "name": patch.get("name", current.name),
+        "category": patch.get("category", current.category),
+        "entry_url": patch.get("entry_url", current.entry_url),
+        "allowed_domains": json.dumps(patch.get("allowed_domains", list(current.allowed_domains))),
+        "vector_primary": patch.get("vector_primary", current.vector_primary),
+        "vector_secondary": patch.get("vector_secondary", current.vector_secondary),
+        "allowed_redirects": json.dumps(patch.get("allowed_redirects", list(current.allowed_redirects))),
+        "guinee_filter": "true" if patch.get("guinee_filter", current.guinee_filter) else "false",
+        "responsible": patch.get("responsible", current.responsible),
+        "status": patch.get("status", current.status),
+        "version": patch.get("version") or now[:10],
+        "updated_at": now,
+    }
+    con, mode = db.conn()
+    try:
+        cur = con.cursor()
+        p = _ph()
+        set_clause = ", ".join(f"{k}={p}" for k in fields)
+        cur.execute(f"UPDATE whitelist_sources SET {set_clause} WHERE id={p}",
+                    tuple(fields.values()) + (source_id,))
+        con.commit()
+    finally:
+        con.close()
+    return get_entry(source_id)
 
 
 def _host(url: str) -> str:
@@ -130,35 +308,14 @@ def _host(url: str) -> str:
 
 
 def is_allowed(url: str) -> bool:
-    """Vrai si l'hôte est dans un domaine autorisé (avant OU après redirection)."""
+    """Vrai si l'hôte est dans un domaine autorisé (avant OU après
+    redirection), toutes sources confondues (actives ou non — un domaine
+    suspendu reste un domaine connu/gouverné, pas un domaine étranger)."""
     host = _host(url)
     if not host:
         return False
-    # match exact ou sous-domaine d'un domaine autorisé
-    return any(host == d or host.endswith("." + d) for d in _ACTIVE_DOMAINS)
-
-
-def get_entry(source_id: str) -> WhitelistEntry:
-    for e in WHITELIST:
-        if e.id == source_id:
-            return e
-    raise KeyError(f"Source {source_id} absente de la whitelist")
-
-
-def get_entry_by_source(source_name: str):
-    """Retourne l'entrée whitelist dont le nom/domaine correspond au 'source'
-    d'un article (ex. 'mosaiqueguinee.com', 'RFI Guinée'). None si aucune."""
-    if not source_name:
-        return None
-    s = source_name.lower()
-    for e in WHITELIST:
-        if s in e.name.lower():
-            return e
-        for d in e.allowed_domains:
-            if s in d.lower():
-                return e
-    return None
-
-
-def active_entries() -> List[WhitelistEntry]:
-    return [e for e in WHITELIST if e.status == "active"]
+    domains = set()
+    for e in all_entries():
+        domains.update(e.allowed_domains)
+        domains.update(e.allowed_redirects)
+    return any(host == d or host.endswith("." + d) for d in domains)

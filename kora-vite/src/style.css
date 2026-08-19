@@ -1952,7 +1952,7 @@ html.icons-ready .material-icons { visibility: visible; }
 .reject-confirm-option-head strong { font-size: 14px; color: var(--text-primary); }
 .reject-confirm-danger:hover, .reject-confirm-danger:focus-visible { border-color: var(--danger); }
 
-/* Détail d'une source (wireframe 7.2) — panneau 100% lecture seule */
+/* Détail d'une source (wireframe 7.2) — gouvernance ouverte à l'UI (advanced) */
 .source-detail-badges { display: flex; flex-wrap: wrap; gap: 6px; }
 .source-detail-field { display: flex; flex-direction: column; gap: 4px; }
 .source-detail-label { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim, var(--md-sys-color-on-surface-variant)); }
@@ -1961,6 +1961,17 @@ html.icons-ready .material-icons { visibility: visible; }
 .source-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .source-detail-footnote { display: flex; align-items: center; gap: 6px; font-size: 12.5px; margin: 4px 0 0; }
 .source-detail-footnote .ic { width: 14px; height: 14px; flex: none; }
+.src-row-suspended { opacity: .6; }
+
+/* Formulaire d'ajout de source (2026-08-19) */
+.add-source .form-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; font-size: 13px; }
+.add-source .form-field span { font-weight: 600; color: var(--text-dim, var(--md-sys-color-on-surface-variant)); }
+.add-source .form-field input, .add-source .form-field select {
+  padding: 10px 12px; border-radius: var(--radius-md, 10px); border: 1px solid var(--md-sys-color-outline);
+  background: var(--surface-raised); color: var(--text-primary); font-size: 14px; font-family: inherit;
+}
+.add-source .form-field input:focus, .add-source .form-field select:focus { outline: none; border-color: var(--coral); }
+.add-source .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
 /* État du transmetteur (wireframe 9.6) */
 .transmitter-mode-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 18px; border: 1px solid var(--md-sys-color-outline); border-radius: var(--radius-lg); background: var(--glass-bg); }

@@ -419,7 +419,7 @@ class Handler(BaseHTTPRequestHandler):
                 "vector": e.vector_primary, "vector_secondary": e.vector_secondary,
                 "guinea_filter": e.guinee_filter, "responsible": e.responsible,
                 "version": e.version, "status": e.status,
-            } for e in wl.WHITELIST])
+            } for e in wl.all_entries()])
         if path == "/api/audit":
             if not self._require_auth():
                 return
@@ -821,6 +821,31 @@ class Handler(BaseHTTPRequestHandler):
             field = payload.get("field")  # "system" | "addon"
             res = agent_prompts.reset(field, editor=self._actor_username())
             return self._send(200 if res.get("ok") else 400, res)
+        if p.path == "/api/whitelist":
+            # Ajout d'une source (2026-08-19 : gouvernance ouverte a l'UI,
+            # tracee ici dans le journal d'audit -- reprend le role qu'assurait
+            # le commit Git quand la whitelist etait figee en code).
+            if not self._require_capability("gerer_sources"):
+                return
+            try:
+                e = wl.add_entry(payload or {})
+            except ValueError as ve:
+                return self._send(400, {"error": str(ve)})
+            log("whitelist", "SOURCE_ADDED", f"{e.id} ({e.name}) par {self._actor_username()}", action="GOUVERNANCE")
+            return self._send(200, {"ok": True, "id": e.id})
+        if p.path.startswith("/api/whitelist/"):
+            # Edition / activation-suspension d'une source existante.
+            if not self._require_capability("gerer_sources"):
+                return
+            source_id = p.path[len("/api/whitelist/"):].strip("/")
+            try:
+                e = wl.update_entry(source_id, payload or {})
+            except KeyError:
+                return self._send(404, {"error": "source_introuvable"})
+            except ValueError as ve:
+                return self._send(400, {"error": str(ve)})
+            log("whitelist", "SOURCE_UPDATED", f"{e.id} -> {payload} par {self._actor_username()}", action="GOUVERNANCE")
+            return self._send(200, {"ok": True, "id": e.id, "status": e.status})
         # ---- Auth ----
         if p.path == "/api/auth/login":
             u = payload.get("username", "").strip()
