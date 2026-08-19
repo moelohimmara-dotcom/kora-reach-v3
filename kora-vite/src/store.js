@@ -15,7 +15,7 @@ export const Store = (() => {
     // Bug corrigé 2026-08-19 : le loader plein écran lisait "busy" (générique)
     // au lieu de "cycleBusy" -> une simple suppression déclenchait l'écran
     // "Kora Agent explore les sources..." alors qu'aucun cycle n'était lancé.
-    ui: { loading: false, error: null, busy: false, cycleBusy: false, overlay: null, theme: "dark", rail: "expanded", factFilter: "all" },
+    ui: { loading: false, error: null, busy: false, cycleBusy: false, overlay: null, launchEstimate: null, theme: "dark", rail: "expanded", factFilter: "all" },
     health: null,
     lastCycle: null,
     facts: [],
@@ -445,6 +445,16 @@ export const Store = (() => {
   // boot() dans app.js) — jamais deux boucles de suivi en parallèle
   // (_watching évite la double-boucle qui ferait sauter l'état en dépit
   // l'une de l'autre).
+  // Estimation de temps (2026-08-19, demande explicite) : formate eta_seconds
+  // (reach_agent._update_progress_eta(), déjà en secondes entières) en texte
+  // court et intuitif, jamais plus précis que la minute (une estimation à la
+  // seconde près serait trompeuse -- c'est une moyenne mobile, pas un minuteur).
+  function _formatEta(sec) {
+    if (sec == null || sec < 0) return "";
+    if (sec < 45) return "moins d'une minute restante";
+    const min = Math.round(sec / 60);
+    return min <= 1 ? "≈ 1 min restante" : `≈ ${min} min restantes`;
+  }
   let _watching = false;
   async function _watchCycle() {
     if (_watching) return;
@@ -461,9 +471,10 @@ export const Store = (() => {
           setState({ lastCycle: r, ui: { ...state.ui, busy: false, cycleBusy: false, overlay: null, progress: null } });
           return;
         }
+        const etaTxt = p && p.eta_seconds != null ? _formatEta(p.eta_seconds) : "";
         const label = p && p.total > 0
-          ? `Article ${p.current || 1} sur ${p.total}…`
-          : "Cycle en cours… (" + i * 3 + "s)";
+          ? `Article ${p.current || 1} sur ${p.total}…` + (etaTxt ? ` (${etaTxt})` : "")
+          : "Collecte des sources en cours… (" + i * 3 + "s)";
         setState({ lastCycle: r, ui: { ...state.ui, busy: true, cycleBusy: true, overlay: label, progress: p } });
         await wait(3000);
       }
@@ -482,7 +493,7 @@ export const Store = (() => {
   // LOGIQUE-METIER-REACH.md §7). force : ignore la fenêtre 24h.
   // Signature objet (et non positionnelle) pour éviter les appels ambigus.
   async function startCycle({ demand, force = false } = {}) {
-    setState({ ui: { ...state.ui, busy: true, cycleBusy: true, overlay: force ? "Génération forcée (hors fenêtre 24h)…" : "Collecte des sources whitelist…", progress: null } });
+    setState({ ui: { ...state.ui, busy: true, cycleBusy: true, overlay: force ? "Génération forcée (hors fenêtre 24h)…" : "Collecte des sources whitelist…", progress: null, launchEstimate: null } });
     try {
       const started = await api("/api/cycle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ demand, force }) });
       if (started && started.error) {
@@ -491,6 +502,14 @@ export const Store = (() => {
         // au lieu d'afficher un échec pour une action qui, de son point de
         // vue, "n'a rien fait" alors qu'un cycle légitime est bien en vie.
         return _watchCycle();
+      }
+      // Estimation immédiate (2026-08-19, demande explicite) : le backend
+      // renvoie déjà un ordre de grandeur avant même de connaître le nombre
+      // d'articles (ça, ça vient seulement après la collecte). Affichée tout
+      // de suite dans le loader -- voir globalLoaderEstimate/cycleBannerEstimate
+      // (app.js), remplacée par l'ETA en direct dès que le cycle progresse.
+      if (started && started.estimate) {
+        setState({ ui: { ...state.ui, launchEstimate: started.estimate } });
       }
     } catch (e) {
       setState({ ui: { ...state.ui, busy: false, cycleBusy: false, overlay: null, progress: null, error: e.message } });
@@ -895,6 +914,7 @@ export const Store = (() => {
     state, setState, subscribe, api,
     loadHealth, loadLast, loadHITL, loadAudit, loadSources, addSource, updateSource, loadSettings, applySettings,
     startCycle, resumeCycleWatch, cancelCycle, decide, retract, setRoute, openSheet, closeSheet, wait,
+    formatEta: _formatEta,
     getFactFilter, setFactFilter,
     getTheme, setTheme, initTheme,
     getRailMode, setRailMode, initRailMode, applyRailMode,

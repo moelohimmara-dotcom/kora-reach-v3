@@ -2440,11 +2440,24 @@ function render() {
   // par /api/last). N'apparaît que si le backend a déjà déterminé le nombre
   // de faits à générer (total > 0) — avant ça, on reste sur le message chaleureux seul.
   const prog = s.ui && s.ui.progress;
-  const progTxt = (prog && prog.total > 0) ? `Article ${prog.current || 1} sur ${prog.total}` : "";
+  const eta = prog && prog.eta_seconds != null ? Store.formatEta(prog.eta_seconds) : "";
+  const progTxt = (prog && prog.total > 0)
+    ? `Article ${prog.current || 1} sur ${prog.total}` + (eta ? ` (${eta})` : "")
+    : "";
   const glProg = document.getElementById("globalLoaderProgress");
   if (glProg) { glProg.hidden = !progTxt; glProg.textContent = progTxt; }
   const cbProg = document.getElementById("cycleBannerProgress");
   if (cbProg) { cbProg.hidden = !progTxt; cbProg.textContent = progTxt; }
+  // Estimation annoncée dès le lancement (2026-08-19, demande explicite) :
+  // affichée UNIQUEMENT tant que le nombre d'articles n'est pas encore connu
+  // (avant progTxt) -- une fois la progression réelle disponible, elle est
+  // plus précise et prend le relais, pas besoin des deux à la fois.
+  const launchEst = s.ui && s.ui.launchEstimate;
+  const estTxt = (!progTxt && launchEst && launchEst.note) ? launchEst.note : "";
+  const glEst = document.getElementById("globalLoaderEstimate");
+  if (glEst) { glEst.hidden = !estTxt; glEst.textContent = estTxt; }
+  const cbEst = document.getElementById("cycleBannerEstimate");
+  if (cbEst) { cbEst.hidden = !estTxt; cbEst.textContent = estTxt; }
   if (cycleBusy) {
     const glDismiss = document.getElementById("globalLoaderDismiss");
     if (glDismiss) glDismiss.onclick = () => {

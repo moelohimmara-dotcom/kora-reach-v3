@@ -690,7 +690,13 @@ class Handler(BaseHTTPRequestHandler):
                 LAST_CYCLE["running"] = True
                 LAST_CYCLE["result"] = None
             threading.Thread(target=_run, daemon=True).start()
-            return self._send(200, {"started": True, "detail": "Cycle lancé en arrière-plan. Poll /api/last ou /api/hitl."})
+            # Estimation immediate (2026-08-19, demande explicite) : previent
+            # tout de suite l'utilisateur d'un ordre de grandeur, avant meme
+            # de connaitre le nombre d'articles (connu seulement apres la
+            # collecte). Voir reach_agent.estimate_launch_message().
+            estimate = reach_agent.estimate_launch_message()
+            return self._send(200, {"started": True, "detail": "Cycle lancé en arrière-plan. Poll /api/last ou /api/hitl.",
+                                    "estimate": estimate})
         if p.path == "/api/cycle/cancel":
             # Interrompt le cycle en cours (arrêt propre après l'article en cours).
             # Le flag est lu par reach_agent.run ; le verrou LAST_CYCLE est relâché

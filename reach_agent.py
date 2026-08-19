@@ -15,8 +15,9 @@ from normalizer import normalize, TZ, _parse_date
 from guinea_filter import filter_guinea
 from dedup import url_hash, is_dup
 from clusterer import cluster, pick_champion, score_item
-from state_store import seen, mark, new_cycle, end_cycle, init as _init_state
-from writer import write_article
+from state_store import (seen, mark, new_cycle, end_cycle, init as _init_state,
+                          get_avg_article_seconds, record_article_seconds)
+from writer import write_article, llm_circuit_status
 
 # Flag d'annulation de cycle (bouton « Interrompre » côté UI)
 CANCEL_FLAG = {"requested": False}
@@ -28,7 +29,12 @@ def cancel_cycle():
 # Progression du cycle en cours (lue par /api/last -> loader plein écran
 # "Article X sur Y"). Un seul cycle actif à la fois (mutex fichier), un seul
 # writer -> pas besoin de lock, simple dict remplacé/lu par polling HTTP.
-CYCLE_PROGRESS = {"cycle_id": None, "current": 0, "total": 0}
+# eta_seconds/avg_sec_per_article (2026-08-19, demande explicite : estimation
+# de temps annoncée dès le lancement) : recalculés à chaque article terminé,
+# voir _update_progress_eta() plus bas.
+CYCLE_PROGRESS = {"cycle_id": None, "current": 0, "total": 0,
+                   "eta_seconds": None, "avg_sec_per_article": None}
+_CYCLE_ELAPSED = {"start_ts": None, "done": 0}
 
 def get_progress() -> dict:
     """Copie de l'état de progression du cycle en cours (0/0 si aucun)."""
@@ -38,6 +44,53 @@ def _reset_progress(cid=None, total=0):
     CYCLE_PROGRESS["cycle_id"] = cid
     CYCLE_PROGRESS["current"] = 0
     CYCLE_PROGRESS["total"] = total
+    CYCLE_PROGRESS["eta_seconds"] = None
+    CYCLE_PROGRESS["avg_sec_per_article"] = None
+    _CYCLE_ELAPSED["start_ts"] = datetime.now(TZ).timestamp() if total else None
+    _CYCLE_ELAPSED["done"] = 0
+
+def _update_progress_eta():
+    """Rafraîchit l'estimation de temps restant après chaque article terminé.
+    Utilise le rythme RÉEL de CE cycle dès qu'au moins 1 article est fini
+    (plus fiable : reflète l'état actuel des fournisseurs LLM) ; avant ça,
+    se rabat sur la moyenne historique persistée (déjà utile dès l'article 1,
+    voir get_avg_article_seconds())."""
+    done = _CYCLE_ELAPSED["done"]
+    total = CYCLE_PROGRESS["total"]
+    remaining = max(total - done, 0)
+    if done > 0 and _CYCLE_ELAPSED["start_ts"]:
+        elapsed = datetime.now(TZ).timestamp() - _CYCLE_ELAPSED["start_ts"]
+        pace = elapsed / done
+    else:
+        pace = get_avg_article_seconds()
+    CYCLE_PROGRESS["avg_sec_per_article"] = round(pace)
+    CYCLE_PROGRESS["eta_seconds"] = round(pace * remaining)
+
+def estimate_launch_message() -> dict:
+    """Estimation IMMÉDIATE renvoyée dans la réponse de POST /api/cycle
+    (2026-08-19, demande explicite : prévenir l'utilisateur du temps
+    approximatif dès le lancement, avant même de connaître le nombre
+    d'articles -- connu seulement après la collecte, ~15-30s). Se base sur
+    la moyenne mobile persistée (voir state_store) + l'état du disjoncteur
+    LLM pour prévenir explicitement d'un ralentissement probable."""
+    avg = get_avg_article_seconds()
+    cb = llm_circuit_status()
+    degraded = cb.get("failures", 0) >= 1 and not cb.get("open_until")
+    per_article_min = avg / 60.0
+    if per_article_min < 1.5:
+        rough = "moins de 2 min par article"
+    elif per_article_min < 3:
+        rough = "environ 2 à 3 min par article"
+    elif per_article_min < 5:
+        rough = "environ 3 à 5 min par article"
+    else:
+        rough = f"environ {round(per_article_min)} min par article"
+    note = (f"Estimation : {rough}. Le nombre d'articles sera connu après la "
+            f"collecte (~15-30s), l'estimation totale s'affinera ensuite en direct.")
+    if degraded:
+        note += " Un fournisseur IA montre des signes de ralentissement en ce moment : la génération pourrait être plus lente que d'habitude."
+    return {"avg_sec_per_article": round(avg), "note": note, "degraded": degraded}
+
 from hitl_store import fact_id_of
 from audit import log
 from illustrate import illustrate, illustrate_all
@@ -399,6 +452,7 @@ class ReachAgent:
             safety_cap = config.LIMITS.get("daily_article_limit", 10)
             limit = min(demand, len(clusters), safety_cap) if demand else min(len(clusters), safety_cap)
             _reset_progress(cid=cid, total=limit)
+            _update_progress_eta()  # estimation initiale (moyenne historique) avant le 1er article
             facts = []
             for idx, c in enumerate(clusters[:limit]):
                 if CANCEL_FLAG["requested"]:
@@ -415,17 +469,38 @@ class ReachAgent:
                 # mélanger des faits frais normaux et des faits bypassés.
                 fact_forced_stale = champ.get("date_status") == "STALE"
                 fact = {"champion": champ, "contexts": ctx, "n_sources": len(c), "forced_stale": fact_forced_stale, "cycle_id": cid}
+                _t0 = datetime.now(TZ).timestamp()
                 written = write_article(fact)
+                _elapsed = datetime.now(TZ).timestamp() - _t0
+                # Alimente l'estimation de temps affichée au lancement d'un
+                # cycle (2026-08-19, demande explicite) : moyenne mobile
+                # persistée, mise à jour à CHAQUE article réellement généré.
+                try:
+                    record_article_seconds(_elapsed)
+                except Exception:
+                    pass
+                _CYCLE_ELAPSED["done"] += 1
+                _update_progress_eta()
                 fact["article"] = written["article"]
                 fact["image"] = written["image"]
                 fact["gen_model"] = written["model"]
                 fact["gen_status"] = written["status"]
+                fact["critique_issues"] = written.get("critique_issues", 0)
                 facts.append(fact)
                 # Dedup inter-cycles : on marque CHAQUE item unique (pas que le champion)
                 for it in c:
                     mark(url_hash(it["url"]), it["title"])
-                log(cid, "FACT_GEN", f"provider={written['model']} src={champ['source']}",
+                log(cid, "FACT_GEN", f"provider={written['model']} src={champ['source']} durée={_elapsed:.0f}s",
                     written["model"], fact_id=fact_id_of(champ), action="GENERE")
+                # Auto-critique (2026-08-19, demande explicite : contrôle qualité
+                # orthographe/grammaire/accords/conjugaison/cohérence sémantique
+                # AVANT sortie du texte final -- voir writer._self_review_pass).
+                # Journalisé séparément pour rester consultable/auditable même
+                # si l'article final ne montre plus la trace des corrections.
+                if written.get("critique_issues"):
+                    log(cid, "AUTOCRITIQUE",
+                        f"{written['critique_issues']} probleme(s) corrige(s) | {(written.get('critique_report') or '')[:300]}",
+                        written["model"], fact_id=fact_id_of(champ), action="CORRIGE")
             # Illustration : garantit une image UNIQUE par article (aucun doublon)
             try:
                 facts = illustrate_all(facts)
