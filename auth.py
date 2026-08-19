@@ -429,7 +429,16 @@ def add_user(username, password, email="", role="normal"):
         return {"ok": True, "id": uid}
     except Exception as e:
         con.rollback()
-        return {"ok": False, "error": "username_exists" if "unique" in str(e).lower() else str(e)}
+        # Bug corrige (revue de code 2026-08-19) : str(e) brut partait tel
+        # quel dans la reponse API pour toute erreur DB non identifiee comme
+        # une violation d'unicite -- fuite potentielle de details internes
+        # (message SQL, structure de table) vers un appelant non authentifie
+        # (ce chemin est atteignable depuis /api/auth/invitations/accept,
+        # public). Journalise cote serveur, message generique cote client.
+        if "unique" in str(e).lower():
+            return {"ok": False, "error": "username_exists"}
+        print(f"[auth] add_user error: {type(e).__name__}: {e}")
+        return {"ok": False, "error": "erreur_serveur"}
     finally:
         con.close()
 
