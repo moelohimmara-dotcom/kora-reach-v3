@@ -53,7 +53,19 @@ import atexit
 # Le mutex precedent etait en memoire (instance unique) -> ne protegeait pas
 # si le serveur tourne en multi-process (gunicorn/uvicorn workers) ou si un
 # second process se lance. Ici on utilise un fichier verrou avec PID+timestamp.
-_CYCLE_LOCK_PATH = "/tmp/kora_cycle.lock"
+#
+# Emplacement (2026-08-19, diagnostic P1 §6) : etait en dur sur /tmp, qui sur
+# ce VPS n'est PAS inscriptible par l'utilisateur kora (permissions 755, uid
+# different) — seul le PrivateTmp=true du service systemd (mount /tmp prive et
+# isole) rendait ca fonctionnel, sans que ce soit documente ni garanti hors de
+# ce contexte precis (debug manuel, script one-off, tests). On utilise desormais
+# un repertoire sous le code de l'app (garanti inscriptible : c'est le seul
+# chemin autorise en ecriture par ReadWritePaths dans le durcissement systemd),
+# override possible via KORA_CYCLE_LOCK_PATH pour un deploiement different.
+_CYCLE_LOCK_PATH = os.environ.get(
+    "KORA_CYCLE_LOCK_PATH",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), ".kora_cycle.lock"),
+)
 _MUTEX_TTL_SEC = 300
 
 
@@ -99,7 +111,14 @@ def _acquire_cycle_lock():
                 pass
             return _acquire_cycle_lock()
         return False  # Lock valide et non perime -> refus
-    except OSError:
+    except PermissionError as e:
+        # Distinct des autres OSError : un vrai probleme d'ecriture ne doit
+        # JAMAIS se faire passer pour "cycle deja en cours" (message trompeur
+        # pour l'utilisateur qui masquerait le vrai probleme) -> log explicite.
+        print(f"[CYCLE_LOCK_PERMISSION_ERROR] impossible d'ecrire {_CYCLE_LOCK_PATH}: {e}")
+        return False
+    except OSError as e:
+        print(f"[CYCLE_LOCK_ERROR] {_CYCLE_LOCK_PATH}: {e}")
         return False
     # Lock acquis : ecrire PID + timestamp pour proprio/diagnostic
     try:

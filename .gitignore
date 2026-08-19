@@ -13,6 +13,7 @@ backups/
 *.sqlite
 *.sqlite3
 reach_state.db
+.kora_cycle.lock
 
 # --- Virtual env ---
 .venv/
