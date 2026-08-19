@@ -217,7 +217,20 @@ def list_facts() -> list:
     for r in rows:
         d = dict(r)
         champ = json.loads(d["champion"]) if d["champion"] else {}
+        # Prevention (2026-08-19, demande explicite apres le correctif de
+        # lenteur de /api/hitl) : raw_content (texte source COMPLET scrape,
+        # potentiellement plusieurs Ko par source) n'est utilise QUE cote
+        # serveur (writer.py, au moment de la generation/regeneration, relu
+        # frais depuis get_fact() -- jamais depuis list_facts()). Verifie :
+        # AUCUNE reference a raw_content dans le frontend (app.js/store.js),
+        # il n'est jamais affiche. Retire ici -> pur gain de poids sans
+        # aucun changement cote client. Article deja redige (le texte
+        # REELLEMENT affiche) reste inclus, lui, sans changement.
+        champ.pop("raw_content", None)
         ctx = json.loads(d["contexts"]) if d["contexts"] else []
+        for c in ctx:
+            if isinstance(c, dict):
+                c.pop("raw_content", None)
         # B1 fix : article stocké en JSON string ("{}" = vide) -> traiter comme ""
         art_raw = d["article"]
         if art_raw and (art_raw.startswith("{") or art_raw.startswith("[")):
@@ -521,8 +534,14 @@ def list_trashed() -> list:
         for d in out:
             try: d["champion"] = json.loads(d["champion"]) if d["champion"] else {}
             except Exception: d["champion"] = {}
+            # Meme prevention que list_facts() : raw_content jamais affiche cote frontend.
+            if isinstance(d["champion"], dict):
+                d["champion"].pop("raw_content", None)
             try: d["contexts"] = json.loads(d["contexts"]) if d["contexts"] else []
             except Exception: d["contexts"] = []
+            for c in d["contexts"]:
+                if isinstance(c, dict):
+                    c.pop("raw_content", None)
             try:
                 a = d["article"]
                 d["article"] = json.loads(a) if (a and a.startswith("{")) else a
