@@ -25,6 +25,12 @@ export const Store = (() => {
     sources: [],
     sheet: null,
     trash: [],
+    // trashLoaded (2026-08-19, bug corrigé : "Corbeille vide" s'affichait une
+    // fraction de seconde au chargement avant que les vrais éléments
+    // n'apparaissent) : distingue "aucune donnée encore reçue" de "reçu, et
+    // vraiment vide" — nécessaire séparément de ui.loading, qui ne reflète
+    // PAS le chargement de la corbeille (loadTrash() ne le touche pas).
+    trashLoaded: false,
     invitations: [],       // invitations en attente/révoquées/acceptées (Phase 2)
     selection: {},        // { fact_id: true } — sélection multiple
     selectMode: false,    // mode sélection activé
@@ -819,9 +825,17 @@ export const Store = (() => {
   }
 
   async function loadTrash() {
-    const r = await api("/api/hitl/trash");
-    if (!r.error && r.items) setState({ trash: r.items });
-    return r;
+    try {
+      const r = await api("/api/hitl/trash");
+      if (!r.error && r.items) setState({ trash: r.items, trashLoaded: true });
+      else setState({ trashLoaded: true });
+      return r;
+    } catch (e) {
+      // Échec ou pas, la tentative a eu lieu : ne jamais rester bloqué sur
+      // l'état "pas encore chargé" indéfiniment si /api/hitl/trash échoue.
+      setState({ trashLoaded: true });
+      throw e;
+    }
   }
 
   async function loadStats() {
