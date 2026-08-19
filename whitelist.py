@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 from urllib.parse import urlparse
 import json
+import threading
 from datetime import datetime
 import db
 
@@ -123,6 +124,11 @@ _SEED: List[WhitelistEntry] = [
 WHITELIST_VERSION = "2026-08-19-db"
 
 _initialized = False
+# Garde-fou de precaution 2026-08-19 (voir state_store.py, incident reel :
+# deux threads dans init() au tout premier appel -> CREATE TABLE IF NOT
+# EXISTS concurrent sur Postgres peut lever UniqueViolation). Meme patron
+# ici, verrou par precaution.
+_init_lock = threading.Lock()
 
 
 def _ph():
@@ -136,6 +142,14 @@ def init():
     global _initialized
     if _initialized:
         return
+    with _init_lock:
+        if _initialized:
+            return
+        _init_locked()
+
+
+def _init_locked():
+    global _initialized
     con, mode = db.conn()
     try:
         cur = con.cursor()

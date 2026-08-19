@@ -10,9 +10,21 @@ de la base Postgres réelle. Ce module passe maintenant par db.conn() comme le
 reste de l'app (SQLite en dev local, Postgres en prod selon DATABASE_BACKEND).
 """
 import db
+import threading
 from datetime import datetime
 
 _initialized = False
+# Bug corrige 2026-08-19 (incident prod, casse par l'ajout de timing_stats) :
+# le garde "if _initialized: return" seul ne protege PAS contre deux THREADS
+# appelant init() en meme temps au tout premier appel (avant que le flag ne
+# passe a True) -- un thread de requete (estimate_launch_message) et le
+# thread de cycle en arriere-plan peuvent tomber pile dans cette fenetre.
+# Sur Postgres, deux CREATE TABLE IF NOT EXISTS concurrents pour une table
+# TOUTE NOUVELLE peuvent lever UniqueViolation sur pg_type_typname_nsp_index
+# (particularite connue de Postgres : IF NOT EXISTS n'est pas atomique face a
+# une creation concurrente du meme type). Ce verrou serialise le premier
+# appel, comme le reste du process n'a besoin de l'init qu'une fois.
+_init_lock = threading.Lock()
 
 
 def _ph():
@@ -26,6 +38,14 @@ def init():
     global _initialized
     if _initialized:
         return
+    with _init_lock:
+        if _initialized:  # un autre thread a pu finir pendant l'attente du verrou
+            return
+        _init_locked()
+
+
+def _init_locked():
+    global _initialized
     con, mode = db.conn()
     try:
         cur = con.cursor()

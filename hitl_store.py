@@ -10,6 +10,7 @@ anonyme. Survit aux redémarrages (SQLite ou PostgreSQL selon DATABASE_BACKEND).
 import os
 import json
 import hashlib
+import threading
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import config
@@ -40,6 +41,14 @@ def _ph():
 
 
 _initialized = False
+# Garde-fou 2026-08-19 (incident distinct trouve sur state_store.py, meme
+# schema ici) : le flag seul ne protege pas deux THREADS appelant _init() au
+# tout premier appel avant qu'il ne passe a True -- sur Postgres, un CREATE
+# TABLE IF NOT EXISTS concurrent pour une table neuve peut lever
+# UniqueViolation (pg_type_typname_nsp_index). Verrou de precaution : pas de
+# nouvelle table ajoutee ici aujourd'hui, mais ce fichier suit exactement le
+# meme patron que celui qui a plante en prod.
+_init_lock = threading.Lock()
 
 
 def _init():
@@ -56,6 +65,14 @@ def _init():
     global _initialized
     if _initialized:
         return
+    with _init_lock:
+        if _initialized:
+            return
+        _init_locked()
+
+
+def _init_locked():
+    global _initialized
     con, mode = db.conn()
     try:
         if mode == "postgres":
