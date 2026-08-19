@@ -8,6 +8,7 @@ Toute defaillance source/LLM = isolee (jamais crash global).
 """
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
+import threading
 import config
 import whitelist as wl
 from fetchers import fetch_source
@@ -35,6 +36,10 @@ def cancel_cycle():
 CYCLE_PROGRESS = {"cycle_id": None, "current": 0, "total": 0,
                    "eta_seconds": None, "avg_sec_per_article": None}
 _CYCLE_ELAPSED = {"start_ts": None, "done": 0}
+# Génération d'articles PARALLELE (2026-08-20) : plusieurs threads écrivent
+# CYCLE_PROGRESS/_CYCLE_ELAPSED en même temps -> l'ancienne hypothèse "un seul
+# writer, pas besoin de lock" (voir commentaire ci-dessus) ne tient plus.
+_PROGRESS_LOCK = threading.Lock()
 
 def get_progress() -> dict:
     """Copie de l'état de progression du cycle en cours (0/0 si aucun)."""
@@ -101,7 +106,6 @@ from alt_sources import alt_fetch
 import os
 import json
 import atexit
-import threading
 
 # Lock fichier cross-process pour /api/cycle (fonctionne sur multi-worker).
 # Le mutex precedent etait en memoire (instance unique) -> ne protegeait pas
@@ -462,15 +466,21 @@ class ReachAgent:
             limit = min(demand, len(clusters), safety_cap) if demand else min(len(clusters), safety_cap)
             _reset_progress(cid=cid, total=limit)
             _update_progress_eta()  # estimation initiale (moyenne historique) avant le 1er article
-            facts = []
-            for idx, c in enumerate(clusters[:limit]):
+
+            # Generation PARALLELE des articles (2026-08-20, demande explicite :
+            # reduire le temps TOTAL d'un cycle sans reduire la rigueur du
+            # pipeline auto-critique par article, qui reste inchange -- voir
+            # writer.py). Avant ce changement, chaque article (~400s, jusqu'a
+            # 4 appels LLM sequentiels) attendait la fin du precedent : un
+            # cycle de 10 articles pouvait depasser 1h. Chaque worker ne
+            # touche AUCUN etat partage (pick_champion/write_article sont
+            # purs) -- toutes les mutations partagees (CYCLE_PROGRESS,
+            # facts, dedup mark(), logs) restent faites par le thread
+            # PRINCIPAL au fur et a mesure que les resultats arrivent
+            # (as_completed), donc sans besoin de lock supplementaire.
+            def _gen_one(c):
                 if CANCEL_FLAG["requested"]:
-                    # Interruption propre : on arrête après l'article en cours,
-                    # on libère le flag et on rend les faits déjà générés.
-                    CANCEL_FLAG["requested"] = False
-                    log(cid, "CYCLE_CANCEL", "annulation demandee par l'utilisateur", action="CYCLE")
-                    break
-                CYCLE_PROGRESS["current"] = idx + 1
+                    return {"status": "cancelled"}, None, None, 0.0
                 champ, ctx = pick_champion(c)
                 # Par fact, pas globalement au cycle : seul un item réellement
                 # bypassé (STALE, jamais présent hors "Forcer") doit porter le
@@ -480,56 +490,75 @@ class ReachAgent:
                 fact = {"champion": champ, "contexts": ctx, "n_sources": len(c), "forced_stale": fact_forced_stale, "cycle_id": cid}
                 _t0 = datetime.now(TZ).timestamp()
                 # Bug corrige 2026-08-19 (rapporte : "Interrompre" restait
-                # sans effet plusieurs minutes) : avant ce correctif, le SEUL
-                # point de controle de CANCEL_FLAG etait ici, ENTRE deux
-                # articles -- avec ~400s/article en moyenne observes en prod
-                # (jusqu'a 4 appels LLM sequentiels par article), un clic sur
-                # "Interrompre" pendant la generation de l'article en cours
-                # n'avait litteralement AUCUN effet avant que celui-ci ne
-                # finisse. should_cancel est revérifié entre CHAQUE passe LLM
-                # a l'interieur de write_article() (voir writer.py).
+                # sans effet plusieurs minutes) : should_cancel est revérifié
+                # entre CHAQUE passe LLM a l'interieur de write_article() (voir
+                # writer.py) -- fonctionne pareillement en parallele, chaque
+                # worker lit le meme CANCEL_FLAG partage (simple bool, lecture
+                # sans risque entre threads).
                 written = write_article(fact, should_cancel=lambda: CANCEL_FLAG["requested"])
                 _elapsed = datetime.now(TZ).timestamp() - _t0
-                # Alimente l'estimation de temps affichée au lancement d'un
-                # cycle (2026-08-19, demande explicite) : moyenne mobile
-                # persistée, mise à jour à CHAQUE article réellement généré.
-                try:
-                    record_article_seconds(_elapsed)
-                except Exception:
-                    pass
-                _CYCLE_ELAPSED["done"] += 1
-                _update_progress_eta()
-                # Annulation detectee EN COURS de generation (status="cancelled",
-                # voir writer.py) : written["article"] est vide, ce fact n'a
-                # aucun contenu publiable -> on ne l'ajoute PAS a facts (un
-                # article vide dans les resultats serait pire qu'un article en
-                # moins) et on sort de la boucle immediatement, sans attendre
-                # le prochain tour (CANCEL_FLAG deja consomme ici, pas besoin
-                # que le garde-fou en tete de boucle le refasse).
-                if written.get("status") == "cancelled":
-                    CANCEL_FLAG["requested"] = False
-                    log(cid, "CYCLE_CANCEL", "annulation prise en compte en cours d'article", action="CYCLE")
-                    break
-                fact["article"] = written["article"]
-                fact["image"] = written["image"]
-                fact["gen_model"] = written["model"]
-                fact["gen_status"] = written["status"]
-                fact["critique_issues"] = written.get("critique_issues", 0)
-                facts.append(fact)
-                # Dedup inter-cycles : on marque CHAQUE item unique (pas que le champion)
-                for it in c:
-                    mark(url_hash(it["url"]), it["title"])
-                log(cid, "FACT_GEN", f"provider={written['model']} src={champ['source']} durée={_elapsed:.0f}s",
-                    written["model"], fact_id=fact_id_of(champ), action="GENERE")
-                # Auto-critique (2026-08-19, demande explicite : contrôle qualité
-                # orthographe/grammaire/accords/conjugaison/cohérence sémantique
-                # AVANT sortie du texte final -- voir writer._self_review_pass).
-                # Journalisé séparément pour rester consultable/auditable même
-                # si l'article final ne montre plus la trace des corrections.
-                if written.get("critique_issues"):
-                    log(cid, "AUTOCRITIQUE",
-                        f"{written['critique_issues']} probleme(s) corrige(s) | {(written.get('critique_report') or '')[:300]}",
-                        written["model"], fact_id=fact_id_of(champ), action="CORRIGE")
+                return written, fact, champ, _elapsed
+
+            concurrency = max(1, int(config.LIMITS.get("cycle_concurrency", 1)))
+            facts_by_idx = {}
+            cancel_logged = False
+            with ThreadPoolExecutor(max_workers=concurrency) as gen_ex:
+                gen_futs = {gen_ex.submit(_gen_one, c): (idx, c) for idx, c in enumerate(clusters[:limit])}
+                for fut in as_completed(gen_futs):
+                    idx, c = gen_futs[fut]
+                    try:
+                        written, fact, champ, _elapsed = fut.result()
+                    except Exception as _we:
+                        log(cid, "GEN_ERROR", f"{type(_we).__name__}: {_we}", action="GENERE")
+                        continue
+                    # Annulation detectee (avant ou pendant la generation,
+                    # voir writer.py) : written["article"] est vide, ce fact
+                    # n'a aucun contenu publiable -> on ne l'ajoute PAS a
+                    # facts (un article vide serait pire qu'un article en
+                    # moins). On ne "break" plus ici (d'autres workers du lot
+                    # peuvent deja etre en train de finir legitimement) : on
+                    # laisse simplement le flag consomme empecher tout NOUVEAU
+                    # demarrage (verifie en tete de _gen_one).
+                    if written.get("status") == "cancelled":
+                        if not cancel_logged:
+                            CANCEL_FLAG["requested"] = False
+                            log(cid, "CYCLE_CANCEL", "annulation prise en compte", action="CYCLE")
+                            cancel_logged = True
+                        continue
+                    # Alimente l'estimation de temps affichée au lancement d'un
+                    # cycle (2026-08-19, demande explicite) : moyenne mobile
+                    # persistée, mise à jour à CHAQUE article réellement généré.
+                    try:
+                        record_article_seconds(_elapsed)
+                    except Exception:
+                        pass
+                    _CYCLE_ELAPSED["done"] += 1
+                    CYCLE_PROGRESS["current"] = _CYCLE_ELAPSED["done"]
+                    _update_progress_eta()
+                    fact["article"] = written["article"]
+                    fact["image"] = written["image"]
+                    fact["gen_model"] = written["model"]
+                    fact["gen_status"] = written["status"]
+                    fact["critique_issues"] = written.get("critique_issues", 0)
+                    facts_by_idx[idx] = fact
+                    # Dedup inter-cycles : on marque CHAQUE item unique (pas que le champion)
+                    for it in c:
+                        mark(url_hash(it["url"]), it["title"])
+                    log(cid, "FACT_GEN", f"provider={written['model']} src={champ['source']} durée={_elapsed:.0f}s",
+                        written["model"], fact_id=fact_id_of(champ), action="GENERE")
+                    # Auto-critique (2026-08-19, demande explicite : contrôle qualité
+                    # orthographe/grammaire/accords/conjugaison/cohérence sémantique
+                    # AVANT sortie du texte final -- voir writer._self_review_pass).
+                    # Journalisé séparément pour rester consultable/auditable même
+                    # si l'article final ne montre plus la trace des corrections.
+                    if written.get("critique_issues"):
+                        log(cid, "AUTOCRITIQUE",
+                            f"{written['critique_issues']} probleme(s) corrige(s) | {(written.get('critique_report') or '')[:300]}",
+                            written["model"], fact_id=fact_id_of(champ), action="CORRIGE")
+            # Ordre stable = ordre de priorite (score du champion), pas l'ordre
+            # d'arrivee (aleatoire en parallele) : preserve le meme comportement
+            # qu'avant pour tout code aval qui suppose cet ordre.
+            facts = [facts_by_idx[i] for i in sorted(facts_by_idx)]
             # Illustration : garantit une image UNIQUE par article (aucun doublon)
             try:
                 facts = illustrate_all(facts)

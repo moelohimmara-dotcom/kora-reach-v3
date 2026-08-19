@@ -53,4 +53,13 @@ LIMITS = {
     "cluster_sim_threshold": 0.35,  # seuil Jaccard vrai (voir clusterer.py, refonte 2026-08-19)
     "daily_article_limit": 10,
     "timezone": "Africa/Conakry",
+    # Nombre d'articles generes EN PARALLELE pendant un cycle (2026-08-20,
+    # demande explicite : reduire le temps total du cycle SANS toucher a la
+    # rigueur du pipeline auto-critique par article, qui reste intact -- voir
+    # reach_agent.run()). Valeur prudente par defaut : chaque article fait
+    # jusqu'a ~4 appels LLM sequentiels (~400s), donc 3 en parallele reste
+    # raisonnable pour les quotas des fournisseurs (Groq/Cerebras/OpenRouter)
+    # sans les saturer. A ajuster si le disjoncteur LLM (llm_circuit_status)
+    # se declenche plus souvent apres ce changement.
+    "cycle_concurrency": 3,
 }
