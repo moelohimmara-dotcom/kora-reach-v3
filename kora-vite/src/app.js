@@ -1643,6 +1643,18 @@ function renderSheet(s) {
   const regenCancel = body.querySelector("[data-regen-cancel]");
   if (regenBtn && regenPanel) {
     regenBtn.onclick = async () => {
+      // Garde-fou (2026-08-19, demande explicite) : "Régénérer" remplace
+      // IMMÉDIATEMENT le texte affiché, sans confirmation jusqu'ici -- sur
+      // un brouillon (EDITED), ça écrasait silencieusement des corrections
+      // manuelles déjà faites. Sur un article déjà envoyé (APPROVED/
+      // TRANSMITTED), ça changeait le texte ici sans toucher à la version
+      // déjà transmise sur WordPress, ce qui n'était pas évident non plus.
+      // Statut "vierge" (PENDING_REVIEW) : rien à perdre, pas de confirmation.
+      if (status === "EDITED") {
+        if (!window.confirm("Ce brouillon contient des corrections que tu as faites manuellement. Régénérer va les REMPLACER par un nouveau texte généré par l'IA -- tes modifications actuelles seront perdues. Continuer ?")) return;
+      } else if (status === "APPROVED" || status === "TRANSMITTED") {
+        if (!window.confirm("Cet article a déjà été approuvé/transmis. Le régénérer changera le texte affiché ici, mais ne republiera PAS automatiquement la version déjà envoyée sur WordPress. Continuer ?")) return;
+      }
       regenPanel.hidden = false;
       regenChips.innerHTML = "<span class='muted'>Chargement…</span>";
       let sugs = [];
