@@ -509,11 +509,20 @@ export const Store = (() => {
   function setGuidesEnabled(on) {
     try { localStorage.setItem("kora-guides-enabled", on ? "1" : "0"); } catch (e) {}
   }
+  // Bug corrige 2026-08-19 : "kora-tour-seen" etait une seule cle globale au
+  // NAVIGATEUR, pas par compte -> une fois le tour vu/ferme avec UN compte
+  // (ex. admin), il ne s'affichait plus jamais pour AUCUN autre compte
+  // (lecteur/editeur) sur ce meme navigateur, meme jamais connecte
+  // auparavant. Scope desormais par identifiant de compte.
+  function _tourKey() {
+    const uname = (state.auth && state.auth.username) || "anon";
+    return "kora-tour-seen:" + uname;
+  }
   function hasSeenTour() {
-    try { return localStorage.getItem("kora-tour-seen") === "1"; } catch (e) { return false; }
+    try { return localStorage.getItem(_tourKey()) === "1"; } catch (e) { return false; }
   }
   function markTourSeen() {
-    try { localStorage.setItem("kora-tour-seen", "1"); } catch (e) {}
+    try { localStorage.setItem(_tourKey(), "1"); } catch (e) {}
   }
   function getFactFilter() { return state.ui.factFilter || "all"; }
   function setFactFilter(f) { setState({ ui: { ...state.ui, factFilter: f } }); }

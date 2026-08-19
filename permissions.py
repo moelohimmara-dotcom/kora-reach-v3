@@ -41,7 +41,15 @@ ROLES_ORDER = ["lecteur", "normal", "advanced", "owner"]
 # capacité (ou en ajouter une nouvelle) sans devoir relire tout server.py pour
 # retrouver les endroits concernés.
 CAPABILITIES = {
-    "voir_sources": "advanced",              # GET /api/whitelist
+    # Bug corrige 2026-08-19 : etait "advanced" -> un Lecteur/Editeur qui
+    # atteignait la page Sources (ex. via une bulle "source-chip" sur le
+    # cockpit, non filtree par role) recevait un 403 sur CHAQUE chargement et
+    # restait bloque sur le squelette "Sources en chargement..." indefiniment
+    # (aucun message d'erreur) -- lu a tort comme "la page est tres lente".
+    # La liste des sources est une info de gouvernance en lecture seule, pas
+    # une donnee sensible -> ouverte a tout compte connecte. gerer_sources
+    # (ajout/edition/suspension) reste reserve a advanced+.
+    "voir_sources": "lecteur",                # GET /api/whitelist
     "gerer_sources": "advanced",             # POST/PATCH /api/whitelist (ajout, edition, activation)
     "voir_prompts_agent": "advanced",         # GET /api/agent-prompts
     "action_demo": "advanced",                # GET /api/seed_demo
