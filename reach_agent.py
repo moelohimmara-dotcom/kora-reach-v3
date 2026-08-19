@@ -59,17 +59,32 @@ def _update_progress_eta():
     Utilise le rythme RÉEL de CE cycle dès qu'au moins 1 article est fini
     (plus fiable : reflète l'état actuel des fournisseurs LLM) ; avant ça,
     se rabat sur la moyenne historique persistée (déjà utile dès l'article 1,
-    voir get_avg_article_seconds())."""
+    voir get_avg_article_seconds()).
+
+    Bug corrige 2026-08-20 (rapporte : ETA affichait "46 min" des l'article 1
+    alors que le cycle tournait bien a 3 articles en parallele) : la branche
+    done>0 est deja correcte SANS changement -- elapsed/done est un debit
+    OBSERVE (naturellement plus rapide si plusieurs articles avancent en
+    meme temps, peu importe le mecanisme). Seule la branche de repli AVANT
+    le 1er article termine etait fausse : get_avg_article_seconds() est une
+    latence LLM PAR ARTICLE (mesuree seule, avant la parallelisation), et la
+    multiplier directement par le nombre d'articles restants ignore que
+    plusieurs tournent en meme temps -> ETA ~3x trop pessimiste. Diviser par
+    cycle_concurrency corrige l'estimation initiale (avant qu'un rythme reel
+    de CE cycle soit disponible)."""
     done = _CYCLE_ELAPSED["done"]
     total = CYCLE_PROGRESS["total"]
     remaining = max(total - done, 0)
+    concurrency = max(1, int(config.LIMITS.get("cycle_concurrency", 1)))
     if done > 0 and _CYCLE_ELAPSED["start_ts"]:
         elapsed = datetime.now(TZ).timestamp() - _CYCLE_ELAPSED["start_ts"]
         pace = elapsed / done
+        eta_seconds = round(pace * remaining)
     else:
         pace = get_avg_article_seconds()
+        eta_seconds = round((pace * remaining) / concurrency)
     CYCLE_PROGRESS["avg_sec_per_article"] = round(pace)
-    CYCLE_PROGRESS["eta_seconds"] = round(pace * remaining)
+    CYCLE_PROGRESS["eta_seconds"] = eta_seconds
 
 def estimate_launch_message() -> dict:
     """Estimation IMMÉDIATE renvoyée dans la réponse de POST /api/cycle
