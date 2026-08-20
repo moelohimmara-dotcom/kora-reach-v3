@@ -100,7 +100,16 @@ def _val(row, key, idx):
 def fetch_candidates(con):
     """Retourne [(fact_id, article, title, status)] pour tout fact dont
     l'article échoue _structure_ok() -- même détection que la garde de
-    génération, aucune logique dupliquée ici."""
+    génération, aucune logique dupliquée ici.
+
+    Bug trouvé par revue de code (2026-08-20) : hitl_store.list_facts()
+    traite un article stocké en JSON string vide ("{}"/"[]") comme "pas
+    encore d'article" (convention "B1 fix", voir son code) -- SANS ce même
+    filtre ici, un fact réellement vide serait pris pour un défaut de
+    structure, "réparé" par la cascade, et le résultat écrit écraserait le
+    placeholder par un texte fabriqué qui ne serait PLUS reconnu comme vide
+    par list_facts() -- pire que le problème d'origine. Reproduit ici
+    EXACTEMENT la même détection."""
     cur = con.cursor()
     cur.execute("SELECT fact_id, article, champion, status FROM hitl_facts WHERE article IS NOT NULL AND length(article) > 0")
     rows = cur.fetchall()
@@ -112,6 +121,14 @@ def fetch_candidates(con):
         status = _val(row, "status", 3)
         if not art or not isinstance(art, str):
             continue
+        if art.startswith("{") or art.startswith("["):
+            import json
+            try:
+                parsed = json.loads(art)
+                if isinstance(parsed, (dict, list)) and not parsed:
+                    continue  # placeholder vide (convention list_facts()) -- pas un vrai article
+            except json.JSONDecodeError:
+                pass  # pas du JSON valide -> traité comme texte normal ci-dessous
         if writer._structure_ok(art):
             continue
         title = ""
@@ -125,12 +142,16 @@ def fetch_candidates(con):
     return candidates
 
 
-def repair_one(article: str) -> dict:
+def repair_one(article: str, try_llm: bool = True) -> dict:
     """Applique la MÊME cascade que generation/writer.py._finalize_article()
     pour la partie structure (pas de re-génération, pas de ré-appel de
     l'auto-critique orthographe/grammaire -- UNIQUEMENT la réparation de
-    structure, sur le texte déjà validé et publiable tel quel)."""
-    fixed = writer._llm_fix_structure(article)
+    structure, sur le texte déjà validé et publiable tel quel).
+    `try_llm=False` (2026-08-20, revue de code) : saute directement au filet
+    mécanique sans même tenter l'appel réseau, quand on sait déjà qu'aucun
+    fournisseur n'est configuré -- évite un appel voué à l'échec ET la
+    pause de courtoisie associée (voir main())."""
+    fixed = writer._llm_fix_structure(article) if try_llm else None
     if fixed and writer._structure_ok(fixed):
         return {"article": fixed, "method": "llm"}
     mech = writer._mechanical_paragraph_split(article)
@@ -176,28 +197,60 @@ def main():
 
         # --- Réparation réelle, UNE transaction PAR FACT ---
         to_process = candidates[:args.limit] if args.limit else candidates
+        skipped_by_limit = len(candidates) - len(to_process)
         print(f"\n[APPLICATION] {len(to_process)} article(s) à traiter...")
+        # Bug trouvé par revue de code (2026-08-20) : aucun fournisseur LLM
+        # configuré (ou circuit ouvert) -> _llm_fix_structure() ne fait de
+        # toute façon AUCUN appel réseau, mais le script dormait quand même
+        # LLM_CALL_SPACING_SEC "par courtoisie" a chaque fact -- des heures
+        # perdues pour rien sur un run sans fournisseur disponible.
+        llm_available = bool(
+            os.environ.get("NVIDIA_API_KEY") or os.environ.get("OLLAMA_API_KEY")
+            or os.environ.get("TR_KEY")
+            or any(os.environ.get(writer.PROVIDER_CONFIG[p]["env"]) for p in writer.PROVIDER_ORDER)
+        )
+        if not llm_available:
+            print("[avertissement] Aucun fournisseur LLM configuré -- réparation MÉCANIQUE uniquement pour ce run.")
         p = db.placeholder()
-        results = {"llm": 0, "mecanique": 0, "mecanique_insuffisant": 0, "erreur": 0}
+        results = {"llm": 0, "mecanique": 0, "mecanique_insuffisant_non_ecrit": 0, "erreur": 0}
         for i, (fid, art, title, status) in enumerate(to_process, 1):
             try:
-                rep = repair_one(art)
-                cur = con.cursor()
-                cur.execute(f"UPDATE hitl_facts SET article={p} WHERE fact_id={p}", (rep["article"], fid))
-                con.commit()
-                results[rep["method"]] += 1
-                print(f"  [{i}/{len(to_process)}] {fid} -> {rep['method']}")
+                rep = repair_one(art, try_llm=llm_available)
+                # Bug trouvé par revue de code (2026-08-20) : un résultat
+                # "mecanique_insuffisant" (n'atteint toujours pas le seuil)
+                # était écrit quand même, remplaçant l'original par une
+                # version qui ne résout rien -- aucune raison d'écraser
+                # l'original dans ce cas précis, on le laisse tel quel.
+                if rep["method"] == "mecanique_insuffisant":
+                    results["mecanique_insuffisant_non_ecrit"] += 1
+                    print(f"  [{i}/{len(to_process)}] {fid} -> insuffisant, ORIGINAL CONSERVÉ (trop court pour le seuil)")
+                else:
+                    cur = con.cursor()
+                    cur.execute(f"UPDATE hitl_facts SET article={p} WHERE fact_id={p}", (rep["article"], fid))
+                    con.commit()
+                    results[rep["method"]] += 1
+                    print(f"  [{i}/{len(to_process)}] {fid} -> {rep['method']}")
             except Exception as e:
                 con.rollback()
                 results["erreur"] += 1
                 print(f"  [{i}/{len(to_process)}] {fid} -> ERREUR: {type(e).__name__}: {e}")
-            if i < len(to_process):
+            if i < len(to_process) and llm_available:
                 time.sleep(LLM_CALL_SPACING_SEC)
 
         print(f"\n[APPLIQUÉ] {json_summary(results)}")
         remaining = fetch_candidates(con)
-        print(f"[vérification] {len(remaining)} article(s) encore hors structure après ce passage "
-              f"(attendu : uniquement 'mecanique_insuffisant' -- articles genuinement trop courts).")
+        # Bug trouvé par revue de code (2026-08-20) : avec --limit, la
+        # plupart des candidats restants sont simplement NON TRAITÉS (pas
+        # des échecs de réparation) -- message ambigu corrigé pour distinguer
+        # les deux cas.
+        if skipped_by_limit:
+            print(f"[vérification] {len(remaining)} article(s) encore hors structure : "
+                  f"{skipped_by_limit} non traité(s) à cause de --limit, le reste "
+                  f"génuinement trop court pour le seuil même après réparation. "
+                  f"Relancez sans --limit (ou avec une limite plus grande) pour continuer.")
+        else:
+            print(f"[vérification] {len(remaining)} article(s) encore hors structure après ce passage "
+                  f"(attendu : uniquement les articles génuinement trop courts pour le seuil).")
     finally:
         con.close()
 
