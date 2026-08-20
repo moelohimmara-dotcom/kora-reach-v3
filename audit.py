@@ -204,6 +204,27 @@ def purge_day(day: str, editor: str = None) -> int:
 _init()
 
 
+def count_deleted() -> int:
+    """Compte les articles DÉFINITIVEMENT SUPPRIMÉS (poubelle vidée / purge).
+    Source unique : CETTE table SQLite locale (voir DB plus haut) -- c'est ICI,
+    et seulement ici, que log() écrit réellement (2026-08-20, bug corrigé :
+    hitl_store.count_deleted()/get_dashboard_stats() interrogeaient une table
+    'audit_events' homonyme mais DIFFÉRENTE côté Postgres, jamais alimentée
+    par log() -- gelée depuis une ancienne migration, le compteur "Supprimés"
+    du tableau de bord ne bougeait plus depuis). Toute lecture du compte de
+    suppressions DOIT passer par cette fonction plutôt que par une requête
+    SQL directe sur 'audit_events' via db.py/Postgres."""
+    _init()
+    conn = sqlite3.connect(DB)
+    try:
+        row = conn.execute(
+            "SELECT count(*) FROM audit_events WHERE action IN ('SUPPRIME', 'PURGE')"
+        ).fetchone()
+        return int(row[0] or 0) if row else 0
+    finally:
+        conn.close()
+
+
 def get_events(cycle_id: str = "") -> list:
     """Rétrocompatibilité (non utilisé par la nouvelle UI mais conservé)."""
     _init()
