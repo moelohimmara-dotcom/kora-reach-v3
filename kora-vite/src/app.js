@@ -2415,6 +2415,12 @@ function render() {
       snack(_nextStaleMessage());
     } else if (r && r.status === "ok") {
       _resetStaleStreak(); // du neuf trouve -> on repart du ton le plus leger la prochaine fois
+      // 2026-08-20 (rapporte : "j'ai relancé mais aucun message, panne ?") :
+      // un cycle REUSSI restait tout aussi silencieux qu'un echec -- aucune
+      // confirmation ne ressemble a une panne aux yeux de l'utilisateur,
+      // meme quand tout s'est bien passe. On confirme desormais aussi le succes.
+      const n = (r.facts && r.facts.length) || r.facts_to_generate || 0;
+      if (n > 0) snack(`${n} ${n > 1 ? "nouveaux" : "nouvel"} article${n > 1 ? "s" : ""} généré${n > 1 ? "s" : ""}, en attente de validation.`);
     } else if (r && r.error) {
       snack("Erreur pendant la génération : " + r.error);
     }
