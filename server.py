@@ -731,7 +731,7 @@ class Handler(BaseHTTPRequestHandler):
             if not fid:
                 return self._send(400, {"error": "fact_id_requis"})
             try:
-                res = writer.regenerate(fid, suggestion=suggestion)
+                res = reach_agent.regenerate(fid, suggestion=suggestion)
             except Exception as _re:
                 import traceback as _tb
                 _tb.print_exc()

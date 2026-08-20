@@ -9,7 +9,11 @@ import re
 import json
 from typing import Dict, List
 import generation.illustrate as illustrate
-import editorial.hitl_store as hitl_store
+# Plus d'import de editorial.hitl_store ICI (2026-08-20, refactor monolithe
+# modulaire) : regenerate() -- la seule fonction qui en avait besoin -- a
+# ete deplacee vers orchestration/reach_agent.py. generation/ ne connait
+# plus editorial/ du tout : la generation d'un article ne depend plus JAMAIS
+# du stockage editorial, seul l'orchestrateur relie les deux domaines.
 
 _MOIS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
             "août", "septembre", "octobre", "novembre", "décembre"]
@@ -729,60 +733,16 @@ def list_regen_suggestions() -> list:
     return [{"id": s["id"], "label": s["label"], "hint": s["hint"]} for s in REGEN_SUGGESTIONS]
 
 
-def _angle_directive(suggestion_id: str) -> str:
+def angle_directive(suggestion_id: str) -> str:
+    """API publique (2026-08-20, refactor monolithe modulaire) : la
+    regeneration complete (regenerate(), qui lit/ecrit hitl_facts) a ete
+    deplacee vers orchestration/reach_agent.py -- elle ORCHESTRE generation
+    (ce module, pur : aucun acces DB) et stockage editorial (editorial/
+    hitl_store.py), deux domaines que writer.py n'a plus a connaitre
+    directement. Cette fonction reste ICI (pure logique de generation :
+    mapper un id de suggestion vers une consigne d'angle, sans DB) et
+    devient publique car appelee depuis l'orchestrateur."""
     for s in REGEN_SUGGESTIONS:
         if s["id"] == suggestion_id:
             return s["hint"]
     return ""  # suggestion inconnue -> réécriture neutre
-
-
-def regenerate(fact_id: str, suggestion: str = None, dry_run: bool = None) -> Dict:
-    """Régénère UN article à partir des INFOS DÉJÀ ACQUISES (table hitl_facts).
-    AUCUN re-scraping, AUCune requête vers les sources : le champion/contexts
-    source est relu depuis la base et reste la source unique de vérité.
-    La 'suggestion' oriente l'angle de rédaction (jamais les faits).
-    Retourne le fact mis à jour (avec le nouvel article) + suggestion appliquée.
-    """
-    row = hitl_store.get_fact(fact_id)
-    if not row:
-        return {"error": "fact_introuvable", "fact_id": fact_id}
-    # Reconstituer le fact depuis la base (infos sécurisées)
-    champ = row["champion"] if isinstance(row["champion"], dict) else json.loads(row["champion"] or "{}")
-    ctx = row["contexts"] if isinstance(row["contexts"], list) else json.loads(row["contexts"] or "[]")
-    fact = {
-        "champion": champ,
-        "contexts": ctx,
-        "image": row.get("image", "") or champ.get("image", ""),
-        "image_meta": (row["image_meta"] if isinstance(row["image_meta"], dict)
-                       else json.loads(row["image_meta"] or "{}")),
-        "n_sources": row.get("n_sources", len(ctx) + 1),
-        "forced_stale": False,
-    }
-    # Consigne d'angle (n'ajoute AUCUN fait, uniquement une orientation de rédaction)
-    angle = _angle_directive(suggestion)
-    if angle:
-        fact["_regen_angle"] = angle
-        fact["_regen_suggestion"] = suggestion
-    written = write_article(fact, dry_run=dry_run)
-    # Mise à jour du fact avec le nouvel article + modèle
-    fact["article"] = written.get("article", "")
-    fact["gen_model"] = written.get("model", "")
-    fact["gen_status"] = written.get("status", "")
-    fact["image"] = written.get("image", fact["image"])
-    # Bug corrige 2026-08-19 (trouve en verifiant le changement de generateur
-    # d'images) : seul fact["image"] (l'URL) etait mis a jour, jamais
-    # fact["image_meta"] (provider/generated) -> une regeneration changeait
-    # bien la photo affichee mais la metadonnee persistee restait celle de
-    # l'ANCIEN generateur (ex: "loremflickr" alors que l'image venait
-    # desormais de Pollinations), faussant toute verification/audit ulterieur.
-    fact["image_meta"] = written.get("image_meta", fact.get("image_meta", {}))
-    fid = hitl_store.upsert_fact(fact)
-    return {
-        "fact_id": fid,
-        "article": written.get("article", ""),
-        "model": written.get("model", ""),
-        "status": written.get("status", ""),
-        "suggestion_applied": suggestion or "neutre",
-        "angle": angle,
-        "critique_issues": written.get("critique_issues", 0),
-    }
