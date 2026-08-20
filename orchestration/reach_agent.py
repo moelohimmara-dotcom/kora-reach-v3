@@ -9,16 +9,16 @@ Toute defaillance source/LLM = isolee (jamais crash global).
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 import threading
-import config
-import whitelist as wl
-from fetchers import fetch_source
-from normalizer import normalize, TZ, _parse_date
-from guinea_filter import filter_guinea
-from dedup import url_hash, is_dup
-from clusterer import cluster, pick_champion, score_item
-from state_store import (seen, mark, new_cycle, end_cycle, init as _init_state,
+import core.config as config
+import collection.whitelist as wl
+from collection.fetchers import fetch_source
+from collection.normalizer import normalize, TZ, _parse_date
+from collection.guinea_filter import filter_guinea
+from collection.dedup import url_hash, is_dup
+from collection.clusterer import cluster, pick_champion, score_item
+from editorial.state_store import (seen, mark, new_cycle, end_cycle, init as _init_state,
                           get_avg_article_seconds, record_article_seconds)
-from writer import write_article, llm_circuit_status
+from generation.writer import write_article, llm_circuit_status
 
 # Flag d'annulation de cycle (bouton « Interrompre » côté UI)
 CANCEL_FLAG = {"requested": False}
@@ -111,12 +111,12 @@ def estimate_launch_message() -> dict:
         note += " Un fournisseur IA montre des signes de ralentissement en ce moment : la génération pourrait être plus lente que d'habitude."
     return {"avg_sec_per_article": round(avg), "note": note, "degraded": degraded}
 
-from hitl_store import fact_id_of, cleanup_orphan_decisions
-from audit import log
-from illustrate import illustrate, illustrate_all
+from editorial.hitl_store import fact_id_of, cleanup_orphan_decisions
+from editorial.audit import log
+from generation.illustrate import illustrate, illustrate_all
 
 # Dispatcher sources alternatives (gnews/sitemap/gdelt/wayback) — defini dans alt_sources
-from alt_sources import alt_fetch
+from collection.alt_sources import alt_fetch
 
 import os
 import json
@@ -135,9 +135,15 @@ import atexit
 # un repertoire sous le code de l'app (garanti inscriptible : c'est le seul
 # chemin autorise en ecriture par ReadWritePaths dans le durcissement systemd),
 # override possible via KORA_CYCLE_LOCK_PATH pour un deploiement different.
+# Racine du repo, pas le dossier de ce fichier (2026-08-20, refactor
+# monolithe modulaire : reach_agent.py vit desormais dans orchestration/) --
+# sans consequence fonctionnelle (ReadWritePaths=/opt/kora-reach couvre tout
+# l'arbre, y compris les sous-dossiers), mais garde l'emplacement previsible
+# et coherent avec les autres fichiers d'etat (reach_state.db etc.).
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _CYCLE_LOCK_PATH = os.environ.get(
     "KORA_CYCLE_LOCK_PATH",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), ".kora_cycle.lock"),
+    os.path.join(_REPO_ROOT, ".kora_cycle.lock"),
 )
 # Bug corrige 2026-08-19 (incident prod : 2 cycles concurrents sur le meme
 # process, faits generes en double) : 300s (5 min) etait bien trop court

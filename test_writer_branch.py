@@ -2,7 +2,7 @@
 Mode dry-run (aucune clé) -> template. Avec TR_KEY -> vraie génération kimi.
 """
 import os
-from reach_agent import agent
+from orchestration.reach_agent import agent
 
 res = agent.run(scope_filter="GN_NAT", demand=2)
 assert res.get("status") == "ok", res

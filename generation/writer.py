@@ -8,8 +8,8 @@ import os
 import re
 import json
 from typing import Dict, List
-import illustrate
-import hitl_store
+import generation.illustrate as illustrate
+import editorial.hitl_store as hitl_store
 
 _MOIS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
             "août", "septembre", "octobre", "novembre", "décembre"]
@@ -142,7 +142,7 @@ def get_system_prompt() -> str:
     codé en dur ci-dessus. Un add-on optionnel est ajouté à la suite, sans
     jamais toucher au marqueur '2. LONGUEUR' dont dépend le split() plus bas."""
     try:
-        import agent_prompts
+        import generation.agent_prompts as agent_prompts
         ov = agent_prompts.get_overrides()
     except Exception:
         ov = {"system": "", "addon": ""}

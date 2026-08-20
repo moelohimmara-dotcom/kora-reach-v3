@@ -31,8 +31,8 @@ import threading
 import unicodedata
 from datetime import datetime, timedelta
 
-import db
-import totp as _totp
+import core.db as db
+import identity.totp as _totp
 
 ROOT_SESSION_TTL_H = float(os.environ.get("KORA_ROOT_SESSION_TTL_H", "2"))  # session courte : console sensible
 PBKDF2_ROUNDS = int(os.environ.get("KORA_PBKDF2_ROUNDS", "200000"))
@@ -508,7 +508,11 @@ def log_root_event(event, detail, ip=None):
     pas permettre de maquiller les traces de l'autre."""
     try:
         ts = datetime.now().isoformat(timespec="seconds")
-        path = os.environ.get("KORA_ROOT_AUTH_LOG", os.path.join(os.path.dirname(os.path.abspath(__file__)), "root_audit.log"))
+        # Racine du repo, pas le dossier de ce fichier (2026-08-20, refactor
+        # monolithe modulaire : root_auth.py vit desormais dans identity/) --
+        # sinon orphelinerait silencieusement root_audit.log deja accumule.
+        _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        path = os.environ.get("KORA_ROOT_AUTH_LOG", os.path.join(_repo_root, "root_audit.log"))
         with open(path, "a", encoding="utf-8") as f:
             f.write(f"{ts}\t{event}\t{ip or '-'}\t{detail}\n")
     except Exception:

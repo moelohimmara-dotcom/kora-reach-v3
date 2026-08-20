@@ -9,7 +9,7 @@ fichier SQLite local que rien d'autre ne surveille ni ne sauvegarde, déconnect�
 de la base Postgres réelle. Ce module passe maintenant par db.conn() comme le
 reste de l'app (SQLite en dev local, Postgres en prod selon DATABASE_BACKEND).
 """
-import db
+import core.db as db
 import threading
 from datetime import datetime
 

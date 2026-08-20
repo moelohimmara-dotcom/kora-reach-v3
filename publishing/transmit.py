@@ -35,7 +35,7 @@ def _derive_source_level(fact: dict) -> int:
     """Déduit source_level depuis la whitelist (GN_NAT=1, INTL=2).
     Import paresseux pour éviter dépendance circulaire / coût au chargement."""
     try:
-        import whitelist as wl
+        import collection.whitelist as wl
         src = fact.get("champion", {}).get("source", "")
         entry = wl.get_entry_by_source(src)
         if entry and entry.category == "INTL":
@@ -88,7 +88,7 @@ def _mark_article_published(src_url: str) -> None:
     if not src_url:
         return
     try:
-        import db
+        import core.db as db
         con, _ = db.conn()
         try:
             cur = con.cursor()
@@ -320,7 +320,7 @@ def _to_supabase(fact: dict, final_text: str) -> dict:
 def _to_postgres(fact: dict, final_text: str) -> dict:
     """Écrit l'article validé dans la table 'articles' de la base PostgreSQL locale.
     Même schéma que Supabase (colonnes fr). Dédupe sur source_url."""
-    import db
+    import core.db as db
     payload = _build_supabase_payload(fact, final_text)
     src_url = payload.get("source_url", "")
     con, mode = db.conn()

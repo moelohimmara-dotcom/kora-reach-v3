@@ -6,7 +6,7 @@ Usage:
   python run.py --scope INTL
 """
 import argparse
-from reach_agent import agent
+from orchestration.reach_agent import agent
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description="Agent Reach — collecte on-demand KORA")

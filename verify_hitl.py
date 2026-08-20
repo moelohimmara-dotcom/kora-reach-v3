@@ -8,15 +8,15 @@ import server
 threading.Thread(target=server.main, daemon=True).start()
 time.sleep(6)
 
-import whitelist as wl
-from reach_agent import agent
+import collection.whitelist as wl
+from orchestration.reach_agent import agent
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-import config
-from normalizer import normalize, TZ
-from clusterer import cluster, pick_champion
-from writer import write_article
-from hitl_store import fact_id_of, get as hitl_get
+import core.config as config
+from collection.normalizer import normalize, TZ
+from collection.clusterer import cluster, pick_champion
+from generation.writer import write_article
+from editorial.hitl_store import fact_id_of, get as hitl_get
 
 def post(p, data):
     req = urllib.request.Request("http://127.0.0.1:8765"+p, data=json.dumps(data).encode(),

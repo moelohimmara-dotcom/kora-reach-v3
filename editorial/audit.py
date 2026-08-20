@@ -11,9 +11,15 @@ import sqlite3
 import os
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
-import config
+import core.config as config
 
-DB = os.path.join(os.path.dirname(__file__), "reach_state.db")
+# Racine du repo, PAS le dossier de ce fichier (2026-08-20, refactor monolithe
+# modulaire : audit.py vit desormais dans editorial/, pas a la racine --
+# os.path.dirname(__file__) seul pointerait vers editorial/reach_state.db,
+# un fichier DIFFERENT et VIDE, orphelinant silencieusement tout
+# l'historique reel deja accumule a la racine en production. Remonte donc
+# explicitement d'un niveau depuis ce fichier.
+DB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reach_state.db")
 _TZ = ZoneInfo(config.LIMITS["timezone"])
 
 # Mots à masquer si jamais présents par erreur

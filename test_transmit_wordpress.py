@@ -1,7 +1,7 @@
 """test_transmit_wordpress.py — valide transmit.py mode wordpress réel (ta table WP)."""
 import os, sys
 sys.path.insert(0, "/opt/data/kora-reach")
-import transmit
+import publishing.transmit as transmit
 
 # Fact HITL réaliste
 fact = {

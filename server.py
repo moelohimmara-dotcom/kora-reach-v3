@@ -14,25 +14,25 @@ import urllib.parse
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-import reach_agent
-import whitelist as wl
-import normalizer
-import config
-from audit import get_events, log, get_daily, delete_events, purge_all, purge_day
-import settings
-import agent_prompts
-import auth
-import root_auth
-import permissions
-from hitl_store import (
+import orchestration.reach_agent as reach_agent
+import collection.whitelist as wl
+import collection.normalizer as normalizer
+import core.config as config
+from editorial.audit import get_events, log, get_daily, delete_events, purge_all, purge_day
+import core.settings as settings
+import generation.agent_prompts as agent_prompts
+import identity.auth as auth
+import identity.root_auth as root_auth
+import identity.permissions as permissions
+from editorial.hitl_store import (
     fact_id_of, decide, get as hitl_get, list_all,
     mark_transmitted, mark_transmission_failed, retract,
     upsert_fact, list_facts, get_fact,
     trash_facts, restore_fact, delete_facts, list_trashed, purge_trashed,
     count_published, count_rejected, count_deleted, get_dashboard_stats,
 )
-import transmit
-import writer
+import publishing.transmit as transmit
+import generation.writer as writer
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.environ.get("KORA_STATIC", os.path.join(ROOT, "static"))

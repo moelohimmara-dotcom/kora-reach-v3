@@ -1,7 +1,7 @@
 """test_illustrate_fal.py — prouve le chemin FAL réel (via FAL_PROXY_URL mock local)."""
 import os, sys, threading, http.server, json
 sys.path.insert(0, "/opt/data/kora-reach")
-import illustrate
+import generation.illustrate as illustrate
 
 # Mock server qui imite un proxy FAL (renvoie une URL d'image)
 class H(http.server.BaseHTTPRequestHandler):

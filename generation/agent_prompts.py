@@ -17,7 +17,7 @@ Deux champs éditables (cf. wireframe 9.5) :
 
 Toute modification est tracée dans le journal d'audit (audit.py, action=MODIFIE).
 """
-import db
+import core.db as db
 
 KEY_SYSTEM = "agent_prompt_system"
 KEY_ADDON = "agent_prompt_addon"
@@ -103,7 +103,7 @@ def set_override(field: str, value: str, editor: str = None) -> dict:
         con.close()
 
     try:
-        import audit
+        import editorial.audit as audit
         label = "prompt système" if field == "system" else "instructions complémentaires (add-on)"
         action = "réinitialisé par défaut" if not value else "modifié"
         audit.log(

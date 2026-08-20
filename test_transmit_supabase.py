@@ -5,7 +5,7 @@ os.environ.setdefault("SUPABASE_URL", "https://zixpugzpyrqnzjbjopns.supabase.co"
 
 import sys
 sys.path.insert(0, "/opt/data/kora-reach")
-import transmit
+import publishing.transmit as transmit
 
 # Fact HITL réaliste (issu de la logique reconçue : 3 sources fusionnées)
 fact = {
