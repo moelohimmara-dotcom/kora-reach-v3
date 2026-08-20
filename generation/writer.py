@@ -653,11 +653,23 @@ def _mechanical_paragraph_split(article: str, sentences_per_para: int = 4) -> st
     sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+(?=[A-ZÀ-Ý])", full_text) if s.strip()]
     if not sentences:
         return article
-    chapo = " ".join(sentences[:3])
-    rest = sentences[3:]
+    # Bug trouvé par revue de code (2026-08-20) : une taille de groupe FIXE
+    # (sentences_per_para=4) peut produire MOINS de _MIN_STRUCTURE_PARAGRAPHS
+    # blocs sur un article court (ex. peu de phrases au total, cas d'une
+    # régénération "court") -- ce filet, censé "ne jamais échouer", pouvait
+    # donc lui-même échouer à sa propre garantie, silencieusement (l'appelant
+    # ne revérifiait pas). Taille de groupe désormais DYNAMIQUE : calculée
+    # pour viser au moins _MIN_STRUCTURE_PARAGRAPHS-1 paragraphes de corps
+    # quand le nombre de phrases disponibles le permet, sans jamais dépasser
+    # sentences_per_para (cible 60-100 mots/paragraphe de la règle 2).
+    chapo_len = min(3, len(sentences))
+    rest = sentences[chapo_len:]
+    needed_body_paras = max(1, _MIN_STRUCTURE_PARAGRAPHS - 1)
+    per_para = max(1, min(sentences_per_para, len(rest) // needed_body_paras)) if rest else sentences_per_para
+    chapo = " ".join(sentences[:chapo_len])
     paras = [chapo] if chapo else []
-    for i in range(0, len(rest), sentences_per_para):
-        group = " ".join(rest[i:i + sentences_per_para])
+    for i in range(0, len(rest), per_para):
+        group = " ".join(rest[i:i + per_para])
         if group:
             paras.append(group)
     out = (title + "\n\n") if title else ""
@@ -711,9 +723,23 @@ def _finalize_article(art: str, fact: Dict, lt: Dict, should_cancel=None) -> Dic
         fixed = _llm_fix_structure(art)
         if fixed and _structure_ok(fixed):
             art = fixed
+            structure_fixed = True
         else:
             art = _mechanical_paragraph_split(art)
-        structure_fixed = True
+            # Bug trouvé par revue de code (2026-08-20) : ce filet se
+            # voulait une garantie absolue, mais son résultat n'était
+            # jamais REVÉRIFIÉ -- sur un article déjà court (peu de
+            # phrases disponibles), il pouvait lui-même ne pas atteindre
+            # le seuil minimal, tout en étant annoncé comme réparé
+            # (structure_fixed=True) sans que ce soit vrai. On revérifie
+            # désormais explicitement : structure_fixed ne reflète que ce
+            # qui a RÉELLEMENT été obtenu, jamais une intention supposée.
+            structure_fixed = _structure_ok(art)
+            if not structure_fixed:
+                print(f"[STRUCTURE_GUARD] filet mécanique insuffisant (article "
+                      f"trop court en phrases pour {_MIN_STRUCTURE_PARAGRAPHS} "
+                      f"paragraphes) -- article conservé tel quel, mieux structuré "
+                      f"qu'avant mais sous le seuil idéal.")
     _v = validate_article(art, fact)
     if _v["flags"]:
         print("[INJECTION_BLOCKED]", "; ".join(_v["flags"]))
