@@ -860,6 +860,9 @@ html.icons-ready .material-icons { visibility: visible; }
   position: fixed; left: 50%; bottom: 106px; transform: translateX(-50%); z-index: var(--z-snack); background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur);
   color: var(--md-sys-color-on-surface); padding: 13px 22px; border-radius: var(--radius-pill); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); font-size: var(--t-label); font-weight: 600;
   animation: snackin var(--dur-med) var(--ease);
+  /* 2026-08-20 : messages plus longs (fin de cycle "rien de neuf") sans
+     largeur bornee -> pilule etiree hors ecran / illisible. */
+  max-width: min(560px, calc(100vw - 32px)); white-space: normal; text-align: center; line-height: 1.4;
 }
 @keyframes snackin { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
