@@ -453,6 +453,23 @@ def add_user(username, password, email="", role="normal"):
 INVITE_TTL_H = int(os.environ.get("KORA_INVITE_TTL_H", "72"))
 
 
+def _public_base_url() -> str:
+    return f"https://{os.environ.get('KORA_PUBLIC_HOST', '213-156-135-139.sslip.io')}"
+
+
+def _invite_link(token: str) -> str:
+    """URL distincte (2026-08-20, demande explicite : "plusieurs URLs comme
+    les autres applis") -- un seul segment de profondeur (/kora-v2/invite),
+    le jeton en query string : le build frontend utilise des chemins
+    d'assets RELATIFS (base:"./"), une URL à 2 segments de profondeur
+    casserait leur résolution. Voir kora-vite/src/app.js (ROUTE_SLUGS)."""
+    return f"{_public_base_url()}/kora-v2/invite?token={token}"
+
+
+def _reset_link(token: str) -> str:
+    return f"{_public_base_url()}/kora-v2/reinitialiser?token={token}"
+
+
 def create_invitation(email, role, invited_by):
     """Crée une invitation à usage unique. `role` doit déjà avoir été validé
     par l'appelant (Q2 : seul un Propriétaire peut inviter en tant que
@@ -483,9 +500,7 @@ def create_invitation(email, role, invited_by):
         # Fail-closed comme forgot_password() : on loggue le lien pour que
         # l'inviteur puisse le transmettre manuellement si le SMTP n'est pas
         # configuré (dev local, ou panne SMTP ponctuelle).
-        print(f"[auth] INVITE LINK (SMTP non configuré): "
-              f"https://{os.environ.get('KORA_PUBLIC_HOST','213-156-135-139.sslip.io')}"
-              f"/kora-v2/?invite={token}")
+        print(f"[auth] INVITE LINK (SMTP non configuré): {_invite_link(token)}")
     return {"ok": True, "token": token, "email_sent": sent, "expires_at": expires}
 
 
@@ -537,9 +552,7 @@ def resend_invitation(token):
         con.close()
     sent = _send_invite_email(inv["email"], new_token, inv["role"])
     if not sent:
-        print(f"[auth] INVITE LINK (SMTP non configuré): "
-              f"https://{os.environ.get('KORA_PUBLIC_HOST','213-156-135-139.sslip.io')}"
-              f"/kora-v2/?invite={new_token}")
+        print(f"[auth] INVITE LINK (SMTP non configuré): {_invite_link(new_token)}")
     return {"ok": True, "token": new_token, "email_sent": sent}
 
 
@@ -604,8 +617,7 @@ def _send_invite_email(to_addr, token, role):
         user = os.environ.get("SMTP_USER", "")
         pw = os.environ.get("SMTP_PASS", "")
         frm = os.environ.get("SMTP_FROM", user)
-        link = (f"https://{os.environ.get('KORA_PUBLIC_HOST','213-156-135-139.sslip.io')}"
-                f"/kora-v2/?invite={token}")
+        link = _invite_link(token)
         role_label = {"owner": "Propriétaire", "advanced": "Administrateur", "normal": "Éditeur", "lecteur": "Lecteur"}.get(role, role)
         msg = MIMEText(
             "Bonjour,\n\nVous êtes invité(e) à rejoindre KORA Reach en tant que "
@@ -955,9 +967,7 @@ def forgot_password(email_addr, ip=None):
         sent = _send_reset_email(email_addr, token)
         if not sent:
             # Fail-closed : on loggue le lien pour que l'admin puisse le transmettre
-            print(f"[auth] RESET LINK (SMTP non configuré): "
-                  f"https://{os.environ.get('KORA_PUBLIC_HOST','213-156-135-139.sslip.io')}"
-                  f"/kora-v2/?reset={token}")
+            print(f"[auth] RESET LINK (SMTP non configuré): {_reset_link(token)}")
     return {"ok": True, "message": "si_compte_existe_email_envoye"}
 
 
@@ -999,8 +1009,7 @@ def _send_reset_email(to_addr, token):
         user = os.environ.get("SMTP_USER", "")
         pw = os.environ.get("SMTP_PASS", "")
         frm = os.environ.get("SMTP_FROM", user)
-        link = (f"https://{os.environ.get('KORA_PUBLIC_HOST','213-156-135-139.sslip.io')}"
-                f"/kora-v2/?reset={token}")
+        link = _reset_link(token)
         msg = MIMEText(
             "Bonjour,\n\nVous avez demandé une réinitialisation de mot de passe pour KORA Reach.\n"
             f"Cliquez sur ce lien (valable {RESET_TTL_MIN} min) :\n{link}\n\n"

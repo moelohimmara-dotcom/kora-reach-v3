@@ -2307,6 +2307,10 @@ function bindSettings() {
 }
 
 let _authRendered = false;  // évite de reconstruire le formulaire à chaque setState
+// 2026-08-20 : garde l'overlay d'auth affiché même si s.auth.loggedIn est vrai
+// -- cas d'un lien d'invitation ouvert alors qu'une session valide existe
+// déjà sur ce navigateur (voir renderAuth()/viewInvite()).
+let _forceAuthOverlay = false;
 
 // Notification de fin de cycle "rien de neuf" (2026-08-20, rapporte : un
 // cycle qui se termine sans aucun article FRAIS (pool vide ou tout deja
@@ -2388,10 +2392,10 @@ function render() {
   // setState détruit les champs en cours de saisie et le focus).
   // Si la verification est EN COURS (pending), on n'affiche RIEN (pas de flash
   // login au reload) : on attend l'issue de checkAuth() avant de trancher.
-  if (!s.auth || !s.auth.loggedIn) {
-    if (s.auth && s.auth.pending) { return; } // verification en cours -> pas de login
+  if (!s.auth || !s.auth.loggedIn || _forceAuthOverlay) {
+    if (s.auth && s.auth.pending && !_forceAuthOverlay) { return; } // verification en cours -> pas de login
     hideBootSplash(); // auth resolue (login affiche) -> splash plus utile
-    if (!_authRendered) { renderAuth("login"); }
+    if (!_authRendered && !_forceAuthOverlay) { renderAuth("login"); }
     return;
   }
   // Session confirmee (login ou reload avec cookie valide) : on masque l'overlay
@@ -2876,9 +2880,32 @@ function snack(msg) {
   _notifications = [{ id: "n" + Date.now() + Math.random().toString(36).slice(2, 6), type, message: msg, ts: Date.now(), read: false }, ..._notifications].slice(0, NOTIF_MAX);
   try { renderNotifCenter(); } catch (e) { /* jamais bloquant */ }
 }
+// URLs distinctes par page (2026-08-20, demande explicite : "plusieurs URLs
+// comme les autres applis" plutôt qu'une seule adresse + fragment #hash
+// invisible du serveur). Table de correspondance clé-route-interne <-> segment
+// d'URL public : les clés internes (s.route, data-route, viewByRoute...) ne
+// changent PAS (trop de points d'usage pour un renommage sans risque) --
+// seule la représentation dans l'URL change, traduite ici aux deux points
+// d'entrée/sortie (navigate() écrit, boot() lit). Un seul segment de
+// profondeur pour CHAQUE route (jamais /kora-v2/a/b/...) : le build Vite
+// utilise des chemins d'assets RELATIFS (base:"./", voir vite.config.js) --
+// une URL à deux segments de profondeur casserait le chargement des assets
+// (mauvaise résolution relative), une URL à un seul segment reste sûre.
+const ROUTE_SLUGS = {
+  cockpit: "", facts: "articles", drafts: "brouillons", trash: "corbeille",
+  sources: "sources", audit: "historique", settings: "parametres", styleguide: "style-guide",
+};
+const SLUG_ROUTES = Object.fromEntries(
+  Object.entries(ROUTE_SLUGS).filter(([, slug]) => slug).map(([route, slug]) => [slug, route])
+);
+function routeToPath(route) {
+  const slug = ROUTE_SLUGS[route];
+  return "/kora-v2/" + (slug !== undefined ? slug : route);
+}
 function navigate(route, push = true) {
-  if (push && location.hash !== "#" + route) {
-    try { history.pushState({ route }, "", "#" + route); } catch (e) {}
+  const path = routeToPath(route);
+  if (push && location.pathname !== path) {
+    try { history.pushState({ route }, "", path); } catch (e) {}
   }
   Store.setRoute(route);
   Store.setState({ ui: { ...Store.state.ui, busy: false, overlay: null } });
@@ -3246,10 +3273,16 @@ function bind() {
   }, true);
   // Fermeture au clavier (Escape) en complément du clic-dehors
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && Store.state.sheet) Store.closeSheet(); });
-  window.addEventListener("popstate", (e) => { if (e.state && e.state.route) Store.setRoute(e.state.route); });
+  window.addEventListener("popstate", (e) => {
+    if (e.state && e.state.route) { Store.setRoute(e.state.route); return; }
+    // Pas d'état attaché (ex. retour vers une entrée d'historique posée avant
+    // ce correctif, ou navigation clavier/adresse directe) : reparse l'URL.
+    const seg = location.pathname.replace(/^\/kora-v2\/?/, "").split("/")[0];
+    Store.setRoute(seg ? (SLUG_ROUTES[seg] || "cockpit") : "cockpit");
+  });
   // Amorce l'historique : la route courante devient l'état de base pour que le
   // bouton "retour" du navigateur (mobile) puisse revenir en arrière.
-  if (!location.hash) { try { history.replaceState({ route: Store.state.route }, "", "#" + Store.state.route); } catch (e) {} }
+  try { history.replaceState({ route: Store.state.route }, "", routeToPath(Store.state.route)); } catch (e) {}
 
   // =========================================================
   // COCKPIT — Delegated event binding (dynamic components)
@@ -3375,13 +3408,26 @@ function boot() {
     Store.state.ui.busy = true;
     Store.state.ui.overlay = "Reconnexion au cycle en cours…";
   }
-  const resetToken = new URLSearchParams(location.search).get("reset");
-  const inviteToken = new URLSearchParams(location.search).get("invite");
+  // Detection des liens reset/invite (2026-08-20, URLs distinctes) : format
+  // ACTUEL = /kora-v2/reinitialiser?token=X ou /kora-v2/invite?token=X.
+  // Format LEGACY (?reset=X / ?invite=X sur la racine) gardé en repli pour
+  // que les liens deja envoyes par email AVANT ce changement (valables
+  // jusqu'a 72h/30min apres envoi) continuent de fonctionner.
+  const qs = new URLSearchParams(location.search);
+  const pathSeg0 = location.pathname.replace(/^\/kora-v2\/?/, "").split("/")[0];
+  const resetToken = (pathSeg0 === "reinitialiser" ? qs.get("token") : null) || qs.get("reset");
+  const inviteToken = (pathSeg0 === "invite" ? qs.get("token") : null) || qs.get("invite");
   Store.loadSettings().then(() => {
     if (resetToken) {
       renderAuth("reset", resetToken);
     } else if (inviteToken) {
-      renderAuth("invite", inviteToken);
+      // 2026-08-20, demande explicite : si une session valide existe deja
+      // sur ce navigateur (ex. l'admin teste son propre lien d'invitation
+      // sans s'etre deconnecte), on le previent au lieu d'afficher
+      // directement "Creer un compte" sans explication -- voir viewInvite().
+      Store.checkAuth().then((ok) => {
+        renderAuth("invite", inviteToken, false, ok ? Store.state.auth : null);
+      });
     } else {
       Store.checkAuth().then((ok) => {
         if (!ok) { renderAuth("login"); return; }
@@ -3402,14 +3448,19 @@ function boot() {
       });
     }
   });
-  // Routing : on lit la route depuis le HASH (#facts, #trash, #cockpit...) en
-  // priorite, sinon depuis le pathname. Ainsi un refresh ramene SUR LA MEME PAGE
-  // que celle ou l'utilisateur se trouvait (persistance de la vue au reload).
-  const hashRoute = (location.hash || "").replace(/^#/, "").trim();
-  const r = hashRoute
-    || (location.pathname.replace(/^\/kora-v2/, "") || "/").split("/")[1]
-    || "cockpit";
+  // Routing (2026-08-20, URLs distinctes) : la route se lit desormais depuis
+  // le CHEMIN (/kora-v2/articles...), pas le fragment #hash -- ainsi un
+  // refresh ramene sur la meme page ET l'URL est partageable/marque-page-able,
+  // contrairement a un #hash invisible du serveur. Retro-compat : un ancien
+  // lien en #hash (deja marque-page par un utilisateur avant ce changement)
+  // est encore reconnu une fois, puis migre silencieusement vers la nouvelle
+  // URL (replaceState) pour que le prochain partage/marque-page soit a jour.
+  const legacyHash = (location.hash || "").replace(/^#/, "").trim();
+  const r = legacyHash || (pathSeg0 ? (SLUG_ROUTES[pathSeg0] || "cockpit") : "cockpit");
   if (Store.state.route !== r) Store.state.route = r;
+  if (legacyHash) {
+    try { history.replaceState({ route: r }, "", routeToPath(r)); } catch (e) {}
+  }
   Store.loadHealth();
   Store.loadSettings();
   Store.loadTrash().catch(() => {});
@@ -3421,9 +3472,13 @@ function boot() {
 
 
 // ---- Écrans d'authentification (overlay plein écran) ----
-function renderAuth(mode, token, force = false) {
+// alreadyAuth (2026-08-20, demande explicite) : passe l'auth de la session
+// EN COURS quand un lien d'invitation/reset est ouvert alors qu'un compte est
+// déjà connecté sur ce navigateur -- voir viewInvite() et _forceAuthOverlay.
+function renderAuth(mode, token, force = false, alreadyAuth = null) {
   const overlay = document.getElementById("authOverlay");
   if (!overlay) return;
+  if (mode === "invite" && alreadyAuth) _forceAuthOverlay = true;
   // For explicit navigation (forgot, reset, logout), allow rebuild.
   // For auto-render via render(), only build once.
   if (!_authRendered || force) {
@@ -3431,10 +3486,10 @@ function renderAuth(mode, token, force = false) {
     else if (mode === "mfa") overlay.innerHTML = viewMfa();
     else if (mode === "forgot") overlay.innerHTML = viewForgot();
     else if (mode === "reset") overlay.innerHTML = viewReset(token);
-    else if (mode === "invite") overlay.innerHTML = viewInvite(token);
+    else if (mode === "invite") overlay.innerHTML = viewInvite(token, alreadyAuth);
     overlay.hidden = false;
     document.getElementById("app").style.display = "none";
-    bindAuth(mode, token);
+    bindAuth(mode, token, alreadyAuth);
     bindPasswordToggles(overlay);
     _authRendered = true;
     if (mode === "login") {
@@ -3564,7 +3619,22 @@ function viewReset(token) {
 // (la personne invitée n'a pas encore de compte). L'email/rôle affichés sont
 // chargés de façon asynchrone (bindAuth) : le formulaire est visible tout de
 // suite, avec un espace réservé le temps que /invitations/check réponde.
-function viewInvite(token) {
+function viewInvite(token, alreadyAuth) {
+  // 2026-08-20, demande explicite : une session valide existe déjà sur ce
+  // navigateur (ex. un admin ouvre son propre lien de test sans s'être
+  // déconnecté) -- prévenir clairement plutôt qu'afficher directement le
+  // formulaire de création de compte sans expliquer pourquoi.
+  if (alreadyAuth) {
+    return `<div class="auth-screen">
+      <div class="auth-card">
+        <div class="auth-mark">${icon("i-info")}</div>
+        <h1 class="auth-title">Déjà connecté</h1>
+        <p class="auth-sub">Tu es actuellement connecté en tant que <strong>${esc(alreadyAuth.username || "?")}</strong>. Pour créer le compte de cette invitation, déconnecte-toi d'abord.</p>
+        <button class="btn btn-primary btn-block" id="inviteLogoutBtn">Se déconnecter et accepter l'invitation</button>
+        <button class="btn btn-ghost btn-block" id="inviteContinueBtn" style="margin-top:8px">Continuer vers l'application</button>
+      </div>
+    </div>`;
+  }
   return `<div class="auth-screen">
     <div class="auth-card">
       <div class="auth-mark">${icon("i-spark")}</div>
@@ -3608,11 +3678,29 @@ function bindPasswordToggles(root) {
   });
 }
 
-function bindAuth(mode, token) {
+function bindAuth(mode, token, alreadyAuth) {
   const overlay = document.getElementById("authOverlay");
   const err = overlay.querySelector("#authErr");
   const setErr = (m) => { if (err) err.textContent = m || ""; };
   const form = overlay.querySelector("#authForm");
+  if (mode === "invite" && alreadyAuth) {
+    // 2026-08-20 : ecran "deja connecte" (voir viewInvite()), pas de formulaire ici.
+    const logoutBtn = overlay.querySelector("#inviteLogoutBtn");
+    const continueBtn = overlay.querySelector("#inviteContinueBtn");
+    if (logoutBtn) logoutBtn.onclick = async () => {
+      try { await Store.logout(); } catch (e) {}
+      _forceAuthOverlay = false;
+      _authRendered = false;
+      history.replaceState(null, "", location.pathname + location.search); // garde ?token= pour reprendre l'invitation
+      renderAuth("invite", token, true, null);
+    };
+    if (continueBtn) continueBtn.onclick = () => {
+      _forceAuthOverlay = false;
+      _authRendered = false;
+      navigate("cockpit");
+    };
+    return;
+  }
   if (mode === "login") {
     const forgot = overlay.querySelector("#authForgot");
     if (forgot) forgot.onclick = () => renderAuth("forgot");
