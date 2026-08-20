@@ -704,6 +704,45 @@ def write_article(fact: Dict, dry_run: bool = None, should_cancel=None) -> Dict:
             "model": "template(fallback)", "status": "llm_error", "error": str(last_err)[:200] if last_err else ""}
 
 
+def simple_completion(system_prompt: str, user_prompt: str, max_tokens: int = 120) -> str | None:
+    """Appel LLM leger et generique (PAS le pipeline complet de redaction
+    d'article : pas de compute_length_target, pas de _finalize_article,
+    pas de validate_article) -- reutilise la MEME cascade de fournisseurs
+    que write_article() (nvidia -> ollama -> tokenrouter -> litellm), pour
+    des besoins ponctuels comme resumer un texte en une description visuelle
+    (voir generation/video.py, utilise pour transformer un extrait brut
+    d'article en prompt d'image propre).
+
+    Retourne le texte genere, ou None si tous les fournisseurs echouent /
+    aucune cle configuree / disjoncteur ouvert -- NE LEVE JAMAIS (l'appelant
+    doit prevoir un repli, comme write_article() le fait avec son template)."""
+    if llm_circuit_open():
+        return None
+    messages = [{"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}]
+    attempts = []
+    if os.environ.get("NVIDIA_API_KEY"):
+        attempts.append(lambda: _call_nvidia(messages, max_tokens))
+    if os.environ.get("OLLAMA_API_KEY"):
+        attempts.append(lambda: _call_ollama_cloud(messages, max_tokens))
+    if os.environ.get("TR_KEY"):
+        attempts.append(lambda: _call_tokenrouter(messages, max_tokens))
+    for p in PROVIDER_ORDER:
+        key = os.environ.get(PROVIDER_CONFIG[p]["env"])
+        if key:
+            attempts.append(lambda p=p, key=key: _call_litellm(p, key, messages, max_tokens))
+    for call_fn in attempts:
+        try:
+            out = call_fn()
+            if out:
+                llm_circuit_ok()
+                return out.strip()
+        except Exception as e:
+            llm_circuit_fail(str(e))
+            continue
+    return None
+
+
 # ---------------------------------------------------------------------------
 # RÉGÉNÉRATION (sans re-scraping) — exigence métier KORA 2026-08
 # ---------------------------------------------------------------------------

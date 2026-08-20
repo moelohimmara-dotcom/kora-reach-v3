@@ -22,6 +22,7 @@ import urllib.request
 
 import generation.illustrate as illustrate
 import generation.narrate as narrate
+import generation.writer as writer
 
 FFMPEG_BIN = os.environ.get("KORA_FFMPEG_BIN", "ffmpeg")
 FFPROBE_BIN = os.environ.get("KORA_FFPROBE_BIN", "ffprobe")
@@ -45,8 +46,41 @@ def ffmpeg_available() -> bool:
     return shutil.which(FFMPEG_BIN) is not None and shutil.which(FFPROBE_BIN) is not None
 
 
+_VISUAL_SUMMARY_SYSTEM = (
+    "Tu es directeur photo pour un media d'actualite. On te donne un extrait "
+    "d'article de presse. Decris en UNE phrase courte (15 mots maximum) une "
+    "SCENE VISUELLE CONCRETE et PLAUSIBLE qui illustre ce passage : un lieu, "
+    "des personnes (jamais nommees ni identifiables), une action observable. "
+    "JAMAIS de texte/pancarte/logo a afficher dans l'image. Reponds "
+    "UNIQUEMENT par la description de scene, sans introduction ni guillemets."
+)
+
+
+def _visual_summary(title: str, segment_text: str) -> str:
+    """Convertit un extrait BRUT d'article en une description de SCENE
+    VISUELLE propre, via LLM (2026-08-20, bug corrige : donner un extrait
+    brut tel quel au generateur d'image produisait des scenes hors-sujet
+    et bizarres -- costumes, armes -- constate en conditions reelles sur un
+    article de greve bancaire, le modele d'image "complete" un contexte
+    administratif abstrait de facon imprevisible). Repli sur l'ancien
+    comportement (extrait brut tronque) si le LLM echoue -- jamais bloquant,
+    coherent avec write_article() qui a toujours un repli."""
+    segment_text = (segment_text or "").strip()
+    if not segment_text:
+        return title
+    user = f"Titre de l'article : {title}\nExtrait : {segment_text[:600]}"
+    try:
+        out = writer.simple_completion(_VISUAL_SUMMARY_SYSTEM, user, max_tokens=60)
+    except Exception:
+        out = None
+    if out:
+        return out.strip().strip('"').strip("«»").strip()
+    return segment_text[:180]  # repli : ancien comportement
+
+
 def _segment_prompts(title: str, article_text: str, n: int) -> list:
-    """Decoupe l'article en n segments a peu pres egaux et construit un
+    """Decoupe l'article en n segments a peu pres egaux, resume chacun en
+    une scene visuelle propre (voir _visual_summary), puis construit un
     prompt d'image DISTINCT par segment (reutilise illustrate._build_prompt,
     meme garde-fou editorial "no recognizable real faces"). Chaque image du
     diaporama illustre ainsi une partie differente de l'article, pas n fois
@@ -59,7 +93,8 @@ def _segment_prompts(title: str, article_text: str, n: int) -> list:
         segments = [" ".join(words[i * size:(i + 1) * size]) for i in range(n)]
         while len(segments) < n:
             segments.append(segments[-1] if segments else "")
-    return [illustrate._build_prompt(title, seg[:180]) for seg in segments[:n]]
+    visuals = [_visual_summary(title, seg) for seg in segments[:n]]
+    return [illustrate._build_prompt(title, v) for v in visuals]
 
 
 def fetch_images(title: str, article_text: str, out_dir: str, n: int = 3, fact_id: str = "") -> list:
