@@ -234,7 +234,15 @@ def main():
                 con.rollback()
                 results["erreur"] += 1
                 print(f"  [{i}/{len(to_process)}] {fid} -> ERREUR: {type(e).__name__}: {e}")
-            if i < len(to_process) and llm_available:
+            # Bug trouvé par revue de code (2026-08-20, 2e passage) :
+            # llm_available est calculé UNE FOIS avant la boucle (présence
+            # de clés API), mais le disjoncteur LLM (generation.writer,
+            # partagé avec simple_completion()) peut s'OUVRIR EN COURS DE
+            # ROUTE après 3 échecs consécutifs -- dès lors, _llm_fix_structure()
+            # ne fait plus AUCUN appel réseau (court-circuité), mais la pause
+            # continuait quand même à se déclencher pour le reste du run.
+            # Revérifié ICI, à chaque itération, en plus du test statique.
+            if i < len(to_process) and llm_available and not writer.llm_circuit_open():
                 time.sleep(LLM_CALL_SPACING_SEC)
 
         print(f"\n[APPLIQUÉ] {json_summary(results)}")

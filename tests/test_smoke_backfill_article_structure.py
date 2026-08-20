@@ -179,7 +179,12 @@ def main():
             print("OK   article génuinement trop court préservé tel quel (jamais écrasé par un résultat insuffisant)")
 
         # Fix 3 : aucun sleep() si aucun fournisseur LLM n'est disponible.
-        for k in ("NVIDIA_API_KEY", "OLLAMA_API_KEY", "TR_KEY"):
+        # Bug trouve par revue de code (2e passage) : oubliait de nettoyer
+        # les cles litellm (GROQ/CEREBRAS/OPENROUTER) -- si l'une d'elles
+        # traine dans l'environnement (deploy/.env source par erreur, CI...),
+        # llm_available devient a tort True et le test tenterait un VRAI
+        # appel reseau au lieu du chemin mocke.
+        for k in ["NVIDIA_API_KEY", "OLLAMA_API_KEY", "TR_KEY"] + [writer.PROVIDER_CONFIG[p]["env"] for p in writer.PROVIDER_ORDER]:
             os.environ.pop(k, None)
         mal39 = ("# Titre sleep\n\n" + " ".join([f"Phrase numero {i} test contenu reel." for i in range(1, 40)]) + "\n\nPar La Rédaction")
         hitl_store.upsert_fact({
@@ -197,6 +202,33 @@ def main():
             failed.append(f"FIX3: {sleep_calls['n']} appel(s) sleep() alors qu'aucun fournisseur LLM n'est configuré")
         else:
             print("OK   aucun sleep() inutile quand aucun fournisseur LLM n'est disponible")
+
+        # Fix 1 (2e passage de revue) : disjoncteur OUVERT en cours de run
+        # (pas juste "aucune clé configurée") -- une clé EST présente
+        # (llm_available=True statiquement), mais le circuit est ouvert :
+        # aucun sleep ne doit se déclencher non plus dans ce cas.
+        os.environ["NVIDIA_API_KEY"] = "fausse-cle-pour-le-test"
+        import time as _time
+        writer._LLM_CB["open_until"] = _time.time() + 300
+        writer._LLM_CB["failures"] = 3
+        mal39b = ("# Titre circuit\n\n" + " ".join([f"Phrase numero {i} test contenu reel." for i in range(1, 40)]) + "\n\nPar La Rédaction")
+        hitl_store.upsert_fact({
+            "champion": {"title": "Test circuit ouvert", "source": "test", "url": "http://x/circuit"},
+            "contexts": [], "article": mal39b, "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
+        })
+        sleep_calls2 = {"n": 0}
+        backfill.time.sleep = lambda s: sleep_calls2.__setitem__("n", sleep_calls2["n"] + 1)
+        buf6 = io.StringIO()
+        with contextlib.redirect_stdout(buf6):
+            backfill.main()
+        backfill.time.sleep = _orig_sleep
+        os.environ.pop("NVIDIA_API_KEY", None)
+        writer._LLM_CB["open_until"] = 0.0
+        writer._LLM_CB["failures"] = 0
+        if sleep_calls2["n"] != 0:
+            failed.append(f"FIX1 (2e revue): {sleep_calls2['n']} appel(s) sleep() alors que le disjoncteur LLM est ouvert (clé présente mais circuit coupé)")
+        else:
+            print("OK   aucun sleep() quand le disjoncteur LLM s'ouvre en cours de run (revérifié en direct, pas juste au démarrage)")
 
         print()
         if failed:
