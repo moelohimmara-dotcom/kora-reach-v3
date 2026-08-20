@@ -3429,12 +3429,19 @@ function boot() {
     if (resetToken) {
       renderAuth("reset", resetToken);
     } else if (inviteToken) {
+      // Affichage immediat du formulaire (force=true : marque _authRendered
+      // tout de suite, empeche le garde-fou generique de render() de le
+      // remplacer par "login" pendant l'attente reseau ci-dessous -- bug
+      // corrige 2026-08-20 : un premier render() intermediaire gagnait
+      // sinon la course et affichait "login" a la place, avant meme que
+      // checkAuth() n'ait eu le temps de repondre).
+      renderAuth("invite", inviteToken, true);
       // 2026-08-20, demande explicite : si une session valide existe deja
       // sur ce navigateur (ex. l'admin teste son propre lien d'invitation
-      // sans s'etre deconnecte), on le previent au lieu d'afficher
-      // directement "Creer un compte" sans explication -- voir viewInvite().
+      // sans s'etre deconnecte), on met a niveau vers l'ecran "Deja connecte"
+      // au lieu d'afficher "Creer un compte" sans explication -- voir viewInvite().
       Store.checkAuth().then((ok) => {
-        renderAuth("invite", inviteToken, false, ok ? Store.state.auth : null);
+        if (ok) renderAuth("invite", inviteToken, true, Store.state.auth);
       });
     } else {
       Store.checkAuth().then((ok) => {
