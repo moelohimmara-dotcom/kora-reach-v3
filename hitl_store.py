@@ -700,20 +700,12 @@ def count_rejected() -> int:
 
 def count_deleted() -> int:
     """Compte les articles DÉFINITIVEMENT SUPPRIMÉS (poubelle vidée / purge).
-    Source : journal d'audit (action SUPPRIME ou PURGE)."""
-    _init()
-    con, _ = db.conn()
-    try:
-        cur = con.cursor()
-        cur.execute(
-            "SELECT count(*) FROM audit_events WHERE action IN ('SUPPRIME', 'PURGE')")
-        row = cur.fetchone()
-        if row is None:
-            return 0
-        val = list(row.values())[0] if isinstance(row, dict) else row[0]
-        return int(val or 0)
-    finally:
-        con.close()
+    Source : journal d'audit (action SUPPRIME ou PURGE).
+    Délègue à audit.count_deleted() (2026-08-20, bug corrigé : cette fonction
+    interrogeait auparavant une table 'audit_events' Postgres homonyme mais
+    JAMAIS alimentée par le vrai journal -- gelée depuis une ancienne
+    migration -- voir audit.count_deleted() pour le détail)."""
+    return audit.count_deleted()
 
 
 def get_dashboard_stats() -> dict:
@@ -778,10 +770,10 @@ def get_dashboard_stats() -> dict:
         cur.execute("SELECT count(*) FROM articles WHERE lower(status) = 'published'")
         row = cur.fetchone()
         published = int((list(row.values())[0] if isinstance(row, dict) else row[0]) or 0)
-        # 7) Supprimes (audit)
-        cur.execute("SELECT count(*) FROM audit_events WHERE action IN ('SUPPRIME', 'PURGE')")
-        row = cur.fetchone()
-        deleted = int((list(row.values())[0] if isinstance(row, dict) else row[0]) or 0)
+        # 7) Supprimes (audit) -- delegue a audit.count_deleted() (2026-08-20,
+        # bug corrige : cette requete directe visait la table 'audit_events'
+        # Postgres, jamais alimentee par le vrai journal, voir audit.py)
+        deleted = audit.count_deleted()
         return {
             # total_facts = "Articles" partout dans l'UI (sidebar, dashboard, filtre
             # "Tous" de la page Articles) : c'est la SEULE definition dont la somme

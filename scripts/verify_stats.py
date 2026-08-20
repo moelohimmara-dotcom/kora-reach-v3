@@ -82,9 +82,22 @@ def db_expected(e):
         "WHERE f.status = 'REJECTED' OR (f.status = 'TRASHED' AND d.status = 'REJECTED')"
     )
     rejected = int(cur.fetchone()[0])
-    cur.execute("SELECT count(*) FROM audit_events WHERE action IN ('SUPPRIME', 'PURGE')")
-    deleted = int(cur.fetchone()[0])
     conn.close()
+    # "deleted" vient du journal d'audit -- SQLite LOCAL (reach_state.db),
+    # PAS de Postgres (2026-08-20, bug corrige : une table 'audit_events'
+    # homonyme existe aussi cote Postgres mais n'est jamais alimentee par
+    # audit.log(), qui ecrit uniquement en local -- voir audit.py). Ce
+    # script tourne SUR le VPS (voir docstring), le fichier local est donc
+    # accessible directement, au meme chemin que celui utilise par audit.py.
+    import sqlite3
+    sqlite_path = os.path.join(os.path.dirname(__file__), "..", "reach_state.db")
+    sconn = sqlite3.connect(sqlite_path)
+    try:
+        deleted = int(sconn.execute(
+            "SELECT count(*) FROM audit_events WHERE action IN ('SUPPRIME', 'PURGE')"
+        ).fetchone()[0] or 0)
+    finally:
+        sconn.close()
     return {
         "total_facts": sum(by.values()),
         "articles": by.get("PENDING_REVIEW", 0) + by.get("TRANSMITTED", 0) + by.get("EDITED", 0),
