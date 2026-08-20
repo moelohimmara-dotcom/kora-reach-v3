@@ -2308,6 +2308,21 @@ function bindSettings() {
 
 let _authRendered = false;  // évite de reconstruire le formulaire à chaque setState
 
+// Notification de fin de cycle "rien de neuf" (2026-08-20, rapporte : un
+// cycle qui se termine sans aucun article FRAIS (pool vide ou tout deja
+// couvert -- voir reach_agent.py, status "empty_or_stale") ramenait
+// silencieusement au tableau de bord, sans aucune explication visible pour
+// l'utilisateur, qui y voyait a tort un plantage. Le backend calcule deja
+// un message FR explicatif (result.message) -- il n'etait simplement jamais
+// affiche nulle part par defaut (uniquement visible si l'utilisateur pensait
+// a naviguer manuellement vers Articles avec 0 resultat). On le declenche au
+// moment EXACT ou l'ecran de progression se referme (transition
+// cycleBusy:true -> false), quelle que soit la page affichee a ce moment --
+// pas au chargement de page (lastCycle peut contenir un ancien resultat
+// jamais montre, qu'on ne veut pas re-notifier a chaque F5).
+let _wasCycleBusy = false;
+let _lastNotifiedCycleTs = null;
+
 function render() {
   // Garde anti-récursion STRICT : si render est rappelé en boucle (sync ou async),
   // on lève une erreur EXPLICITE AVEC LE STACK au 6e appel rapproché, plutôt que
@@ -2343,6 +2358,20 @@ function render() {
   if (agent) agent.innerHTML = s.ui.busy
     ? `<span class="dot dot-busy"></span><span>${s.ui.overlay || "Agent occupé…"}</span>`
     : `<span class="dot dot-ready"></span><span>prêt</span>`;
+  // Notification "rien de neuf" / erreur de cycle -- voir commentaire sur
+  // _wasCycleBusy plus haut. Se declenche UNE SEULE fois, exactement au
+  // moment ou l'ecran de progression vient de se refermer.
+  const cycleJustFinished = _wasCycleBusy && !s.ui.cycleBusy;
+  _wasCycleBusy = s.ui.cycleBusy;
+  if (cycleJustFinished && s.lastCycle && s.lastCycle.ts !== _lastNotifiedCycleTs) {
+    _lastNotifiedCycleTs = s.lastCycle.ts;
+    const r = s.lastCycle.result;
+    if (r && r.status === "empty_or_stale" && r.message) {
+      snack(r.message);
+    } else if (r && r.error) {
+      snack("Erreur pendant la génération : " + r.error);
+    }
+  }
   renderErrorBanner(s);
   // Tour guidé (11.1) : une seule fois, au premier cockpit d'une session
   // authentifiée, si les guides ne sont pas désactivés. Délai court pour
@@ -2781,7 +2810,12 @@ function snack(msg) {
   const sn = document.getElementById("snackbar");
   if (sn) {
     sn.textContent = msg; sn.hidden = false;
-    clearTimeout(sn._t); sn._t = setTimeout(() => sn.hidden = true, 2600);
+    // Duree adaptee a la longueur du message (2026-08-20) : les 2.6s fixes
+    // suffisent pour "Erreur : ..." mais pas pour un message explicatif
+    // complet (ex. fin de cycle "rien de neuf", plusieurs phrases) --
+    // laisse le temps de lire sans pour autant bloquer indefiniment.
+    const dur = Math.max(2600, Math.min(9000, msg.length * 60));
+    clearTimeout(sn._t); sn._t = setTimeout(() => sn.hidden = true, dur);
   }
   // Type inféré du message : la convention existante préfixe déjà les erreurs
   // par "Erreur" (40 sites d'appel) — pas besoin de réécrire chaque appelant.
