@@ -141,6 +141,32 @@ def main():
     else:
         print("OK   structure_fixed=False sur un article deja correct")
 
+    # Cas trouve par revue de code independante (2026-08-20) : le filet
+    # mecanique se voulait une garantie absolue ("ne peut jamais echouer")
+    # mais une taille de groupe FIXE pouvait produire MOINS de blocs que le
+    # seuil sur un article court -- corrige (taille dynamique). Verifie sur
+    # un cas exactement a la limite (6 phrases de corps).
+    mal_court = ("# Titre court\n\n"
+        + " ".join([f"Phrase numero {i} du corps de l'article." for i in range(1, 7)])
+        + "\n\nPar La Rédaction")
+    fixed_court = writer._mechanical_paragraph_split(mal_court)
+    if not writer._structure_ok(fixed_court):
+        failed.append(f"_mechanical_paragraph_split: cas limite (6 phrases) toujours sous le seuil -- {fixed_court!r}")
+    else:
+        print("OK   _mechanical_paragraph_split atteint le seuil sur un article court (regression testee)")
+
+    # Cas VRAIMENT trop court (4 phrases) : meme le filet ne peut pas
+    # garantir le seuil sans dupliquer/couper des phrases -- _finalize_article
+    # doit rapporter HONNETEMENT structure_fixed=False plutot que pretendre
+    # un succes qui n'a pas eu lieu.
+    mal_tres_court = "# Titre\n\n" + " ".join([f"Phrase {i}." for i in range(1, 5)]) + "\n\nPar La Rédaction"
+    writer.simple_completion = lambda sysp, usrp, max_tokens=2600: None
+    result3 = writer._finalize_article(mal_tres_court, fact, lt)
+    if result3.get("structure_fixed") and not writer._structure_ok(result3["article"]):
+        failed.append("_finalize_article: pretend structure_fixed=True sur un resultat qui echoue toujours _structure_ok")
+    else:
+        print("OK   _finalize_article honnete sur l'echec du cas extreme (jamais de faux succes)")
+
     print()
     if failed:
         print(f"{len(failed)} ECHEC(S):")
