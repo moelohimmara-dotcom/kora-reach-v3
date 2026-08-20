@@ -13,6 +13,7 @@ fonctions prennent du texte en entree et rendent des fichiers en sortie.
 C'est orchestration/video.py qui relie ce module a editorial/hitl_store.py.
 """
 import os
+import time
 import hashlib
 import shutil
 import subprocess
@@ -28,6 +29,14 @@ VIDEO_WIDTH = 1280
 VIDEO_HEIGHT = 720
 VIDEO_FPS = 25
 FADE_SEC = 1.0
+# Espacement entre appels Pollinations successifs (2026-08-20, bug trouve en
+# prod : sans pause, le palier anonyme ralentit progressivement chaque appel
+# suivant jusqu'au timeout -- 5.8s, 44.5s, timeout, mesure en conditions
+# reelles). Timeout par image plus genereux que illustrate.py (45s, tune
+# pour le cycle SYNCHRONE) : ce module tourne toujours en thread de fond
+# (voir orchestration/video.py), rien n'attend une reponse rapide ici.
+IMAGE_CALL_SPACING_SEC = float(os.environ.get("KORA_VIDEO_IMAGE_SPACING_SEC", "16"))
+IMAGE_FETCH_TIMEOUT = int(os.environ.get("KORA_VIDEO_IMAGE_TIMEOUT_SEC", "90"))
 FFMPEG_TIMEOUT = int(os.environ.get("KORA_FFMPEG_TIMEOUT_SEC", "180"))
 MIN_IMAGES = 2  # en dessous, pas de diaporama possible -> echec explicite
 
@@ -63,17 +72,33 @@ def fetch_images(title: str, article_text: str, out_dir: str, n: int = 3, fact_i
     prompts = _segment_prompts(title, article_text, n)
     paths = []
     for i, prompt in enumerate(prompts):
+        if i > 0:
+            # Bug corrige 2026-08-20 (rate-limit Pollinations decouvert EN
+            # PROD : 3 appels immediats -> 5.8s, 44.5s, puis timeout -- le
+            # palier anonyme (voir recherche initiale : ~1 requete/15s) ne
+            # rejette pas franchement (pas de 429), il RALENTIT
+            # progressivement jusqu'au timeout. Sans pause entre les appels,
+            # la 3e image (voire la 2e) echoue quasi systematiquement des
+            # que n_images > 1. Ce module tourne en thread de fond (voir
+            # orchestration/video.py) : une pause ici ne bloque personne.
+            time.sleep(IMAGE_CALL_SPACING_SEC)
         seed = int(hashlib.sha256(f"{fact_id}-video-{i}".encode()).hexdigest()[:8], 16) % 900000
         try:
             url, _provider = illustrate._call_pollinations(prompt, seed=seed)
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 KORA/1.0"})
-            with urllib.request.urlopen(req, timeout=illustrate.TIMEOUT) as r:
+            with urllib.request.urlopen(req, timeout=IMAGE_FETCH_TIMEOUT) as r:
                 data = r.read()
             path = os.path.join(out_dir, f"img{i}.jpg")
             with open(path, "wb") as f:
                 f.write(data)
             paths.append(path)
-        except Exception:
+        except Exception as e:
+            # Journalise (2026-08-20, bug corrige : echec totalement
+            # silencieux jusqu'ici -- une image en echec en prod ne
+            # laissait AUCUNE trace, seul le message generique
+            # "images: seulement X/N obtenues" remontait, sans jamais dire
+            # POURQUOI -- reproduit manuellement pour diagnostiquer).
+            print(f"[video] image {i} echouee: {type(e).__name__}: {e}")
             continue  # cette image manque, les autres peuvent suffire
     return paths
 
