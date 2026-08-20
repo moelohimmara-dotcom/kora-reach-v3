@@ -13,9 +13,9 @@ import hashlib
 import threading
 from datetime import datetime
 from zoneinfo import ZoneInfo
-import config
-import db
-import audit
+import core.config as config
+import core.db as db
+import editorial.audit as audit
 
 TZ = ZoneInfo(config.LIMITS["timezone"])
 

@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 import json
 import threading
 from datetime import datetime
-import db
+import core.db as db
 
 
 @dataclass(frozen=True)

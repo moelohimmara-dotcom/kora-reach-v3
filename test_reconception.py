@@ -4,20 +4,20 @@ valider fenêtre glissante + filtre Guinée + cluster + writer + audit.
 """
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-import config
-import whitelist as wl
-from normalizer import normalize, TZ
-from guinea_filter import filter_guinea
-from dedup import url_hash, is_dup
-from clusterer import cluster, pick_champion
-from writer import write_article
-from audit import log, get_events
+import core.config as config
+import collection.whitelist as wl
+from collection.normalizer import normalize, TZ
+from collection.guinea_filter import filter_guinea
+from collection.dedup import url_hash, is_dup
+from collection.clusterer import cluster, pick_champion
+from generation.writer import write_article
+from editorial.audit import log, get_events
 import os
 # Reset DB pour test déterministe (AVANT import state_store qui crée les tables)
 _db = os.path.join(os.path.dirname(__file__), "reach_state.db")
 if os.path.exists(_db):
     os.remove(_db)
-from state_store import seen, mark
+from editorial.state_store import seen, mark
 # cycle_start = maintenant (fenêtre glissante)
 cs = datetime.now(TZ)
 recent = cs - timedelta(hours=2)  # <24h -> actual

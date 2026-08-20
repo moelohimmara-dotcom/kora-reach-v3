@@ -6,7 +6,7 @@ import time
 import urllib.robotparser
 from urllib.parse import urlparse
 from typing import Dict, Optional
-import whitelist as wl
+import collection.whitelist as wl
 
 _rp_cache: Dict[str, urllib.robotparser.RobotFileParser] = {}
 _last_req: Dict[str, float] = {}

@@ -4,8 +4,8 @@ import trafilatura
 import requests
 import re
 import time
-import config
-from guardrails import check as guardrails_check, rate_limit
+import core.config as config
+from collection.guardrails import check as guardrails_check, rate_limit
 from typing import List, Dict, Optional
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
@@ -188,18 +188,18 @@ def fetch_source(source) -> List[Dict]:
     if fmt == "html":
         return fetch_html(source)
     if fmt == "gnews":
-        from alt_sources import fetch_google_news
+        from collection.alt_sources import fetch_google_news
         # Collecte Google News (query fixe = Guinée) : le filtre strict
         # guinee_filter s'applique APRES dans reach_agent (comme pour les autres
         # vecteurs). On ne laisse PAS passer d'articles mondiaux non liés.
         return fetch_google_news("Guinée")
     if fmt == "sitemap":
-        from alt_sources import fetch_sitemap
+        from collection.alt_sources import fetch_sitemap
         return fetch_sitemap(source)
     if fmt == "gdelt":
-        from alt_sources import fetch_gdelt
+        from collection.alt_sources import fetch_gdelt
         return fetch_gdelt(source.url)
     if fmt == "wayback":
-        from alt_sources import fetch_wayback
+        from collection.alt_sources import fetch_wayback
         return fetch_wayback(source.url)
     return fetch_html(source)

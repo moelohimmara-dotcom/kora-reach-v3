@@ -49,7 +49,7 @@ import json
 import argparse
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-import db  # noqa: E402
+import core.db as db  # noqa: E402
 
 
 REAL_WP_PROVIDERS = ("both", "wordpress")

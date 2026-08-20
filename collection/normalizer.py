@@ -9,7 +9,7 @@ Règles (CDC §2.5) :
 """
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
-import config
+import core.config as config
 
 TZ = ZoneInfo(config.LIMITS["timezone"])
 _DATE_FORMATS = (

@@ -21,8 +21,8 @@ import threading
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta
 
-import db
-import totp as _totp
+import core.db as db
+import identity.totp as _totp
 
 RESET_TTL_MIN = int(os.environ.get("KORA_RESET_TTL_MIN", "30"))
 SESSION_TTL_H = int(os.environ.get("KORA_SESSION_TTL_H", "24"))
@@ -90,7 +90,11 @@ def _mfa_finalize(token):
 
 # Audit des événements d'auth (fichier dédié, fail-open : n'échoue jamais l'action)
 import os as _os
-_AUTH_LOG = _os.environ.get("KORA_AUTH_LOG", _os.path.join(ROOT if (ROOT := _os.path.dirname(_os.path.abspath(__file__))) else ".", "auth_audit.log"))
+# Racine du repo, pas le dossier de ce fichier (2026-08-20, refactor
+# monolithe modulaire : auth.py vit desormais dans identity/) -- sinon
+# orphelinerait silencieusement auth_audit.log deja accumule a la racine.
+_REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+_AUTH_LOG = _os.environ.get("KORA_AUTH_LOG", _os.path.join(_REPO_ROOT, "auth_audit.log"))
 
 def log_auth_event(event, detail, ip=None):
     try:

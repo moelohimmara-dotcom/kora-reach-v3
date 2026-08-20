@@ -37,8 +37,12 @@ def conn():
         c = psycopg2.connect(_pg_url(), connect_timeout=10)
         c.cursor_factory = psycopg2.extras.RealDictCursor
         return c, "postgres"
-    # SQLite par défaut
-    db = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reach_state.db")
+    # SQLite par défaut. Racine du repo, pas le dossier de ce fichier
+    # (2026-08-20, refactor monolithe modulaire : db.py vit desormais dans
+    # core/) -- sinon un reach_state.db LOCAL/DEV distinct et vide serait
+    # cree dans core/, deconnecte de celui deja utilise a la racine.
+    _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    db = os.path.join(_repo_root, "reach_state.db")
     c = sqlite3.connect(db)
     c.row_factory = sqlite3.Row
     return c, "sqlite"

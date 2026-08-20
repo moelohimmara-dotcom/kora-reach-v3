@@ -3,7 +3,7 @@ Simule 3 'articles' de 3 médias guinéens parlant du MÊME fait (match Guinée-
 avec rédactions différentes, comme en réalité. Vérifie que Reach les clusterise
 en 1 fait + sélectionne le champion le plus parlant.
 """
-from clusterer import cluster, pick_champion, score_item
+from collection.clusterer import cluster, pick_champion, score_item
 
 items = [
     {"title": "Guinée bat Mali 2-1 en match amical à Conakry",

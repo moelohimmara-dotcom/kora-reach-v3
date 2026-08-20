@@ -5,7 +5,7 @@ de fichier) pour éviter toute inclusion/traversée de fichier.
 """
 import re
 import base64
-import db
+import core.db as db
 
 _HEX = re.compile(r"^#?[0-9A-Fa-f]{6}$")
 

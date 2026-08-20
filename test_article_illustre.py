@@ -2,7 +2,7 @@
 génération d'un article de synthèse ILLUSTRÉ (image du champion).
 Le 'writer' ici est un template (le LLM writer KORA serait branché ensuite).
 Prouve que Reach livre un article prêt à publier AVEC son image."""
-from reach_agent import agent
+from orchestration.reach_agent import agent
 
 def synth_template(champion, contexts):
     """Simule le writer KORA : article de synthèse à partir du champion + contextes."""

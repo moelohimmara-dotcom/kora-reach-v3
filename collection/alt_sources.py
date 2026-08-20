@@ -12,7 +12,7 @@ import requests
 import feedparser
 import trafilatura
 from typing import Dict, List
-from fetchers import get_with_retry
+from collection.fetchers import get_with_retry
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; KoraReachBot/1.0)"}
 _TIMEOUT = 15
@@ -86,7 +86,7 @@ def fetch_google_news(query="Guinée", gl="GN", hl="fr", limit=20) -> List[Dict]
     pas a nourrir une synthese fiable (regle metier 2026-08-19)."""
     out = []
     try:
-        from fetchers import _fetch_full_article, _RSS_FULLTEXT_MIN_LEN
+        from collection.fetchers import _fetch_full_article, _RSS_FULLTEXT_MIN_LEN
         url = f"https://news.google.com/rss/search?q={requests.utils.quote(query)}&hl={hl}&gl={gl}&ceid={gl}:{hl}"
         # requests + retry (au lieu de feedparser.parse(url) direct, qui n'a
         # aucune resilience reseau propre) puis feedparser.parse(bytes).
