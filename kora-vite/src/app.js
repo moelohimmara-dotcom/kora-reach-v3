@@ -3280,9 +3280,17 @@ function bind() {
     const seg = location.pathname.replace(/^\/kora-v2\/?/, "").split("/")[0];
     Store.setRoute(seg ? (SLUG_ROUTES[seg] || "cockpit") : "cockpit");
   });
-  // Amorce l'historique : la route courante devient l'état de base pour que le
-  // bouton "retour" du navigateur (mobile) puisse revenir en arrière.
-  try { history.replaceState({ route: Store.state.route }, "", routeToPath(Store.state.route)); } catch (e) {}
+  // Amorce l'historique : attache un état à l'entrée d'historique courante
+  // pour que le bouton "retour" du navigateur (mobile) puisse revenir en
+  // arrière. IMPORTANT (2026-08-20, bug corrigé) : bind() s'exécute AVANT
+  // boot() (voir main.js) -- Store.state.route vaut encore sa valeur par
+  // défaut ("cockpit") à ce stade, la vraie route n'est déterminée par
+  // boot() qu'ensuite depuis l'URL. Réécrire l'URL ICI avec routeToPath()
+  // écrasait donc systématiquement une navigation directe (ex.
+  // /kora-v2/articles) par "/kora-v2/" avant même que boot() ne s'exécute.
+  // On garde location.href tel quel : seul l'état est posé, boot() se
+  // charge de la route réelle depuis l'URL affichée par le navigateur.
+  try { history.replaceState({ route: Store.state.route }, "", location.href); } catch (e) {}
 
   // =========================================================
   // COCKPIT — Delegated event binding (dynamic components)
