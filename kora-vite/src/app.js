@@ -2323,6 +2323,51 @@ let _authRendered = false;  // évite de reconstruire le formulaire à chaque se
 let _wasCycleBusy = false;
 let _lastNotifiedCycleTs = null;
 
+// Messages "rien de neuf" (2026-08-20, demande explicite : remplacer le
+// message technique brut du backend par un ton chaleureux et personnifie,
+// avec de la variete si l'utilisateur relance plusieurs fois de suite --
+// les premiers messages restent legers, les suivants reconnaissent
+// l'insistance ("Kora comprend ce que vous cherchez..."), boucle au-dela.
+const KORA_STALE_MESSAGES = [
+  "Kora n'a encore rien trouvé de neuf. Repassez un peu plus tard !",
+  "Pas de nouvelle fraîche pour l'instant. Kora garde l'œil ouvert et vous préviendra.",
+  "Silence du côté des sources pour le moment. Retentez dans un petit moment.",
+  "Kora a fait le tour de ses sources : rien à publier là tout de suite.",
+  "Toujours rien de neuf à l'horizon. Un peu de patience et ça viendra.",
+  "Les sources n'ont rien publié depuis votre dernier passage. À très vite !",
+  "Kora comprend ce que vous cherchez, mais il n'y a vraiment rien à se mettre sous la dent pour l'instant. Réessayez plus tard.",
+  "Encore un tour, encore rien de neuf. Les sources restent muettes pour le moment.",
+  "Kora insiste aussi, mais l'actualité fraîche se fait attendre. Merci de votre patience.",
+  "Toujours calme plat de ce côté-là. On y retourne bientôt.",
+  "Kora a revérifié minutieusement : rien de nouveau à publier pour l'instant.",
+  "Les sources dorment encore un peu. Kora reste en veille et reviendra vite.",
+  "Rien de frais à se mettre sous la dent, même après plusieurs passages. Ça ne saurait tarder.",
+  "Kora a bien compris votre insistance, mais il n'y a réellement rien à publier là maintenant.",
+  "Toujours rien à l'horizon, mais Kora ne relâche pas la surveillance. Repassez plus tard.",
+  "Encore et toujours du calme plat. Merci pour votre patience, ça finira par bouger.",
+];
+// Compteur de tentatives "a la suite" (persiste au F5, expire apres 3h sans
+// nouvel essai -- au-dela, on considere que c'est une nouvelle "session"
+// d'essais et on repart du ton le plus leger).
+const _STALE_STREAK_KEY = "kora-stale-streak";
+const _STALE_STREAK_TS_KEY = "kora-stale-streak-ts";
+const _STALE_STREAK_RESET_MS = 3 * 60 * 60 * 1000;
+function _nextStaleMessage() {
+  let n = 0;
+  try {
+    const ts = parseInt(localStorage.getItem(_STALE_STREAK_TS_KEY) || "0", 10);
+    if (ts && Date.now() - ts <= _STALE_STREAK_RESET_MS) {
+      n = parseInt(localStorage.getItem(_STALE_STREAK_KEY) || "0", 10) || 0;
+    }
+    localStorage.setItem(_STALE_STREAK_KEY, String(n + 1));
+    localStorage.setItem(_STALE_STREAK_TS_KEY, String(Date.now()));
+  } catch (e) {}
+  return KORA_STALE_MESSAGES[n % KORA_STALE_MESSAGES.length];
+}
+function _resetStaleStreak() {
+  try { localStorage.removeItem(_STALE_STREAK_KEY); localStorage.removeItem(_STALE_STREAK_TS_KEY); } catch (e) {}
+}
+
 function render() {
   // Garde anti-récursion STRICT : si render est rappelé en boucle (sync ou async),
   // on lève une erreur EXPLICITE AVEC LE STACK au 6e appel rapproché, plutôt que
@@ -2366,8 +2411,10 @@ function render() {
   if (cycleJustFinished && s.lastCycle && s.lastCycle.ts !== _lastNotifiedCycleTs) {
     _lastNotifiedCycleTs = s.lastCycle.ts;
     const r = s.lastCycle.result;
-    if (r && r.status === "empty_or_stale" && r.message) {
-      snack(r.message);
+    if (r && r.status === "empty_or_stale") {
+      snack(_nextStaleMessage());
+    } else if (r && r.status === "ok") {
+      _resetStaleStreak(); // du neuf trouve -> on repart du ton le plus leger la prochaine fois
     } else if (r && r.error) {
       snack("Erreur pendant la génération : " + r.error);
     }
