@@ -33,6 +33,7 @@ from editorial.hitl_store import (
 )
 import publishing.transmit as transmit
 import generation.writer as writer
+import orchestration.video as video_orchestrator
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.environ.get("KORA_STATIC", os.path.join(ROOT, "static"))
@@ -453,6 +454,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"mutex": reach_agent.agent.is_busy,
                                     "whitelist_version": wl.WHITELIST_VERSION,
                                     "editor": EDITOR_NAME, "transmit_mode": transmit.mode()})
+        if path == "/api/video/status":
+            # Poll cote frontend pendant/apres une generation video (2026-08-20).
+            if not self._require_auth():
+                return
+            _qs = urllib.parse.parse_qs(p.query)
+            fid = (_qs.get("fact_id") or [""])[0]
+            if not fid:
+                return self._send(400, {"error": "fact_id_requis"})
+            res = video_orchestrator.video_status(fid)
+            return self._send(200 if res.get("ok") else 404, res)
         if path == "/api/settings":
             # GET = lecture du branding (nom/logo/couleurs) -> public pour l'écran de connexion.
             # La MODIFICATION (POST) reste advanced (voir do_POST).
@@ -739,6 +750,21 @@ class Handler(BaseHTTPRequestHandler):
             if res.get("error"):
                 return self._send(404, res)
             return self._send(200, res)
+        if p.path == "/api/video/generate":
+            # Genere une video narree pour UN article (2026-08-20). TOUJOURS
+            # en arriere-plan (thread dedie dans l'orchestrateur) : la
+            # generation prend 2 a 5 min, inacceptable en synchrone dans une
+            # requete HTTP. Meme verrou anti-cycle que /api/regenerate (le
+            # cycle et la generation video se disputeraient sinon le CPU
+            # et les appels Pollinations).
+            with _LAST_LOCK:
+                if LAST_CYCLE["running"]:
+                    return self._send(429, {"error": "cycle_en_cours", "detail": "Génération vidéo verrouillée : un cycle est en cours."})
+            fid = payload.get("fact_id")
+            if not fid:
+                return self._send(400, {"error": "fact_id_requis"})
+            res = video_orchestrator.start_video_generation(fid)
+            return self._send(200 if res.get("ok") else 400, res)
         if p.path == "/api/hitl/decide":
             fid = payload.get("fact_id")
             decision = payload.get("decision")  # EDITED | APPROVED | REJECTED

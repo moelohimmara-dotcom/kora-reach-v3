@@ -17,3 +17,9 @@ paramiko>=3.4.0
 
 # --- (optionnel) si FAL.ai direct est activé via SDK ---
 # fal_client (pip install fal_client) — requiert FAL_KEY
+
+# --- Narration audio (feature video, 2026-08-20) ---
+# edge-tts : voix neuronales Microsoft Edge, gratuit, sans cle API, sans
+# limite documentee. Verifie en conditions reelles (article FR complet,
+# voix fr-FR-HenriNeural) avant integration -- voir media/narrate.py.
+edge-tts>=6.1.0

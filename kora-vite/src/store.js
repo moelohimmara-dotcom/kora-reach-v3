@@ -1025,10 +1025,27 @@ export const Store = (() => {
     }
   }
 
+  // Vidéo narrée (2026-08-20) : démarre en arrière-plan côté serveur
+  // (2-5 min, jamais bloquant) -- l'appelant (app.js) poll ensuite
+  // getVideoStatus() à intervalle régulier jusqu'à done/error.
+  async function startVideoGeneration(fact_id) {
+    const r = await api("/api/video/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fact_id }),
+    });
+    if (r.error) throw new Error(r.error);
+    return r;
+  }
+  async function getVideoStatus(fact_id) {
+    return api(`/api/video/status?fact_id=${encodeURIComponent(fact_id)}`);
+  }
+
   return {
     state, setState, subscribe, api,
     loadHealth, loadLast, loadHITL, loadAudit, loadSources, addSource, updateSource, loadSettings, applySettings,
     startCycle, resumeCycleWatch, cancelCycle, decide, retract, setRoute, openSheet, closeSheet, wait,
+    startVideoGeneration, getVideoStatus,
     formatEta: _formatEta,
     wasCycleActiveBeforeLoad,
     getFactFilter, setFactFilter,
