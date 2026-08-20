@@ -11,6 +11,19 @@ export const SHELL = `
       </div>
     </div>
     <div class="topbar-right">
+      <!-- Identite du compte connecte (2026-08-20, demande explicite) :
+           affiche en PERMANENCE, sur toutes les pages, qui est connecte et
+           avec quel role -- evite la confusion "je ne sais plus quel compte
+           est actif" (contrairement a une URL, qui n'est pas la bonne place
+           pour ca : voir echange sur Facebook/URL). Clic -> Parametres >
+           Compte, ou l'info complete (email, changer de mdp...) vit deja. -->
+      <button class="topbar-identity" id="topbarIdentity" title="Compte connecté — voir dans Paramètres">
+        <span class="topbar-identity-avatar" id="topbarIdentityAvatar">?</span>
+        <span class="topbar-identity-text">
+          <span class="topbar-identity-name" id="topbarIdentityName">—</span>
+          <span class="topbar-identity-role" id="topbarIdentityRole">—</span>
+        </span>
+      </button>
       <div class="topbar-status" id="agentStatus" role="status" aria-live="polite">
         <span class="dot dot-ready"></span><span id="agentMode">prêt</span>
       </div>
