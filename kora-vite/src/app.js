@@ -1479,6 +1479,36 @@ function stopCycleMessages() {
   _cycleMsgTimer = null;
 }
 
+// Section "Vidéo narrée" de la fiche article (2026-08-20, demande explicite) :
+// texte -> narration (edge-tts) + diaporama d'images (Pollinations) -> .mp4
+// (ffmpeg). Génération à la demande (2-5 min), jamais automatique -- coût
+// CPU/appels externes, inutile pour un brouillon jamais publié.
+function videoSection(f) {
+  const status = f.video_status;
+  if (!status || status === "error") {
+    return `<div class="video-section">
+      <button class="btn btn-tonal btn-block" id="videoGenBtn">${icon("i-spark")} Générer la vidéo narrée</button>
+      ${status === "error" ? `<p class="muted" style="margin-top:6px">Échec précédent : ${esc(f.video_error || "erreur inconnue")}</p>` : ""}
+    </div>`;
+  }
+  if (status === "generating") {
+    return `<div class="video-section">
+      <div class="video-generating"><span class="dot dot-busy"></span> Génération de la vidéo en cours… (2-5 min)</div>
+    </div>`;
+  }
+  if (status === "done" && f.video_path) {
+    const dur = f.video_duration_sec ? `${Math.round(f.video_duration_sec / 60)} min` : "";
+    return `<div class="video-section">
+      <video class="video-preview" src="/kora-v2/media/${esc(f.video_path)}" controls preload="metadata"></video>
+      <div class="video-actions">
+        <span class="muted">${dur ? `Durée : ${dur}` : ""}</span>
+        <button class="btn btn-ghost btn-sm" id="videoRegenBtn">${icon("i-refresh")} Régénérer la vidéo</button>
+      </div>
+    </div>`;
+  }
+  return "";
+}
+
 function renderSheet(s) {
   _editingActive = false;
   const sh = s.sheet;
@@ -1554,6 +1584,7 @@ function renderSheet(s) {
         <div class="regen-chips" id="regenChips"></div>
         <button class="btn btn-ghost btn-sm" data-regen-cancel="1">Annuler</button>
       </div>
+      ${videoSection(f)}
     </div>`}`;
   sheet.hidden = false; scrim.hidden = false;
 
@@ -1704,6 +1735,45 @@ function renderSheet(s) {
     };
   }
   if (regenCancel) regenCancel.onclick = () => { regenPanel.hidden = true; };
+
+  // ---- Vidéo narrée (2026-08-20) : déclenchement + sondage du statut ----
+  const videoGenBtn = body.querySelector("#videoGenBtn");
+  const videoRegenBtn = body.querySelector("#videoRegenBtn");
+  const startVideoFlow = async (btn) => {
+    if (btn) { btn.disabled = true; btn.textContent = "Démarrage…"; }
+    try {
+      await Store.startVideoGeneration(f.fact_id);
+      f.video_status = "generating";
+      renderSheet(s);
+      // Sondage toutes les 8s jusqu'à done/error -- s'arrête tout seul si
+      // la fiche est refermée entre-temps (sheet retiré du DOM).
+      const poll = async () => {
+        if (!document.getElementById("videoGenBtn") && !document.querySelector(".video-generating")) return; // fiche fermée/changée
+        try {
+          const st = await Store.getVideoStatus(f.fact_id);
+          if (st.video_status === "generating") { setTimeout(poll, 8000); return; }
+          f.video_status = st.video_status;
+          f.video_path = st.video_path;
+          f.video_duration_sec = st.video_duration_sec;
+          f.video_error = st.video_error;
+          const inList = (Store.state.facts || []).find(x => x.fact_id === f.fact_id);
+          if (inList) Object.assign(inList, { video_status: st.video_status, video_path: st.video_path, video_duration_sec: st.video_duration_sec, video_error: st.video_error });
+          if (Store.state.sheet && Store.state.sheet.fact && Store.state.sheet.fact.fact_id === f.fact_id) renderSheet(Store.state);
+          if (st.video_status === "done") snack("Vidéo narrée générée.");
+          else if (st.video_status === "error") snack("Erreur génération vidéo : " + (st.video_error || "inconnue"));
+        } catch (e) { setTimeout(poll, 8000); }
+      };
+      setTimeout(poll, 8000);
+    } catch (e) {
+      snack("Erreur : " + (e.message || "échec du démarrage"));
+      renderSheet(s);
+    }
+  };
+  if (videoGenBtn) videoGenBtn.onclick = () => startVideoFlow(videoGenBtn);
+  if (videoRegenBtn) videoRegenBtn.onclick = () => {
+    if (!window.confirm("Régénérer la vidéo va remplacer la vidéo actuelle (nouvelle narration, nouvelles images). Continuer ?")) return;
+    startVideoFlow(videoRegenBtn);
+  };
 }
 
 function bindAudit() {

@@ -56,8 +56,9 @@ MODULES = [
     "collection.clusterer", "collection.guardrails", "collection.fetchers",
     "collection.alt_sources", "collection.whitelist",
     "generation.agent_prompts", "generation.illustrate", "generation.writer",
+    "generation.narrate", "generation.video",
     "publishing.transmit",
-    "orchestration.reach_agent",
+    "orchestration.reach_agent", "orchestration.video",
     "core.settings",
     "server",
 ]
