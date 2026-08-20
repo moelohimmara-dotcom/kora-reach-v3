@@ -2407,6 +2407,19 @@ function render() {
   if (agent) agent.innerHTML = s.ui.busy
     ? `<span class="dot dot-busy"></span><span>${s.ui.overlay || "Agent occupé…"}</span>`
     : `<span class="dot dot-ready"></span><span>prêt</span>`;
+  // Identite du compte connecte, visible en permanence (2026-08-20, demande
+  // explicite) -- voir shell.js pour le pourquoi (jamais dans l'URL, ici a
+  // la place, comme Facebook/Gmail/Slack pour "qui suis-je actuellement").
+  const idName = document.getElementById("topbarIdentityName");
+  const idRole = document.getElementById("topbarIdentityRole");
+  const idAvatar = document.getElementById("topbarIdentityAvatar");
+  if (idName) idName.textContent = s.auth.username || "—";
+  if (idRole) idRole.textContent = ROLE_LABEL_FR[s.auth.role] || s.auth.role || "—";
+  if (idAvatar) {
+    idAvatar.innerHTML = s.auth.avatarData
+      ? `<img src="${esc(s.auth.avatarData)}" alt="">`
+      : esc((s.auth.username || "?").charAt(0).toUpperCase());
+  }
   // Notification "rien de neuf" / erreur de cycle -- voir commentaire sur
   // _wasCycleBusy plus haut. Se declenche UNE SEULE fois, exactement au
   // moment ou l'ecran de progression vient de se refermer.
@@ -3010,6 +3023,10 @@ function bind() {
 
   const btn403 = document.querySelector("[data-403-home]");
   if (btn403) btn403.onclick = () => navigate("cockpit");
+
+  // ---- Identite du compte connecte (topbar) ----
+  const topbarIdentity = document.getElementById("topbarIdentity");
+  if (topbarIdentity) topbarIdentity.onclick = () => navigate("settings");
 
   // ---- Centre de notifications (10.2) ----
   renderNotifCenter();

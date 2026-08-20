@@ -1166,6 +1166,31 @@ html.icons-ready .material-icons { visibility: visible; }
 .kv { display: flex; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--glass-border); font-size: var(--t-body); }
 .kv b { font-weight: 700; }
 
+/* ---- Identite du compte connecte (2026-08-20) : visible en permanence
+   dans le topbar, sur toutes les pages -- voir shell.js pour le pourquoi
+   (jamais dans l'URL). Pilule cliquable -> Parametres > Compte. ---- */
+.topbar-identity {
+  display: flex; align-items: center; gap: 9px; background: var(--glass-bg); border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill); padding: 6px 14px 6px 6px; cursor: pointer; color: var(--text-primary);
+  transition: box-shadow var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.topbar-identity:hover { box-shadow: var(--neu-pressed); transform: scale(0.98); }
+.topbar-identity-avatar {
+  width: 28px; height: 28px; border-radius: 50%; flex: none; overflow: hidden;
+  display: grid; place-items: center; background: linear-gradient(135deg, var(--coral), var(--bordeaux));
+  color: #1a0c08; font-weight: 800; font-size: .78rem; text-transform: uppercase;
+}
+.topbar-identity-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.topbar-identity-text { display: flex; flex-direction: column; line-height: 1.2; text-align: left; min-width: 0; }
+.topbar-identity-name { font-size: var(--t-label); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
+.topbar-identity-role { font-size: var(--t-label-xs); color: var(--md-sys-color-on-surface-variant); font-weight: 600; }
+@media (max-width: 700px) {
+  /* Manque de place a cote du CTA cycle + statut + notifs : ne garde que
+     l'avatar (toujours cliquable -> Parametres pour le detail complet). */
+  .topbar-identity { padding: 4px; gap: 0; }
+  .topbar-identity-text { display: none; }
+}
+
 /* ---- Mobbin-inspired : topbar CTA, pulse live, stat cards, deltas ---- */
 .topbar-right { display: flex; align-items: center; gap: 12px; }
 .topbar-cta { padding: 10px 18px; font-size: var(--t-label); box-shadow: var(--glass-glow); }
