@@ -558,6 +558,114 @@ def _call_litellm(provider: str, key: str, messages: List[Dict], max_tokens: int
     return resp.choices[0].message.content
 
 
+# ---------------------------------------------------------------------------
+# GARDE-FOU STRUCTURE (2026-08-20) — rapporté : des articles générés en
+# paragraphe unique malgré la règle 1 (STRUCTURE) du prompt système, non
+# détecté par l'auto-critique (celle-ci ne vérifie QUE orthographe/grammaire/
+# accords/conjugaison/cohérence sémantique — jamais la structure elle-même).
+# Cascade en 2 temps : réparation LLM ciblée (comprend le sens, coupe aux
+# bonnes frontières thématiques) PUIS filet mécanique déterministe (ne peut
+# jamais échouer) si la passe LLM échoue à son tour -- garantit la structure
+# PAR CONSTRUCTION, même logique que pending=reste calculé par soustraction
+# dans get_dashboard_stats() (hitl_store.py) pour garantir son invariant.
+# ---------------------------------------------------------------------------
+_MIN_STRUCTURE_PARAGRAPHS = 4  # ideal = 6 (chapô + 5 corps) ; seuil tolérant pour eviter les faux positifs
+
+
+def _article_blocks(article: str) -> List[str]:
+    """Découpe un article en blocs sur les sauts de ligne doubles (frontière
+    de paragraphe Markdown). Retourne les blocs non vides, strippés."""
+    return [b.strip() for b in re.split(r"\n\s*\n", article or "") if b.strip()]
+
+
+def _is_title_or_signature(block: str) -> bool:
+    b = block.strip()
+    return b.startswith("#") or b.lower().startswith("par la r")
+
+
+def _structure_ok(article: str) -> bool:
+    """Vrai si l'article respecte la structure minimale de la règle 1 du
+    prompt système (chapô + paragraphes de corps distincts). Seuil TOLÉRANT
+    (_MIN_STRUCTURE_PARAGRAPHS=4, sous l'idéal de 6) pour ne jamais fausse-
+    positiver sur un article légitimement plus court (ex: suggestion 'court'
+    en régénération)."""
+    blocks = [b for b in _article_blocks(article) if not _is_title_or_signature(b)]
+    return len(blocks) >= _MIN_STRUCTURE_PARAGRAPHS
+
+
+_STRUCTURE_FIX_SYSTEM = (
+    "Tu es correcteur de mise en forme pour un media de presse serieux. On te "
+    "donne un article DEJA REDIGE, dont le CONTENU est correct et ne doit "
+    "SURTOUT PAS changer, mais dont la structure en paragraphes est absente "
+    "ou insuffisante (texte compact en un seul bloc). Reformate-le en "
+    "respectant EXACTEMENT ces regles, SANS changer un seul mot du contenu "
+    "ni des faits, sans resumer, sans raccourcir, sans reecrire les phrases "
+    "-- decoupe UNIQUEMENT en inserant des sauts de paragraphe aux bonnes "
+    "frontieres thematiques :\n"
+    "- Garde le titre (# ...) tel quel, sur sa propre ligne, en premier.\n"
+    "- Chapo : le tout premier paragraphe du corps (2 a 3 phrases), separe "
+    "du reste par une ligne vide.\n"
+    "- Corps : MINIMUM 5 paragraphes fluides separes chacun par une ligne "
+    "vide, chacun >= 60 mots, JAMAIS de titre de section entre eux.\n"
+    "- Garde 'Par La Redaction' seule, sur sa derniere ligne.\n"
+    "Reponds UNIQUEMENT par l'article reformate integralement, rien d'autre "
+    "(pas d'introduction, pas de commentaire)."
+)
+
+
+def _llm_fix_structure(article: str) -> str | None:
+    """Étape A de la cascade : demande au LLM de reformater UNIQUEMENT la
+    structure (pas le contenu). Retourne None si l'appel échoue OU si le
+    résultat semble avoir perdu du contenu (garde-fou anti-troncature, même
+    esprit que _apply_critique_corrections) -- l'appelant bascule alors sur
+    le filet mécanique (_mechanical_paragraph_split), qui ne peut pas échouer."""
+    try:
+        out = simple_completion(_STRUCTURE_FIX_SYSTEM, article, max_tokens=2600)
+    except Exception:
+        out = None
+    if not out:
+        return None
+    if len(out.split()) < len(article.split()) * 0.85:
+        return None  # perte de contenu suspecte -> rejeté, repli mécanique
+    return out.strip()
+
+
+def _mechanical_paragraph_split(article: str, sentences_per_para: int = 4) -> str:
+    """Étape B de la cascade : filet de sécurité SANS LLM, déterministe, ne
+    peut jamais échouer. Regroupe les phrases du corps par lots de ~4 (cible
+    60-100 mots/paragraphe, cohérent avec la règle 2 du prompt système) --
+    ne comprend pas le sens (contrairement à _llm_fix_structure), mais
+    GARANTIT une structure lisible même quand la réparation LLM échoue elle
+    aussi. Titre et signature préservés tels quels."""
+    blocks = _article_blocks(article)
+    if not blocks:
+        return article
+    title = blocks[0] if blocks[0].startswith("#") else None
+    body_blocks = blocks[1:] if title else blocks[:]
+    signature = None
+    if body_blocks and _is_title_or_signature(body_blocks[-1]):
+        signature = body_blocks[-1]
+        body_blocks = body_blocks[:-1]
+    full_text = " ".join(body_blocks) if body_blocks else article
+    # Découpe sur ponctuation forte suivie d'une majuscule (évite de couper
+    # sur des abréviations courantes type "M. Diallo" — imparfait mais
+    # largement suffisant pour un filet de repli, jamais le chemin normal).
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+(?=[A-ZÀ-Ý])", full_text) if s.strip()]
+    if not sentences:
+        return article
+    chapo = " ".join(sentences[:3])
+    rest = sentences[3:]
+    paras = [chapo] if chapo else []
+    for i in range(0, len(rest), sentences_per_para):
+        group = " ".join(rest[i:i + sentences_per_para])
+        if group:
+            paras.append(group)
+    out = (title + "\n\n") if title else ""
+    out += "\n\n".join(paras) if paras else full_text
+    out += "\n\n" + (signature or "Par La Rédaction")
+    return out
+
+
 def _finalize_article(art: str, fact: Dict, lt: Dict, should_cancel=None) -> Dict:
     """Post-traitement UNIFORME appliqué à tout article, quel que soit le
     provider qui l'a généré (avant 2026-08-19 : TokenRouter/litellm sautaient
@@ -594,10 +702,22 @@ def _finalize_article(art: str, fact: Dict, lt: Dict, should_cancel=None) -> Dic
         issues, report = review["issues_found"], review["critique"]
     else:
         issues, report = 0, ""
+    # Garde-fou structure (2026-08-20, rapporté : articles générés en un seul
+    # bloc malgré la règle 1 du prompt système -- voir bloc de commentaires
+    # au-dessus de _structure_ok()). Cascade LLM ciblé -> filet mécanique.
+    structure_fixed = False
+    _cancelled = should_cancel() if should_cancel else _cancelled
+    if not _cancelled and not _structure_ok(art):
+        fixed = _llm_fix_structure(art)
+        if fixed and _structure_ok(fixed):
+            art = fixed
+        else:
+            art = _mechanical_paragraph_split(art)
+        structure_fixed = True
     _v = validate_article(art, fact)
     if _v["flags"]:
         print("[INJECTION_BLOCKED]", "; ".join(_v["flags"]))
-    return {"article": _v["article"], "flags": _v["flags"],
+    return {"article": _v["article"], "flags": _v["flags"], "structure_fixed": structure_fixed,
             "critique_issues": issues, "critique_report": report}
 
 
@@ -692,7 +812,8 @@ def write_article(fact: Dict, dry_run: bool = None, should_cancel=None) -> Dict:
             return {"article": fin["article"], "image": image, "image_meta": image_meta,
                     "model": model_name, "status": "ok",
                     "length_target": lt["target"], "length_score": lt["score"],
-                    "critique_issues": fin["critique_issues"], "critique_report": fin["critique_report"]}
+                    "critique_issues": fin["critique_issues"], "critique_report": fin["critique_report"],
+                    "structure_fixed": fin.get("structure_fixed", False)}
         except Exception as e:
             last_err = e
             llm_circuit_fail(str(e))
