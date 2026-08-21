@@ -8,7 +8,7 @@
 ## 1. Préparer les credentials (CÔTÉ VPS, jamais dans le repo)
 ```bash
 cd /opt/kora-reach/deploy
-nano .env   # remplir SUPABASE_URL/KEY, WP_USER/APP_PASS, FAL_PROXY_URL ou FAL_KEY
+nano .env   # remplir SUPABASE_URL/KEY, WP_USER/APP_PASS
 chmod 600 .env
 ```
 ⚠️ Clés à RÉVOQUER après le test et recréer des clés dédiées « KORA ».
@@ -50,7 +50,7 @@ curl -s http://localhost:8765/api/whitelist | head -c 200
 |-----|-------|--------|
 | SUPABASE_KEY | écriture articles HITL | OUI (service_role) |
 | WP_APP_PASS | publication WP | OUI (app-password) |
-| FAL_PROXY_URL / FAL_KEY | images FAL | dépend endpoint |
+| _(aucune)_ | images de couverture : sources réelles + repli stock (LoremFlickr/Picsum), rien à configurer (2026-08-21) | - |
 | EDITOR_NAME | attribution HITL | non |
 
 ## Rollback

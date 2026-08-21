@@ -1488,10 +1488,11 @@ function stopCycleMessages() {
   _cycleMsgTimer = null;
 }
 
-// Section "Vidéo narrée" de la fiche article (2026-08-20, demande explicite) :
-// texte -> narration (edge-tts) + diaporama d'images (Pollinations) -> .mp4
-// (ffmpeg). Génération à la demande (2-5 min), jamais automatique -- coût
-// CPU/appels externes, inutile pour un brouillon jamais publié.
+// Section "Vidéo narrée" de la fiche article (2026-08-20, simplifiée le
+// 2026-08-21 : plus aucune génération IA) : texte -> narration (edge-tts) +
+// la même image de couverture réelle que l'article -> .mp4 (ffmpeg, zoom Ken
+// Burns). Génération à la demande (1-3 min), jamais automatique -- coût
+// CPU, inutile pour un brouillon jamais publié.
 function videoSection(f) {
   const status = f.video_status;
   if (!status || status === "error") {
@@ -1502,7 +1503,7 @@ function videoSection(f) {
   }
   if (status === "generating") {
     return `<div class="video-section">
-      <div class="video-generating"><span class="dot dot-busy"></span> Génération de la vidéo en cours… (2-5 min)</div>
+      <div class="video-generating"><span class="dot dot-busy"></span> Génération de la vidéo en cours… (1-3 min)</div>
     </div>`;
   }
   if (status === "done" && f.video_path) {
@@ -1553,9 +1554,15 @@ function renderSheet(s) {
     : _clean;
   // Retire la section "## Le fait en bref" du corps (le chapeau joue déjà ce rôle -> évite la redondance)
   bodyText = bodyText.replace(/^##\s*Le fait en bref\b[\s\S]*?(?=##\s*Décryptage)/i, "").trim();
+  // Bug corrige 2026-08-21 : légende figée sur "Illustration IA" alors que
+  // KORA n'en génère plus aucune (voir generation/illustrate.py) -- une
+  // vraie photo de source ne doit jamais être présentée comme une
+  // illustration IA. Dérivée de image_meta.provider ("source" = photo
+  // réelle d'une source du cluster, "loremflickr"/"picsum" = photo stock).
+  const imgCaption = f.image_meta?.provider === "source" ? "Photo — KORA (source)" : "Photo d'illustration — KORA";
   body.innerHTML = `
     <article class="sheet-article">
-      ${img ? `<figure class="sheet-figure"><img class="sheet-img" src="${esc(img)}" alt="" onerror="this.src='${ph}'"><figcaption class="sheet-cap">Illustration IA — KORA Agent</figcaption></figure>` : `<figure class="sheet-figure"><img class="sheet-img" src="${ph}" alt=""><figcaption class="sheet-cap">Illustration IA — KORA Agent</figcaption></figure>`}
+      ${img ? `<figure class="sheet-figure"><img class="sheet-img" src="${esc(img)}" alt="" onerror="this.src='${ph}'"><figcaption class="sheet-cap">${esc(imgCaption)}</figcaption></figure>` : `<figure class="sheet-figure"><img class="sheet-img" src="${ph}" alt=""><figcaption class="sheet-cap">${esc(imgCaption)}</figcaption></figure>`}
       <div class="sheet-head">
         ${icon("i-shield", "ic-l")}
         <div class="sheet-head-text">

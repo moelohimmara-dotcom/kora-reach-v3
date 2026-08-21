@@ -28,6 +28,10 @@ def _build_payload(fact: dict, final_text: str) -> dict:
         "og_image": champ.get("raw_og_image") or champ.get("image", ""),  # fallback OG champion
         "n_sources": fact.get("n_sources", 1),
         "generated_model": fact.get("gen_model", ""),
+        # provider de l'image (2026-08-21) : "source" = vraie photo d'une des
+        # sources du cluster, "loremflickr"/"picsum" = photo stock de repli --
+        # utilise pour la legende WP (jamais "IA" desormais, voir _upload_media).
+        "image_provider": (fact.get("image_meta", {}) or {}).get("provider", ""),
     }
 
 
@@ -196,7 +200,7 @@ def credentials_status() -> list:
     ]
 
 
-def _upload_media(image_url: str, fallback_url: str = "") -> int:
+def _upload_media(image_url: str, fallback_url: str = "", image_provider: str = "") -> int:
     """Upload l'image vers WP media. Accepte une URL ou un chemin de fichier local.
     Retourne l'id media ou 0. Strict sur magic bytes (PNG/JPEG).
     Fallback: si l'image générée est corrompue, tente l'OG du champion."""
@@ -233,11 +237,26 @@ def _upload_media(image_url: str, fallback_url: str = "") -> int:
             with urllib.request.urlopen(req, timeout=40) as r:
                 d = json.loads(r.read().decode())
             media_id = d.get("id", 0)
-            # Vider/normaliser la légende (sinon WP affiche l'URL source = JSON Pollinations)
+            # Normalise la légende (sinon WP affiche l'URL source brute).
+            # Bug corrige 2026-08-21 : la legende etait figee sur "Illustration
+            # IA — KORA" quel que soit le provider -- desormais TOUJOURS faux
+            # depuis le retrait de la generation IA (voir generation/
+            # illustrate.py), une vraie photo de source ne doit jamais etre
+            # presentee comme une illustration IA.
+            # Bug corrige (revue de code) : `image_provider` decrit l'image
+            # PRIMAIRE demandee (image_url), mais si celle-ci echoue la magic-
+            # byte check, c'est fallback_url (og du champion, TOUJOURS une
+            # vraie photo de source) qui est effectivement uploadee -- la
+            # legende doit refleter l'URL REELLEMENT envoyee, pas la demande
+            # initiale.
+            is_fallback = fallback_url and url == fallback_url
+            caption = ("Photo d'illustration — KORA"
+                       if (not is_fallback) and image_provider in ("loremflickr", "picsum")
+                       else "Photo — KORA (source)")
             try:
                 upd = urllib.request.Request(
                     WP_URL.rstrip("/") + f"/wp-json/wp/v2/media/{media_id}",
-                    data=json.dumps({"caption": "Illustration IA — KORA"}).encode(),
+                    data=json.dumps({"caption": caption}).encode(),
                     method="POST",
                     headers={"Content-Type": "application/json",
                              "Authorization": "Basic " + _b64(WP_USER + ":" + app_pass)})
@@ -259,7 +278,7 @@ def _to_wordpress(payload: dict, wp_status: str = "publish") -> dict:
     img = payload.get("image", "")
     og = payload.get("og_image", "")  # transmis par writer si dispo
     if img:
-        mid = _upload_media(img, fallback_url=og)
+        mid = _upload_media(img, fallback_url=og, image_provider=payload.get("image_provider", ""))
         if mid > 0:
             media_id = mid
     body = json.dumps({

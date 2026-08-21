@@ -1,141 +1,78 @@
-"""video.py — assemble une video "diaporama commente" pour un article :
-plusieurs images (Pollinations, meme fournisseur que illustrate.py) +
+"""video.py — assemble une video "article narre" pour un article : LA MEME
+image de couverture reelle que celle choisie pour l'article (voir
+generation/illustrate.py, plus aucune generation IA depuis le 2026-08-21) +
 narration audio (narrate.py), montees via ffmpeg (deja installe sur le
 serveur -- verifie avant integration, voir tests/test_smoke_ffmpeg.py).
 
-Pipeline : texte article -> N prompts distincts (segments de l'article) ->
-N images telechargees -> effet zoom lent (Ken Burns) par image, duree
-calee sur l'audio -> transitions en fondu enchaine -> mux avec la
-narration -> fichier .mp4 final.
+Pipeline (simplifie 2026-08-21, remplace l'ancien diaporama a 3 images
+Pollinations) : texte article -> narration -> UNE SEULE image (celle deja
+choisie par illustrate.py comme couverture de l'article) telechargee -> effet
+zoom lent (Ken Burns, sens alterne selon le fait) sur toute la duree de
+l'audio -> fondus d'ouverture/fermeture -> normalisation du volume de la
+narration -> mux -> fichier .mp4 final. Un seul appel ffmpeg (plus besoin de
+xfade entre plusieurs clips).
 
 Aucun acces DB ici (coherent avec le reste de generation/) : toutes les
-fonctions prennent du texte en entree et rendent des fichiers en sortie.
-C'est orchestration/video.py qui relie ce module a editorial/hitl_store.py.
+fonctions prennent du texte/une URL d'image en entree et rendent des
+fichiers en sortie. C'est orchestration/video.py qui relie ce module a
+editorial/hitl_store.py.
 """
 import os
-import time
 import hashlib
 import shutil
 import subprocess
 import tempfile
 import urllib.request
 
-import generation.illustrate as illustrate
 import generation.narrate as narrate
-import generation.writer as writer
 
 FFMPEG_BIN = os.environ.get("KORA_FFMPEG_BIN", "ffmpeg")
 FFPROBE_BIN = os.environ.get("KORA_FFPROBE_BIN", "ffprobe")
 VIDEO_WIDTH = 1280
 VIDEO_HEIGHT = 720
 VIDEO_FPS = 25
-FADE_SEC = 1.0
-# Espacement entre appels Pollinations successifs (2026-08-20, bug trouve en
-# prod : sans pause, le palier anonyme ralentit progressivement chaque appel
-# suivant jusqu'au timeout -- 5.8s, 44.5s, timeout, mesure en conditions
-# reelles). Timeout par image plus genereux que illustrate.py (45s, tune
-# pour le cycle SYNCHRONE) : ce module tourne toujours en thread de fond
-# (voir orchestration/video.py), rien n'attend une reponse rapide ici.
-IMAGE_CALL_SPACING_SEC = float(os.environ.get("KORA_VIDEO_IMAGE_SPACING_SEC", "16"))
+FADE_SEC = 0.6  # fondu d'ouverture/fermeture (video ET audio)
 IMAGE_FETCH_TIMEOUT = int(os.environ.get("KORA_VIDEO_IMAGE_TIMEOUT_SEC", "90"))
 FFMPEG_TIMEOUT = int(os.environ.get("KORA_FFMPEG_TIMEOUT_SEC", "180"))
-MIN_IMAGES = 2  # en dessous, pas de diaporama possible -> echec explicite
+# Zoom Ken Burns : amplitude et vitesse identiques a l'ancien diaporama
+# (bornes 1.0 <-> 1.15, pas de 0.0008/frame), simplement applique sur la
+# totalite de la duree de l'audio au lieu d'un fragment par image.
+ZOOM_MIN = 1.0
+ZOOM_MAX = 1.15
+ZOOM_STEP = 0.0008
 
 
 def ffmpeg_available() -> bool:
     return shutil.which(FFMPEG_BIN) is not None and shutil.which(FFPROBE_BIN) is not None
 
 
-_VISUAL_SUMMARY_SYSTEM = (
-    "Tu es directeur photo pour un media d'actualite. On te donne un extrait "
-    "d'article de presse. Decris en UNE phrase courte (15 mots maximum) une "
-    "SCENE VISUELLE CONCRETE et PLAUSIBLE qui illustre ce passage : un lieu, "
-    "des personnes (jamais nommees ni identifiables), une action observable. "
-    "JAMAIS de texte/pancarte/logo a afficher dans l'image. Reponds "
-    "UNIQUEMENT par la description de scene, sans introduction ni guillemets."
-)
+def _zoom_direction(fact_id: str, title: str) -> str:
+    """Alterne zoom avant/arriere de facon deterministe selon le fait
+    (2026-08-21, amelioration demandee : eviter que toutes les videos se
+    ressemblent). Meme fait -> meme direction a chaque regeneration."""
+    salt = (fact_id or title or "kora").encode()
+    return "in" if int(hashlib.sha256(salt).hexdigest()[:8], 16) % 2 == 0 else "out"
 
 
-def _visual_summary(title: str, segment_text: str) -> str:
-    """Convertit un extrait BRUT d'article en une description de SCENE
-    VISUELLE propre, via LLM (2026-08-20, bug corrige : donner un extrait
-    brut tel quel au generateur d'image produisait des scenes hors-sujet
-    et bizarres -- costumes, armes -- constate en conditions reelles sur un
-    article de greve bancaire, le modele d'image "complete" un contexte
-    administratif abstrait de facon imprevisible). Repli sur l'ancien
-    comportement (extrait brut tronque) si le LLM echoue -- jamais bloquant,
-    coherent avec write_article() qui a toujours un repli."""
-    segment_text = (segment_text or "").strip()
-    if not segment_text:
-        return title
-    user = f"Titre de l'article : {title}\nExtrait : {segment_text[:600]}"
-    try:
-        out = writer.simple_completion(_VISUAL_SUMMARY_SYSTEM, user, max_tokens=60)
-    except Exception:
-        out = None
-    if out:
-        return out.strip().strip('"').strip("«»").strip()
-    return segment_text[:180]  # repli : ancien comportement
-
-
-def _segment_prompts(title: str, article_text: str, n: int) -> list:
-    """Decoupe l'article en n segments a peu pres egaux, resume chacun en
-    une scene visuelle propre (voir _visual_summary), puis construit un
-    prompt d'image DISTINCT par segment (reutilise illustrate._build_prompt,
-    meme garde-fou editorial "no recognizable real faces"). Chaque image du
-    diaporama illustre ainsi une partie differente de l'article, pas n fois
-    la meme scene."""
-    words = (article_text or "").split()
-    if not words:
-        segments = [""] * n
-    else:
-        size = max(1, len(words) // n)
-        segments = [" ".join(words[i * size:(i + 1) * size]) for i in range(n)]
-        while len(segments) < n:
-            segments.append(segments[-1] if segments else "")
-    visuals = [_visual_summary(title, seg) for seg in segments[:n]]
-    return [illustrate._build_prompt(title, v) for v in visuals]
-
-
-def fetch_images(title: str, article_text: str, out_dir: str, n: int = 3, fact_id: str = "") -> list:
-    """Genere puis telecharge n images distinctes. Retourne une liste de
-    chemins de fichiers LOCAUX (jamais d'URL externe -- ffmpeg a besoin de
-    fichiers sur disque). N'echoue jamais globalement : une image en echec
-    est simplement absente du resultat (l'appelant decide si le total
-    restant est suffisant, voir MIN_IMAGES)."""
+def fetch_cover_image(image_url: str, out_dir: str) -> str:
+    """Telecharge l'image de couverture DEJA CHOISIE pour l'article (voir
+    generation/illustrate.py -- image reelle d'une source du cluster, ou
+    repli photo stock) vers un fichier local (ffmpeg a besoin d'un fichier
+    sur disque). Retourne le chemin local, ou "" en cas d'echec."""
+    if not image_url:
+        return ""
     os.makedirs(out_dir, exist_ok=True)
-    prompts = _segment_prompts(title, article_text, n)
-    paths = []
-    for i, prompt in enumerate(prompts):
-        if i > 0:
-            # Bug corrige 2026-08-20 (rate-limit Pollinations decouvert EN
-            # PROD : 3 appels immediats -> 5.8s, 44.5s, puis timeout -- le
-            # palier anonyme (voir recherche initiale : ~1 requete/15s) ne
-            # rejette pas franchement (pas de 429), il RALENTIT
-            # progressivement jusqu'au timeout. Sans pause entre les appels,
-            # la 3e image (voire la 2e) echoue quasi systematiquement des
-            # que n_images > 1. Ce module tourne en thread de fond (voir
-            # orchestration/video.py) : une pause ici ne bloque personne.
-            time.sleep(IMAGE_CALL_SPACING_SEC)
-        seed = int(hashlib.sha256(f"{fact_id}-video-{i}".encode()).hexdigest()[:8], 16) % 900000
-        try:
-            url, _provider = illustrate._call_pollinations(prompt, seed=seed)
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 KORA/1.0"})
-            with urllib.request.urlopen(req, timeout=IMAGE_FETCH_TIMEOUT) as r:
-                data = r.read()
-            path = os.path.join(out_dir, f"img{i}.jpg")
-            with open(path, "wb") as f:
-                f.write(data)
-            paths.append(path)
-        except Exception as e:
-            # Journalise (2026-08-20, bug corrige : echec totalement
-            # silencieux jusqu'ici -- une image en echec en prod ne
-            # laissait AUCUNE trace, seul le message generique
-            # "images: seulement X/N obtenues" remontait, sans jamais dire
-            # POURQUOI -- reproduit manuellement pour diagnostiquer).
-            print(f"[video] image {i} echouee: {type(e).__name__}: {e}")
-            continue  # cette image manque, les autres peuvent suffire
-    return paths
+    path = os.path.join(out_dir, "cover.jpg")
+    try:
+        req = urllib.request.Request(image_url, headers={"User-Agent": "Mozilla/5.0 KORA/1.0"})
+        with urllib.request.urlopen(req, timeout=IMAGE_FETCH_TIMEOUT) as r:
+            data = r.read()
+        with open(path, "wb") as f:
+            f.write(data)
+        return path
+    except Exception as e:
+        print(f"[video] telechargement image de couverture echoue: {type(e).__name__}: {e}")
+        return ""
 
 
 def _probe_duration(path: str) -> float:
@@ -147,64 +84,54 @@ def _probe_duration(path: str) -> float:
     return float(out.stdout.strip())
 
 
-def assemble_video(image_paths: list, audio_path: str, out_path: str) -> dict:
-    """Assemble le diaporama final : effet zoom lent par image (duree =
-    duree_audio / nb_images), transitions en fondu enchaine, narration
-    en piste audio. Retourne {ok, path, duration_sec, error}."""
+def assemble_video(image_path: str, audio_path: str, out_path: str,
+                    zoom_direction: str = "in") -> dict:
+    """Assemble la video finale a partir d'UNE image et de la narration :
+    zoom Ken Burns (avant ou arriere) sur toute la duree de l'audio, fondus
+    d'ouverture/fermeture, narration normalisee en volume (loudnorm).
+    Retourne {ok, path, duration_sec, error}. Un seul appel ffmpeg (plus de
+    xfade entre clips -- une seule image, plus besoin d'enchainement)."""
     if not ffmpeg_available():
         return {"ok": False, "path": None, "duration_sec": None, "error": "ffmpeg_introuvable"}
-    if len(image_paths) < MIN_IMAGES:
-        return {"ok": False, "path": None, "duration_sec": None,
-                "error": f"pas_assez_dimages ({len(image_paths)}/{MIN_IMAGES} minimum)"}
+    if not image_path or not os.path.exists(image_path):
+        return {"ok": False, "path": None, "duration_sec": None, "error": "image_de_couverture_absente"}
     try:
         audio_dur = _probe_duration(audio_path)
     except Exception as e:
         return {"ok": False, "path": None, "duration_sec": None, "error": f"audio_illisible: {type(e).__name__}: {e}"}
 
-    n = len(image_paths)
-    per = max(audio_dur / n, FADE_SEC * 2)  # jamais plus court que 2 fondus
-    tmp_dir = tempfile.mkdtemp(prefix="kora_video_")
-    clip_paths = []
+    frames = max(1, int(audio_dur * VIDEO_FPS))
+    if zoom_direction == "out":
+        # Part de ZOOM_MAX et redescend vers ZOOM_MIN (zoompan : 'on' = numero
+        # de frame de sortie, initialise a ZOOM_MAX au 1er frame puis decroit).
+        z_expr = f"if(eq(on,0),{ZOOM_MAX},max(zoom-{ZOOM_STEP},{ZOOM_MIN}))"
+    else:
+        z_expr = f"min(zoom+{ZOOM_STEP},{ZOOM_MAX})"
+    # Bug corrige (revue de code) : pour un audio tres court (<= FADE_SEC),
+    # fade_out_start tombait a 0 -- les fondus d'ouverture ET de fermeture
+    # demarraient au meme instant et se chevauchaient sur tout le clip
+    # (flash noir/silence au lieu du plan attendu). On reduit le fondu
+    # proportionnellement (jamais plus du tiers de la duree) pour garantir
+    # qu'ouverture et fermeture ne se chevauchent jamais, meme sur un
+    # article tres court.
+    fade = min(FADE_SEC, audio_dur / 3) if audio_dur > 0 else 0.0
+    fade_out_start = max(0.0, audio_dur - fade)
+    vf = (
+        f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:force_original_aspect_ratio=increase,"
+        f"crop={VIDEO_WIDTH}:{VIDEO_HEIGHT},"
+        f"zoompan=z='{z_expr}':d={frames}:s={VIDEO_WIDTH}x{VIDEO_HEIGHT}:fps={VIDEO_FPS},"
+        f"fade=t=in:st=0:d={fade:.3f},fade=t=out:st={fade_out_start:.3f}:d={fade:.3f}"
+    )
+    af = (
+        f"loudnorm,"
+        f"afade=t=in:st=0:d={fade:.3f},afade=t=out:st={fade_out_start:.3f}:d={fade:.3f}"
+    )
+    cmd = [FFMPEG_BIN, "-y", "-loop", "1", "-i", image_path, "-i", audio_path,
+           "-t", str(audio_dur),
+           "-vf", vf, "-af", af,
+           "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", str(VIDEO_FPS),
+           "-c:a", "aac", "-shortest", out_path, "-loglevel", "error"]
     try:
-        for i, img in enumerate(image_paths):
-            clip = os.path.join(tmp_dir, f"clip{i}.mp4")
-            frames = max(1, int(per * VIDEO_FPS))
-            vf = (
-                f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:force_original_aspect_ratio=increase,"
-                f"crop={VIDEO_WIDTH}:{VIDEO_HEIGHT},"
-                f"zoompan=z='min(zoom+0.0008,1.15)':d={frames}:s={VIDEO_WIDTH}x{VIDEO_HEIGHT}:fps={VIDEO_FPS}"
-            )
-            cmd = [FFMPEG_BIN, "-y", "-loop", "1", "-i", img, "-t", str(per),
-                   "-vf", vf, "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                   "-r", str(VIDEO_FPS), clip, "-loglevel", "error"]
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=FFMPEG_TIMEOUT)
-            if r.returncode != 0:
-                return {"ok": False, "path": None, "duration_sec": None,
-                        "error": f"ffmpeg_clip_{i}: {r.stderr[:400]}"}
-            clip_paths.append(clip)
-
-        # Chaine de transitions en fondu enchaine (xfade), clips de duree
-        # egale `per` -> offset_i = i * (per - FADE_SEC) (formule standard
-        # pour un enchainement sequentiel de xfade a duree constante).
-        inputs = []
-        for c in clip_paths:
-            inputs += ["-i", c]
-        inputs += ["-i", audio_path]
-        filter_parts = []
-        prev_label = "0"
-        for i in range(1, n):
-            offset = i * (per - FADE_SEC)
-            out_label = f"v{i}" if i < n - 1 else "vout"
-            filter_parts.append(
-                f"[{prev_label}][{i}]xfade=transition=fade:duration={FADE_SEC}:offset={offset:.3f}[{out_label}]"
-            )
-            prev_label = out_label
-        filter_complex = ";".join(filter_parts)
-        cmd = [FFMPEG_BIN, "-y", *inputs,
-               "-filter_complex", filter_complex,
-               "-map", "[vout]", "-map", f"{n}:a",
-               "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
-               "-shortest", out_path, "-loglevel", "error"]
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=FFMPEG_TIMEOUT)
         if r.returncode != 0:
             return {"ok": False, "path": None, "duration_sec": None,
@@ -217,16 +144,16 @@ def assemble_video(image_paths: list, audio_path: str, out_path: str) -> dict:
         return {"ok": False, "path": None, "duration_sec": None, "error": "ffmpeg_timeout"}
     except Exception as e:
         return {"ok": False, "path": None, "duration_sec": None, "error": f"{type(e).__name__}: {e}"}
-    finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-def generate_video_for_article(title: str, article_text: str, out_dir: str, out_name: str,
-                                n_images: int = 3, voice: str = None, fact_id: str = "") -> dict:
-    """Pipeline complet : narration + N images + assemblage. Retourne
-    {ok, video_path, duration_sec, error}. Nettoie systematiquement les
-    fichiers de travail intermediaires (images, audio brut), ne laisse que
-    la video finale dans out_dir."""
+def generate_video_for_article(title: str, article_text: str, image_url: str,
+                                out_dir: str, out_name: str, voice: str = None,
+                                fact_id: str = "") -> dict:
+    """Pipeline complet : narration + telechargement de l'image de couverture
+    DEJA CHOISIE pour l'article + assemblage. Retourne {ok, video_path,
+    duration_sec, error}. Nettoie systematiquement les fichiers de travail
+    intermediaires (image, audio brut), ne laisse que la video finale dans
+    out_dir."""
     os.makedirs(out_dir, exist_ok=True)
     work_dir = tempfile.mkdtemp(prefix="kora_video_work_")
     try:
@@ -236,13 +163,14 @@ def generate_video_for_article(title: str, article_text: str, out_dir: str, out_
             return {"ok": False, "video_path": None, "duration_sec": None,
                     "error": f"narration: {nres['error']}"}
 
-        images = fetch_images(title, article_text, work_dir, n=n_images, fact_id=fact_id)
-        if len(images) < MIN_IMAGES:
+        image_path = fetch_cover_image(image_url, work_dir)
+        if not image_path:
             return {"ok": False, "video_path": None, "duration_sec": None,
-                    "error": f"images: seulement {len(images)}/{n_images} obtenues"}
+                    "error": "image_de_couverture_indisponible"}
 
         out_path = os.path.join(out_dir, out_name)
-        res = assemble_video(images, audio_path, out_path)
+        direction = _zoom_direction(fact_id, title)
+        res = assemble_video(image_path, audio_path, out_path, zoom_direction=direction)
         if not res["ok"]:
             return {"ok": False, "video_path": None, "duration_sec": None, "error": res["error"]}
         return {"ok": True, "video_path": out_path, "duration_sec": res["duration_sec"], "error": None}

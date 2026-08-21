@@ -751,12 +751,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, res)
             return self._send(200, res)
         if p.path == "/api/video/generate":
-            # Genere une video narree pour UN article (2026-08-20). TOUJOURS
-            # en arriere-plan (thread dedie dans l'orchestrateur) : la
-            # generation prend 2 a 5 min, inacceptable en synchrone dans une
-            # requete HTTP. Meme verrou anti-cycle que /api/regenerate (le
-            # cycle et la generation video se disputeraient sinon le CPU
-            # et les appels Pollinations).
+            # Genere une video narree pour UN article (2026-08-20, simplifiee
+            # 2026-08-21 : une seule image reelle -- plus de generation IA,
+            # voir generation/video.py). TOUJOURS en arriere-plan (thread
+            # dedie dans l'orchestrateur) : la generation prend 1 a 3 min,
+            # inacceptable en synchrone dans une requete HTTP. Meme verrou
+            # anti-cycle que /api/regenerate (le cycle et la generation video
+            # se disputeraient sinon le CPU).
             with _LAST_LOCK:
                 if LAST_CYCLE["running"]:
                     return self._send(429, {"error": "cycle_en_cours", "detail": "Génération vidéo verrouillée : un cycle est en cours."})

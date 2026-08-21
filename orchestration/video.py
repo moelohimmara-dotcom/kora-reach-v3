@@ -1,7 +1,8 @@
 """orchestration/video.py — genere une video narree pour un article DEJA EN
 BASE, en arriere-plan (thread dedie, jamais bloquant pour l'appelant HTTP :
-la generation prend 2 a 5 minutes -- narration + plusieurs images + encodage
-ffmpeg -- inacceptable dans le cycle requete/reponse d'une API).
+la generation prend 1 a 3 minutes -- narration + telechargement de l'image
+de couverture deja choisie + encodage ffmpeg -- inacceptable dans le cycle
+requete/reponse d'une API).
 
 Relie generation/video.py (pur, aucun acces DB) et editorial/hitl_store.py
 (stockage) -- meme principe que regenerate() : cette fonction ORCHESTRE
@@ -42,11 +43,11 @@ def _extract_article_text(row: dict) -> str:
     return art
 
 
-def _run_generation(fact_id: str, title: str, article_text: str):
+def _run_generation(fact_id: str, title: str, article_text: str, image_url: str):
     out_name = f"{fact_id}.mp4"
     try:
         res = gvideo.generate_video_for_article(
-            title=title, article_text=article_text,
+            title=title, article_text=article_text, image_url=image_url,
             out_dir=VIDEO_OUT_DIR, out_name=out_name, fact_id=fact_id)
     except Exception as e:
         set_video_status(fact_id, "error", error=f"{type(e).__name__}: {e}")
@@ -73,8 +74,14 @@ def start_video_generation(fact_id: str) -> dict:
     article_text = _extract_article_text(row)
     if len(article_text.strip()) < MIN_ARTICLE_CHARS:
         return {"ok": False, "error": "article_trop_court_ou_absent"}
+    # Image de couverture DEJA CHOISIE pour l'article (voir generation/
+    # illustrate.py, 2026-08-21 : image reelle d'une source du cluster, ou
+    # repli photo stock -- plus aucune generation IA specifique a la video).
+    image_url = row.get("image", "") or champ.get("image", "")
+    if not image_url:
+        return {"ok": False, "error": "image_de_couverture_absente"}
     set_video_status(fact_id, "generating")
-    t = threading.Thread(target=_run_generation, args=(fact_id, title, article_text), daemon=True)
+    t = threading.Thread(target=_run_generation, args=(fact_id, title, article_text, image_url), daemon=True)
     t.start()
     return {"ok": True, "status": "generating"}
 

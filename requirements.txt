@@ -15,9 +15,6 @@ psycopg2-binary>=2.9.9
 # --- Transfert / SSH (sauvegardes, accès VPS) ---
 paramiko>=3.4.0
 
-# --- (optionnel) si FAL.ai direct est activé via SDK ---
-# fal_client (pip install fal_client) — requiert FAL_KEY
-
 # --- Narration audio (feature video, 2026-08-20) ---
 # edge-tts : voix neuronales Microsoft Edge, gratuit, sans cle API, sans
 # limite documentee. Verifie en conditions reelles (article FR complet,
