@@ -1,84 +1,29 @@
-"""illustrate.py — génération d'images synchronisée (FAL) pour chaque article.
+"""illustrate.py — sélection de l'image de couverture de chaque article.
 
-CONTRAINTES MÉTIER (CDC V3 + option 4 utilisateur):
-- Génération SYNCHRONE à chaque fait (avant transmission HITL).
-- Filigrane éditorial OBLIGATOIRE ("Illustration IA - KORA") pour ne pas tromper
-  sur un fait d'actualité réel (anti-hallucination).
-- Style photo-journalistique sobre, AUCUN visage de personne réelle.
-- FALLBACK FORT: si FAL échoue/timeout/indisponible -> image OG du champion
-  (déjà présente). Aucun article sans visuel, aucun crash du cycle.
-- Blinding VPS: timeout court, rate-limit (max N/appels), jamais de secret en clair
-  dans les logs. Clé FAL uniquement via env (FAL_KEY) ou proxy Nous (FAL_PROXY_URL).
-
-Deux modes:
-  - FAL_PROXY_URL défini -> appel du proxy Nous (FLUX 2) via POST/GET selon endpoint.
-  - sinon FAL_KEY défini -> appel direct api.fal.ai (si SDK dispo) ou HTTP minimal.
-  - sinon -> mode dégradé: on rend l'image OG telle quelle (fallback).
+RÈGLE MÉTIER (révision 2026-08-21, demande explicite : "refléter la réalité"
+plutôt que fabriquer) : KORA ne génère PLUS AUCUNE image par IA (FAL et
+Pollinations retirés). L'image de couverture d'un article est désormais
+TOUJOURS une vraie photo :
+  1) en priorité, une image réelle issue d'une des sources du cluster
+     (champion en premier, puis les contextes par fiabilité de source) --
+     c'est précisément le cas "2+ sources sur le même sujet -> on choisit
+     l'une de leurs images" demandé ; un cluster à une seule source suit la
+     même règle en dégénérant naturellement (un seul candidat) ;
+  2) si aucune source du cluster n'a d'image, repli sur une VRAIE photo
+     générique liée au sujet (LoremFlickr, photos Flickr réelles par
+     mot-clé) ;
+  3) en tout dernier recours, une photo générique sans rapport (Picsum),
+     uniquement pour ne jamais laisser un article sans aucun visuel.
+Aucune de ces trois étapes ne fabrique d'image : "generated" dans le retour
+signifie désormais "pas issue d'une source du cluster" (stock photo), jamais
+"IA".
 """
 import os
-import time
-import json
 import urllib.request
 import urllib.error
+import urllib.parse
 
-FAL_KEY = os.environ.get("FAL_KEY", "")
-FAL_PROXY_URL = os.environ.get("FAL_PROXY_URL", "").rstrip("/")  # proxy Nous, si fourni
 TIMEOUT = int(os.environ.get("FAL_TIMEOUT_SEC", "45"))
-MAX_RETRIES = int(os.environ.get("FAL_MAX_RETRIES", "1"))
-RATE_LIMIT_SEC = float(os.environ.get("FAL_RATE_LIMIT_SEC", "0"))  # 0 = pas de délai
-_WATERMARK = "Illustration IA - KORA"
-_LAST_CALL = 0.0
-
-
-def _rate_limit():
-    global _LAST_CALL
-    if RATE_LIMIT_SEC > 0:
-        wait = RATE_LIMIT_SEC - (time.time() - _LAST_CALL)
-        if wait > 0:
-            time.sleep(wait)
-    _LAST_CALL = time.time()
-
-
-def _build_prompt(title: str, chapeau: str = "") -> str:
-    base = (chapeau or title or "").strip().replace("\n", " ")
-    # Prompt concret + net (évite les représentations symboliques floues)
-    return (
-        f"Professional news photography, sharp focus, high detail, realistic editorial "
-        f"image illustrating the event: {title}. "
-        f"Context: {base[:180]}. "
-        f"Cinematic lighting, documentary style, no text, no watermark, no logos, "
-        f"no recognizable real faces. 8k, crisp, well-lit."
-    )
-
-
-def _call_fal(prompt: str):
-    """Retourne (image_url_or_path, provider) ou lève en cas d'échec."""
-    if FAL_PROXY_URL:
-        _rate_limit()
-        data = json.dumps({"prompt": prompt}).encode()
-        req = urllib.request.Request(
-            FAL_PROXY_URL, data=data, method="POST",
-            headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-            out = json.loads(r.read().decode())
-            url = out.get("image") or out.get("url") or out.get("data", {}).get("image")
-            if not url:
-                raise ValueError("Proxy a répondu sans URL d'image")
-            return url, "fal_proxy"
-    if FAL_KEY:
-        _rate_limit()
-        try:
-            from fal_client import submit, get  # type: ignore
-            handler = submit("fal-ai/flux-2", arguments={"prompt": prompt})
-            for _ in range(MAX_RETRIES + 1):
-                res = get(handler)
-                if res.get("status") == "completed":
-                    return res["images"][0]["url"], "fal_ai"
-                time.sleep(2)
-            raise TimeoutError("FAL.ai n'a pas répondu à temps")
-        except ImportError:
-            raise RuntimeError("fal_client non installé (option FAL_KEY)")
-    raise RuntimeError("Aucun mode FAL configuré (ni FAL_PROXY_URL ni FAL_KEY)")
 
 
 def _extract_keywords(title: str) -> list:
@@ -103,29 +48,6 @@ def _extract_keywords(title: str) -> list:
     return kws[:3]
 
 
-def _call_pollinations(prompt: str, seed: int = None):
-    """Génère une image via Pollinations.ai (modèle FLUX, gratuit, SANS clé —
-    2026-08-19, demande explicite : générateur principal de KORA). L'appel GET
-    déclenche la génération réelle côté Pollinations (synchrone, comme exigé
-    par le CDC) ; on vérifie que la réponse est bien une image avant
-    d'accepter l'URL (même garde-fou que LoremFlickr). `seed` (entier, dérivé
-    du fact_id) rend l'image reproductible et garantit l'unicité entre
-    articles d'un même cycle (voir illustrate_all())."""
-    import urllib.parse
-    encoded = urllib.parse.quote(prompt[:800])
-    params = {"width": "800", "height": "450", "nologo": "true", "model": "flux"}
-    if seed is not None:
-        params["seed"] = str(int(seed) % 1_000_000)
-    url = f"https://image.pollinations.ai/prompt/{encoded}?{urllib.parse.urlencode(params)}"
-    _rate_limit()
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 KORA/1.0"})
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-        ctype = r.headers.get("Content-Type", "")
-        if "image" not in ctype:
-            raise ValueError(f"Pollinations a répondu {ctype}")
-    return url, "pollinations"
-
-
 def _call_loremflickr(title: str, salt: str = "", lock_override: int = None):
     """Génère une image via LoremFlickr (photos Flickr réelles par mot-clé, gratuit, sans clé).
     `salt` (fact_id) dérive un `lock` déterministe. `lock_override` force un lock précis
@@ -143,7 +65,6 @@ def _call_loremflickr(title: str, salt: str = "", lock_override: int = None):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 KORA/1.0"})
             with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-                final = r.geturl()
                 ctype = r.headers.get("Content-Type", "")
                 if "image" not in ctype:
                     raise ValueError(f"LoremFlickr a répondu {ctype}")
@@ -155,106 +76,113 @@ def _call_loremflickr(title: str, salt: str = "", lock_override: int = None):
     raise RuntimeError("LoremFlickr: aucun match (toujours image par défaut)")
 
 
-def illustrate(fact: dict, title: str, chapeau: str = "", lock_seed: int = None) -> dict:
-    """Retourne toujours un dict: {image, provider, generated(bool), detail}.
-    Ordre de repli : FAL (si clé configurée) -> Pollinations (générateur
-    principal, 2026-08-19, gratuit sans clé) -> LoremFlickr (photo réelle) ->
-    Picsum (photo générique) -> OG du champion.
-    `lock_seed` (entier unique par article) force un seed Pollinations/lock
-    LoremFlickr distinct -> garantit qu'aucun article n'a la même image
-    qu'un autre."""
-    og = fact.get("image", "") or ""
-    prompt = _build_prompt(title, chapeau)
-    # 1) FAL (proxy/key si configuré — inactif tant qu'aucune clé n'est fournie,
-    # échoue alors instantanément sans appel réseau, voir _call_fal())
-    for attempt in range(MAX_RETRIES + 1):
-        try:
-            url, provider = _call_fal(prompt)
-            if url:
-                return {"image": url, "provider": provider, "generated": True,
-                        "detail": "Image générée (FAL) avec filigrane éditorial."}
-        except Exception as e:
-            if attempt < MAX_RETRIES:
-                continue
-            fal_err = f"FAL indisponible ({type(e).__name__})"
-            break
-    else:
-        fal_err = "FAL a échoué"
-    # 1b) Pollinations.ai (FLUX, générateur principal — gratuit, sans clé)
-    poll_err = ""
-    try:
-        url, provider = _call_pollinations(prompt, seed=lock_seed)
-        if url:
-            return {"image": url, "provider": provider, "generated": True,
-                    "detail": "Image générée (Pollinations/FLUX) avec filigrane éditorial."}
-    except Exception as e:
-        poll_err = f"Pollinations indisponible ({type(e).__name__})"
-    # 2) LoremFlickr (photos réelles par mot-clé, gratuit, sans clé)
+def _candidate_images(champion: dict, contexts: list) -> list:
+    """Liste ordonnée des images réelles candidates pour un cluster : le
+    champion d'abord (meilleure source), puis les contextes triés par
+    fiabilité de source (source_level décroissant). URLs non vides
+    uniquement, sans doublon."""
+    cands = []
+    champ_img = (champion or {}).get("image", "") or ""
+    if champ_img:
+        cands.append(champ_img)
+    ctx_sorted = sorted(contexts or [], key=lambda c: (c or {}).get("source_level", 0), reverse=True)
+    for c in ctx_sorted:
+        img = (c or {}).get("image", "") or ""
+        if img and img not in cands:
+            cands.append(img)
+    return cands
+
+
+def select_source_image(champion: dict, contexts: list, exclude: set = None) -> str:
+    """Choisit la meilleure image RÉELLE parmi les sources d'un cluster
+    (champion prioritaire, puis contextes par fiabilité), en évitant les
+    URLs déjà utilisées par un autre article du même cycle (`exclude`, pour
+    la garantie d'unicité inter-articles -- voir illustrate_all()).
+    Retourne "" si aucune source du cluster n'a d'image (ou si toutes les
+    images du cluster sont déjà utilisées ailleurs)."""
+    exclude = exclude or set()
+    for img in _candidate_images(champion, contexts):
+        if img not in exclude:
+            return img
+    return ""
+
+
+def illustrate(champion: dict, contexts: list, title: str = "", fact_id: str = "",
+                exclude: set = None) -> dict:
+    """Retourne toujours un dict : {image, provider, generated(bool), detail}.
+    Ordre : image réelle d'une source du cluster (champion puis contextes) ->
+    LoremFlickr (photo réelle par mot-clé) -> Picsum (photo générique).
+    `generated` signifie ici "n'est pas une photo du cluster de sources"
+    (stock photo de repli), jamais "fabriquée par IA" -- KORA n'en génère
+    plus aucune (retrait de FAL/Pollinations, 2026-08-21)."""
+    title = title or (champion or {}).get("title", "")
+    src_img = select_source_image(champion, contexts, exclude=exclude)
+    if src_img:
+        return {"image": src_img, "provider": "source", "generated": False,
+                "detail": "Image réelle issue d'une source du cluster (champion ou contexte)."}
+    # Aucune source du cluster n'a d'image (ou toutes déjà utilisées par un
+    # autre article de ce cycle) -> repli sur une vraie photo générique.
     lf_err = ""
     try:
-        url, provider = _call_loremflickr(title, salt=fact.get("fact_id", ""),
-                                          lock_override=lock_seed)
+        url, provider = _call_loremflickr(title, salt=fact_id)
         if url:
             return {"image": url, "provider": provider, "generated": True,
-                    "detail": "FAL/Pollinations indisponibles -> photo réelle (LoremFlickr) liée au sujet."}
+                    "detail": "Aucune image dans les sources du cluster -> photo réelle (LoremFlickr) liée au sujet."}
     except Exception as e:
         lf_err = f"LoremFlickr indisponible ({type(e).__name__})"
-    # 2b) Picsum (photo générique gratuite, sans clé) — ultime repli pour éviter
-    # le placeholder vide côté frontend. Verrouillé par fact_id pour éviter les doublons.
+    # Dernier recours : photo générique sans rapport avec le sujet, pour ne
+    # jamais laisser un article sans aucun visuel.
     try:
         import hashlib as _hl
-        seed = int(_hl.sha256((fact.get("fact_id", "") or title).encode()).hexdigest()[:8], 16) % 100000
+        seed = int(_hl.sha256((fact_id or title).encode()).hexdigest()[:8], 16) % 100000
         picsum = f"https://picsum.photos/seed/{seed}/800/450"
         return {"image": picsum, "provider": "picsum", "generated": True,
-                "detail": f"{fal_err}; {poll_err}; {lf_err} -> photo générique (Picsum) en repli."}
+                "detail": f"{lf_err} -> photo générique (Picsum) en dernier recours."}
     except Exception as e:
-        picsum_err = f"Picsum indisponible ({type(e).__name__})"
-    # 3) Fallback OG du champion (photo réelle du site source)
-    return {"image": og, "provider": "og_fallback", "generated": False,
-            "detail": f"{fal_err}; {poll_err}; {lf_err}; {picsum_err} -> image OG du champion conservée."}
+        return {"image": "", "provider": "none", "generated": True,
+                "detail": f"{lf_err}; Picsum indisponible ({type(e).__name__})"}
 
 
 def illustrate_all(facts: list) -> list:
-    """Génère une image par fact en GARANTISSANT l'unicité (aucun doublon).
-    Si deux facts obtennent la même image, on change le lock du 2e et on régénère.
-    Retourne la même liste de facts, enrichie de 'image'/'image_meta'."""
-    import urllib.request as _u
-    used = []  # (fact_id, image_url)
+    """Attribue une image à chaque fact en GARANTISSANT l'unicité (aucun
+    doublon) dans le cycle. Pour chaque fact, essaie ses propres candidats
+    réels (champion puis contextes) dans l'ordre, en sautant ceux déjà
+    utilisés par un fact précédent de ce même cycle ; ne tombe sur le repli
+    stock (LoremFlickr/Picsum) que si TOUS les candidats réels du cluster
+    sont épuisés (vides ou déjà pris). Retourne la même liste de facts,
+    enrichie de 'image'/'image_meta'."""
+    used = set()
     for i, fact in enumerate(facts):
-        title = (fact.get("champion", {}) or {}).get("title", "")
-        chapeau = ""
-        art = fact.get("article", "")
-        if isinstance(art, dict):
-            chapeau = str(art.get("body", "") or art.get("final_text", ""))[:200]
-        # seed unique = index + hash fact_id -> lock distinct garanti au 1er essai
-        base_seed = (i * 1009 + int(hashlib_sha(fact.get("fact_id", str(i)))[:8], 16)) % 90000
-        res = None
-        for attempt in range(8):  # boucle jusqu'à trouver une image non-doublonnée
-            seed = base_seed + attempt * 137
-            r = illustrate(fact, title, chapeau, lock_seed=seed)
-            img = r.get("image", "")
-            # vérifie que l'image n'est pas déjà utilisée par un autre fact
-            dup = any(u[1] == img for u in used)
-            if not dup or attempt == 7:
-                res = r
-                used.append((fact.get("fact_id", str(i)), img))
-                break
-            # sinon on boucle avec un autre seed
-        if res is None:
-            res = illustrate(fact, title, chapeau, lock_seed=base_seed)
+        champ = fact.get("champion", {}) or {}
+        contexts = fact.get("contexts", []) or []
+        title = champ.get("title", "")
+        fid = fact.get("fact_id", str(i))
+        res = illustrate(champ, contexts, title, fact_id=fid, exclude=used)
+        # Repli stock (LoremFlickr/Picsum) : peut lui aussi collisionner avec
+        # un autre fact du cycle (deux sujets voisins, mêmes mots-clés) -- on
+        # retente avec un lock différent jusqu'à 8 fois avant d'accepter le
+        # doublon (mieux qu'une boucle infinie sur un cas limite).
+        if res["provider"] in ("loremflickr", "picsum") and res["image"] in used:
+            for attempt in range(1, 8):
+                seed = (i * 1009 + attempt * 137) % 90000
+                try:
+                    url, provider = _call_loremflickr(title, lock_override=seed)
+                except Exception:
+                    url, provider = f"https://picsum.photos/seed/{seed}/800/450", "picsum"
+                if url not in used:
+                    res = {"image": url, "provider": provider, "generated": True,
+                           "detail": res["detail"] + " (lock réajusté pour éviter un doublon)"}
+                    break
+        used.add(res["image"])
         fact["image"] = res["image"]
         fact["image_meta"] = {"image": res["image"], "provider": res["provider"],
                               "generated": res.get("generated", False)}
     return facts
 
 
-def hashlib_sha(s: str) -> str:
-    import hashlib
-    return hashlib.sha256(s.encode()).hexdigest()
-
-
 if __name__ == "__main__":
-    # Test local: mode dégradé (pas de clé) -> doit rendre l'OG sans crash
-    demo = {"image": "https://example.com/og.jpg"}
-    print(illustrate(demo, "Guinée: accord minier signé à Conakry",
-                     "Le gouvernement a signé un accord."))
+    # Test local : cluster à 2 sources, la seconde a une image -> doit la choisir
+    # (le champion en amont n'en a pas).
+    champ = {"title": "Guinée: accord minier signé à Conakry", "image": ""}
+    ctx = [{"image": "https://exemple-source.example/photo-accord.jpg", "source_level": 2}]
+    print(illustrate(champ, ctx))

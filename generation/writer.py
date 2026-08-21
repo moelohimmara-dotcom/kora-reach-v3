@@ -286,12 +286,13 @@ def _template_article(fact: Dict) -> str:
 
 
 def _illustrate_fact(fact: Dict) -> Dict:
-    """Génère l'image (FAL synchrone) ou fallback OG. Retourne dict image/metadonnées."""
+    """Choisit l'image de couverture (2026-08-21 : image réelle d'une source
+    du cluster en priorité, plus aucune génération IA -- voir generation/
+    illustrate.py). Retourne dict image/métadonnées."""
     champ = fact.get("champion", {}) or {}
-    # L'OG du champion peut être dans champ['image'] (son URL d'illustration source)
-    og = champ.get("image", "") or fact.get("image", "")
-    chapeau = (champ.get("raw_content") or "")[:200]
-    res = illustrate.illustrate({"image": og}, champ.get('title', ''), chapeau)
+    contexts = fact.get("contexts", []) or []
+    res = illustrate.illustrate(champ, contexts, champ.get("title", ""),
+                                fact_id=fact.get("fact_id", ""))
     return res
 
 
@@ -475,11 +476,14 @@ def _self_review_pass(raw: str) -> Dict:
 
 def validate_article(raw: str, fact: Dict) -> Dict:
     import re as _re
-    # Les URLs d'images (illustrations IA générées, OG source, extensions images,
-    # domaines d'illustration) NE sont PAS des liens d'injection -> on les preserve.
+    # Les URLs d'images (photo de couverture réelle, extensions images,
+    # domaines d'illustration/stock) NE sont PAS des liens d'injection -> on
+    # les preserve. fal.ai/pollinations.ai retires 2026-08-21 (plus aucune
+    # generation IA, voir generation/illustrate.py) ; loremflickr/picsum
+    # ajoutes (repli photo stock desormais utilise en pratique).
     IMG_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif", ".svg", ".bmp")
-    IMG_DOMAINS = ("fal.ai", "pollinations.ai", "image.pollinations.ai", "oaidalle",
-                   "openai", "cdn.", "githubusercontent.com", "unsplash", "wikimedia")
+    IMG_DOMAINS = ("cdn.", "githubusercontent.com", "unsplash", "wikimedia",
+                   "loremflickr.com", "picsum.photos")
     def _is_image_url(u: str) -> bool:
         ul = u.lower()
         if ul.endswith(IMG_EXT):

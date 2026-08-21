@@ -46,10 +46,14 @@ def main():
             "contexts": [], "article": "Ceci est un article de test suffisamment long pour "
                 "depasser le seuil minimal de caracteres requis pour declencher une "
                 "generation video complete, avec plusieurs phrases distinctes.",
-            "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
+            "image": "http://x/couverture.jpg", "image_meta": {"provider": "source"},
+            "gen_model": "test", "n_sources": 1,
         })
 
-        def fake_generate(title, article_text, out_dir, out_name, n_images=3, voice=None, fact_id=""):
+        def fake_generate(title, article_text, image_url, out_dir, out_name, voice=None, fact_id=""):
+            if not image_url:
+                return {"ok": False, "video_path": None, "duration_sec": None,
+                        "error": "image_de_couverture_indisponible"}
             return {"ok": True, "video_path": os.path.join(out_dir, out_name),
                     "duration_sec": 42.0, "error": None}
         vid.gvideo.generate_video_for_article = fake_generate
@@ -93,6 +97,21 @@ def main():
             failed.append(f"fact_id inconnu mal gere: {res3}")
         else:
             print("OK   fact_id inconnu gere proprement")
+
+        # 2026-08-21 : un fait sans aucune image de couverture (cluster sans
+        # source illustree, cas limite) doit etre refuse explicitement, PAS
+        # tenter une generation video sans image.
+        fid_sans_image = hitl_store.upsert_fact({
+            "champion": {"title": "Sujet sans image", "source": "test", "url": "http://x/2"},
+            "contexts": [], "article": "Article suffisamment long pour depasser le seuil "
+                "minimal de caracteres requis pour la generation video, plusieurs phrases.",
+            "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
+        })
+        res4 = vid.start_video_generation(fid_sans_image)
+        if res4["ok"] or res4["error"] != "image_de_couverture_absente":
+            failed.append(f"fait sans image de couverture mal gere: {res4}")
+        else:
+            print("OK   generation video refusee proprement si aucune image de couverture")
 
         print()
         if failed:
