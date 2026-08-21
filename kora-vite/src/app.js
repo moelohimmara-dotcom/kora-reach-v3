@@ -1378,7 +1378,16 @@ function renderRejectConfirm(s) {
       <button class="btn btn-tonal btn-block" data-reject-cancel="1">Annuler</button>
     </div>`;
   sheet.hidden = false; scrim.hidden = false;
-  body.querySelector('[data-reject-choice="trash"]').onclick = () => { Store.decide(f.fact_id, "REJECTED"); Store.closeSheet(); snack("Article rejeté — envoyé à la corbeille"); };
+  // Bug corrigé 2026-08-20 (revue de code) : même défaut que les autres
+  // points d'appel de decide() -- l'appel n'était ni attendu ni rattrapé,
+  // donc le toast de succès et la fermeture du tiroir s'exécutaient même si
+  // le backend refusait la transition.
+  body.querySelector('[data-reject-choice="trash"]').onclick = () => {
+    Store.decide(f.fact_id, "REJECTED").then(() => {
+      Store.closeSheet();
+      snack("Article rejeté — envoyé à la corbeille");
+    }).catch(e => snack(friendlyActionError(e)));
+  };
   body.querySelector('[data-reject-choice="delete"]').onclick = () => {
     confirmAction({
       title: "Supprimer définitivement ?",
@@ -1597,13 +1606,21 @@ function renderSheet(s) {
     // Droit d'envoi WordPress (§3 du plan valide 2026-08-19) : un Éditeur non
     // délégué voit son article rester "Approuvé" côté KORA (message clair
     // plutôt qu'un envoi silencieusement bloqué).
+    // Bug corrigé 2026-08-20 : le tiroir se fermait AVANT même de savoir si
+    // la décision avait réussi (Store.closeSheet() était appelé sans
+    // attendre la promesse) -- une transition refusée par le backend
+    // passait donc totalement inaperçue. On ferme désormais seulement en
+    // cas de succès, et on affiche un message clair sinon.
     Store.decide(f.fact_id, b.dataset.decide).then(r => {
-      if (r?.transmission?.status === "SKIPPED_NO_WP_RIGHT") snack(r.transmission.detail);
-    });
-    Store.closeSheet();
+      const msg = transmissionMessage(r?.transmission);
+      if (msg) snack(msg);
+      Store.closeSheet();
+    }).catch(e => snack(friendlyActionError(e)));
   });
   const rb = body.querySelector("[data-retract]");
-  if (rb) rb.onclick = () => { Store.retract(f.fact_id); Store.closeSheet(); };
+  if (rb) rb.onclick = () => {
+    Store.retract(f.fact_id).then(r => { if (!r?.cancelled) Store.closeSheet(); }).catch(e => snack(friendlyActionError(e)));
+  };
   const ed = body.querySelector("[data-edit]");
   if (ed) ed.onclick = () => {
     body.innerHTML = `
@@ -1666,16 +1683,36 @@ function renderSheet(s) {
     if (edSaveDraft) edSaveDraft.onclick = () => {
       const { t, x } = getEdited();
       f._edited = { title: t, text: x };
-      Store.decide(f.fact_id, "EDITED", x);
-      Store.closeSheet();
-      snack("Brouillon enregistré");
+      Store.decide(f.fact_id, "EDITED", x).then(() => {
+        Store.closeSheet();
+        snack("Brouillon enregistré");
+      }).catch(e => snack(friendlyActionError(e)));
     };
     const edApprove = document.getElementById("edApprove");
     if (edApprove) edApprove.onclick = () => {
       const { t, x } = getEdited();
       f._edited = { title: t, text: x };
-      Store.decide(f.fact_id, "APPROVED", x);
-      Store.closeSheet();
+      // Bug corrigé 2026-08-20 (4e/8e passage de revue) : ce bouton n'affichait
+      // jamais r.transmission (ni le skip WP, ni un VRAI échec d'envoi)
+      // contrairement au bouton "Approuver & transmettre" du tiroir principal
+      // -- un éditeur pouvait croire l'article publié sur WordPress alors
+      // qu'il n'avait été qu'approuvé localement, ou que l'envoi avait échoué.
+      Store.decide(f.fact_id, "APPROVED", x).then(r => {
+        // Bug corrigé 2026-08-20 (9e passage de revue) : SKIPPED_ALREADY_TRANSMITTED
+        // signifie que decide() n'a JAMAIS été appelé côté serveur (garde-fou
+        // en amont, voir _already_transmitted_skip dans server.py) -- le texte
+        // corrigé n'a donc été enregistré NULLE PART. Le message générique
+        // laissait croire à une simple info sur l'envoi WordPress ; on le
+        // rend explicite ici, et on laisse le tiroir ouvert pour ne pas
+        // perdre la correction sous les yeux de l'éditeur.
+        if (r?.transmission?.status === "SKIPPED_ALREADY_TRANSMITTED") {
+          snack("Article déjà publié entre-temps — vos modifications n'ont PAS été enregistrées. Utilisez « Annuler la décision » puis réessayez.");
+          return;
+        }
+        const msg = transmissionMessage(r?.transmission);
+        if (msg) snack(msg);
+        Store.closeSheet();
+      }).catch(e => snack(friendlyActionError(e)));
     };
     const edCancel = document.getElementById("edCancel");
     if (edCancel) edCancel.onclick = () => renderSheet(s);
@@ -2736,14 +2773,31 @@ function onBulkAction(action) {
   if (!ids.length) { snack("Aucun article sélectionné"); return; }
   if (action === "approve") { openWpChoice(); return; }
   if (action === "pending") {
-    Store.bulkAction("pending").then(r => snack(`${r.done}/${r.total} remis en attente`)).catch(e => snack("Erreur : " + e.message));
+    Store.bulkAction("pending").then(r => snack(bulkResultMsg(r, "remis en attente"))).catch(e => snack("Erreur : " + e.message));
     return;
   }
   if (action === "trash") { openTrashChoice(); return; }
   if (action === "draft") {
-    Store.bulkAction("draft").then(r => snack(`${r.done}/${r.total} en brouillon`)).catch(e => snack("Erreur : " + e.message));
+    Store.bulkAction("draft").then(r => snack(bulkResultMsg(r, "en brouillon"))).catch(e => snack("Erreur : " + e.message));
     return;
   }
+}
+// Bug corrigé 2026-08-20 : "3/5 en brouillon" ne disait jamais POURQUOI les 2
+// autres avaient échoué (transition refusée, article introuvable...) --
+// results[] contient pourtant le détail par article depuis le backend.
+// Factorisé (10e passage de revue) : ce même "trouver la première erreur et
+// la traduire" était dupliqué presque à l'identique dans doBulkApprove --
+// risque qu'un futur correctif (ex: support de r.detail) ne soit appliqué
+// que dans l'un des deux flux groupés (draft/pending vs approve).
+function firstBulkErrorDetail(results) {
+  const firstErr = results.find(x => !x.ok && x.error);
+  return firstErr ? friendlyActionError({ message: firstErr.error }) : "";
+}
+function bulkResultMsg(r, label) {
+  const total = r.total || 0, done = r.done || 0;
+  if (done >= total) return `${done}/${total} ${label}`;
+  const why = firstBulkErrorDetail(r.results || []);
+  return `${done}/${total} ${label}${why ? " — " + why : ""}`;
 }
 function openWpChoice() {
   const wp = document.getElementById("wpChoice");
@@ -2771,8 +2825,26 @@ function doBulkApprove(wp_status) {
     // Droit d'envoi WordPress (§3 du plan valide 2026-08-19) : distingue le
     // cas "approuvé mais pas envoyé, faute de droit" d'un échec technique.
     const skippedWp = results.filter(x => x.transmission?.status === "SKIPPED_NO_WP_RIGHT").length;
-    if (skippedWp) snack(`${r.done}/${r.total} approuvé(s), en attente d'envoi WordPress (droit non délégué)`);
-    else snack(fails ? `${r.done}/${r.total} publié(s) · ${fails} échec(s)` : `${r.done}/${r.total} publié(s) sur WordPress`);
+    const skippedDup = results.filter(x => x.transmission?.status === "SKIPPED_ALREADY_TRANSMITTED").length;
+    // Bug corrigé 2026-08-20 (8e passage de revue) : `fails` (ci-dessus) ne
+    // compte que les decide() refusés (r.ok=false) -- un VRAI échec d'envoi
+    // WordPress alors que decide() a réussi (FAILED/ERROR/PARTIAL/
+    // SKIPPED_DUPLICATE, voir publishing/transmit.py) n'était compté nulle
+    // part et passait totalement inaperçu dans un lot.
+    const txFailed = results.filter(x => x.ok && transmissionMessage(x.transmission) && x.transmission?.status !== "SKIPPED_NO_WP_RIGHT" && x.transmission?.status !== "SKIPPED_ALREADY_TRANSMITTED").length;
+    // Ces cas (déjà-transmis / droit WP manquant / échec d'envoi / échec de
+    // transition) sont indépendants et peuvent survenir simultanément dans
+    // le même lot -- l'ancien if/else-if n'en montrait qu'un seul, masquant
+    // silencieusement les autres (notamment un vrai échec derrière un "déjà publié").
+    const parts = [];
+    if (skippedDup) parts.push(`${skippedDup} déjà publié(s), non renvoyé(s) (utilisez "Annuler la décision" d'abord)`);
+    if (skippedWp) parts.push(`en attente d'envoi WordPress pour le reste (droit non délégué)`);
+    if (txFailed) parts.push(`${txFailed} envoi(s) WordPress échoué(s)`);
+    if (fails) {
+      const why = firstBulkErrorDetail(results);
+      parts.push(`${fails} échec(s)${why ? " — " + why : ""}`);
+    }
+    snack(parts.length ? `${r.done}/${r.total} traité(s) · ${parts.join(" · ")}` : `${r.done}/${r.total} publié(s) sur WordPress`);
   }).catch(e => snack("Erreur : " + e.message));
 }
 function doBulkTrash(definitive) {
@@ -2945,6 +3017,39 @@ function renderNotifCenter() {
 function markAllNotificationsRead() {
   _notifications = _notifications.map(n => ({ ...n, read: true }));
   renderNotifCenter();
+}
+// Traduit les codes d'erreur bruts renvoyés par le backend HITL (decide()/
+// retract()) en messages compréhensibles. Ajouté 2026-08-20 : avant ce
+// correctif, un rejet de transition (ex: "transition_interdite") n'était
+// JAMAIS affiché nulle part -- le tiroir se fermait silencieusement comme
+// si l'action avait réussi. Voir hitl_store.py pour les codes d'origine.
+function friendlyActionError(e) {
+  const msg = (e && e.message) || String(e);
+  if (msg.startsWith("transition_interdite")) {
+    return "Action impossible : ce changement de statut n'est pas autorisé depuis l'état actuel de l'article.";
+  }
+  if (msg.startsWith("retrait_non_autorise_depuis")) {
+    return "Annulation impossible depuis le statut actuel de cet article.";
+  }
+  if (msg.startsWith("introuvable")) {
+    return "Cet article est introuvable (il a peut-être été modifié ailleurs) — la liste va se rafraîchir.";
+  }
+  return `Erreur : ${msg}`;
+}
+// Traduit un objet r.transmission (voir publishing/transmit.py) en message à
+// afficher, ou null si tout va bien et qu'il n'y a rien à signaler. Ajouté
+// 2026-08-20 (8e passage de revue) : seuls les cas SKIPPED_* étaient
+// affichés -- un VRAI échec d'envoi WordPress (FAILED/ERROR/PARTIAL/
+// SKIPPED_DUPLICATE, transmit.py) passait inaperçu : decide() avait réussi
+// (article "Approuvé" côté KORA) mais l'envoi avait échoué, et le tiroir se
+// fermait comme si tout s'était bien passé -- exactement la classe de bug
+// que ce diff visait à corriger.
+function transmissionMessage(tx) {
+  if (!tx || !tx.status) return null;
+  if (tx.status === "TRANSMITTED" || tx.status === "DRY_RUN_OK") return null;
+  if (tx.status === "SKIPPED_NO_WP_RIGHT" || tx.status === "SKIPPED_ALREADY_TRANSMITTED") return tx.detail;
+  // FAILED / ERROR / PARTIAL / SKIPPED_DUPLICATE / tout autre statut inattendu.
+  return `Article approuvé mais l'envoi WordPress a échoué (${tx.status}) — vérifiez la configuration ou réessayez.`;
 }
 function snack(msg) {
   const sn = document.getElementById("snackbar");
