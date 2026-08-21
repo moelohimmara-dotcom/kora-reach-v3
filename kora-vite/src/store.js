@@ -560,12 +560,21 @@ export const Store = (() => {
     try {
       const started = await api("/api/cycle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ demand, force }) });
       _startingCycle = false;
-      if (started && started.error) {
+      if (started && started.error === "cycle_en_cours") {
         // cycle_en_cours (un cycle tourne déjà, p.ex. lancé avant un F5) :
         // pas une vraie erreur -> on se raccorde simplement à CE cycle réel
         // au lieu d'afficher un échec pour une action qui, de son point de
         // vue, "n'a rien fait" alors qu'un cycle légitime est bien en vie.
         return _watchCycle();
+      }
+      // Bug corrigé 2026-08-21 : tout autre code d'erreur (ex: "video_en_cours",
+      // verrou d'exclusivité vidéo) était traité comme "cycle_en_cours" et
+      // déclenchait _watchCycle() -- qui aurait attendu indéfiniment un cycle
+      // n'ayant JAMAIS démarré (bloqué en amont par le verrou vidéo).
+      if (started && started.error) {
+        setState({ ui: { ...state.ui, busy: false, cycleBusy: false, overlay: null,
+          progress: null, error: started.detail || started.error } });
+        return;
       }
       // Estimation immédiate (2026-08-19, demande explicite) : le backend
       // renvoie déjà un ordre de grandeur avant même de connaître le nombre
@@ -1042,7 +1051,9 @@ export const Store = (() => {
         // proxy_read_timeout nginx (600s, /kora-v2/api/), avec marge.
         timeout: 400000,
       });
-      if (r.error) throw new Error(r.error);
+      // r.detail || r.error (2026-08-21) : privilégie le message clair côté
+      // serveur (ex: "video_en_cours" -> "Une vidéo est déjà en cours...").
+      if (r.error) throw new Error(r.detail || r.error);
       return r;  // { fact_id, article, model, status, suggestion_applied, angle }
     } catch (e) {
       setState({ ui: { ...state.ui, error: e.message } });
@@ -1052,16 +1063,19 @@ export const Store = (() => {
     }
   }
 
-  // Vidéo narrée (2026-08-20) : démarre en arrière-plan côté serveur
-  // (2-5 min, jamais bloquant) -- l'appelant (app.js) poll ensuite
-  // getVideoStatus() à intervalle régulier jusqu'à done/error.
+  // Vidéo narrée (2026-08-20, simplifiée 2026-08-21 : 1-3 min) : démarre en
+  // arrière-plan côté serveur, jamais bloquant -- l'appelant (app.js) poll
+  // ensuite getVideoStatus() à intervalle régulier jusqu'à done/error.
   async function startVideoGeneration(fact_id) {
     const r = await api("/api/video/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fact_id }),
     });
-    if (r.error) throw new Error(r.error);
+    // r.detail || r.error (2026-08-21) : privilégie le message clair côté
+    // serveur (ex: "Une vidéo est déjà en cours...", "un cycle est en
+    // cours...") au code brut -- même correctif que decide()/retract().
+    if (r.error) throw new Error(r.detail || r.error);
     return r;
   }
   async function getVideoStatus(fact_id) {

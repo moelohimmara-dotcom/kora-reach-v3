@@ -43,14 +43,27 @@ def _extract_article_text(row: dict) -> str:
     return art
 
 
-def _run_generation(fact_id: str, title: str, article_text: str, image_url: str):
+def _run_generation(fact_id: str, title: str, article_text: str, image_url: str,
+                     on_complete=None):
+    """`on_complete` (2026-08-21, verrou d'exclusivite) : callable optionnel
+    appele UNE FOIS a la toute fin (succes ou echec) -- utilise par server.py
+    pour liberer le verrou video global des que ce thread se termine, sans
+    dependre du polling cote frontend."""
     out_name = f"{fact_id}.mp4"
+
+    def _on_stage(stage):
+        set_video_status(fact_id, "generating", stage=stage)
+
     try:
         res = gvideo.generate_video_for_article(
             title=title, article_text=article_text, image_url=image_url,
-            out_dir=VIDEO_OUT_DIR, out_name=out_name, fact_id=fact_id)
+            out_dir=VIDEO_OUT_DIR, out_name=out_name, fact_id=fact_id,
+            on_stage=_on_stage)
     except Exception as e:
         set_video_status(fact_id, "error", error=f"{type(e).__name__}: {e}")
+        if on_complete:
+            try: on_complete()
+            except Exception: pass
         return
     if res["ok"]:
         # Chemin stocke = nom de fichier seul (le dossier est fixe et connu
@@ -58,18 +71,34 @@ def _run_generation(fact_id: str, title: str, article_text: str, image_url: str)
         set_video_status(fact_id, "done", path=out_name, duration_sec=res["duration_sec"])
     else:
         set_video_status(fact_id, "error", error=res["error"])
+    if on_complete:
+        try: on_complete()
+        except Exception: pass
 
 
-def start_video_generation(fact_id: str) -> dict:
+def start_video_generation(fact_id: str, on_complete=None) -> dict:
     """Demarre la generation en arriere-plan. Retourne immediatement
     {ok, status} ou {ok: False, error}. Le statut reel se suit via
-    editorial.hitl_store.get_fact(fact_id)['video_status']."""
-    row = get_fact(fact_id)
+    editorial.hitl_store.get_fact(fact_id)['video_status']. `on_complete`
+    (2026-08-21) : voir _run_generation -- passe tel quel."""
+    try:
+        row = get_fact(fact_id)
+    except Exception as e:
+        return {"ok": False, "error": f"lecture_fait_echouee: {type(e).__name__}: {e}"}
     if not row:
         return {"ok": False, "error": "fact_introuvable"}
     if row.get("video_status") == "generating":
         return {"ok": False, "error": "generation_deja_en_cours"}
-    champ = row["champion"] if isinstance(row.get("champion"), dict) else json.loads(row.get("champion") or "{}")
+    # Bug corrige 2026-08-21 (revue de code) : ce json.loads() n'etait pas
+    # protege -- un champion corrompu/legacy levait une exception NON
+    # rattrapee jusqu'a l'appelant HTTP (server.py), qui a DEJA pose le
+    # verrou d'exclusivite video a ce moment-la (_try_acquire_video_lock,
+    # avant cet appel) sans aucun try/finally pour le liberer -> le verrou
+    # restait pris pour toujours, bloquant aussi /api/cycle et /api/regenerate.
+    try:
+        champ = row["champion"] if isinstance(row.get("champion"), dict) else json.loads(row.get("champion") or "{}")
+    except Exception:
+        champ = {}
     title = champ.get("title", "")
     article_text = _extract_article_text(row)
     if len(article_text.strip()) < MIN_ARTICLE_CHARS:
@@ -80,8 +109,10 @@ def start_video_generation(fact_id: str) -> dict:
     image_url = row.get("image", "") or champ.get("image", "")
     if not image_url:
         return {"ok": False, "error": "image_de_couverture_absente"}
-    set_video_status(fact_id, "generating")
-    t = threading.Thread(target=_run_generation, args=(fact_id, title, article_text, image_url), daemon=True)
+    set_video_status(fact_id, "generating", stage="narration")
+    t = threading.Thread(target=_run_generation,
+                          args=(fact_id, title, article_text, image_url, on_complete),
+                          daemon=True)
     t.start()
     return {"ok": True, "status": "generating"}
 
@@ -94,7 +125,53 @@ def video_status(fact_id: str) -> dict:
     return {
         "ok": True,
         "video_status": row.get("video_status"),
+        "video_stage": row.get("video_stage"),
         "video_path": row.get("video_path"),
         "video_duration_sec": row.get("video_duration_sec"),
         "video_error": row.get("video_error"),
     }
+
+
+def list_videos() -> list:
+    """Liste tous les faits ayant une video (peu importe le statut -- fait,
+    en cours, en echec) -- pour la page Videos (2026-08-21). Trie par date
+    de creation du fait decroissante (plus recent d'abord).
+
+    Bug corrige (revue de code, 2e version) : passait par hitl_store.
+    list_facts(), qui JOINT hitl_decisions et JSON-parse l'article/contexts
+    COMPLETS de CHAQUE fait -- pour n'en garder que la poignee ayant une
+    video. Requete SQL directe ici (filtre "video_status IS NOT NULL" cote
+    base), ne lit/parse que le strict necessaire (titre du champion,
+    colonnes video_*)."""
+    import core.db as db
+    con, mode = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(
+            """SELECT fact_id, champion, status, video_status, video_stage,
+                      video_path, video_duration_sec, video_error, created_at
+               FROM hitl_facts
+               WHERE video_status IS NOT NULL
+               ORDER BY created_at DESC""")
+        rows = cur.fetchall()
+    finally:
+        con.close()
+    out = []
+    for r in rows:
+        d = dict(r)
+        try:
+            champ = json.loads(d["champion"]) if d["champion"] else {}
+        except Exception:
+            champ = {}
+        out.append({
+            "fact_id": d["fact_id"],
+            "title": (champ or {}).get("title", ""),
+            "status": d.get("status"),
+            "video_status": d.get("video_status"),
+            "video_stage": d.get("video_stage"),
+            "video_path": d.get("video_path"),
+            "video_duration_sec": d.get("video_duration_sec"),
+            "video_error": d.get("video_error"),
+            "created_at": d.get("created_at"),
+        })
+    return out

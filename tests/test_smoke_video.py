@@ -39,6 +39,7 @@ def main():
 
     import editorial.hitl_store as hitl_store
     import orchestration.video as vid
+    import core.db as db
 
     try:
         fid = hitl_store.upsert_fact({
@@ -50,7 +51,11 @@ def main():
             "gen_model": "test", "n_sources": 1,
         })
 
-        def fake_generate(title, article_text, image_url, out_dir, out_name, voice=None, fact_id=""):
+        def fake_generate(title, article_text, image_url, out_dir, out_name, voice=None, fact_id="", on_stage=None):
+            if on_stage:
+                on_stage("narration")
+                on_stage("image")
+                on_stage("assemblage")
             if not image_url:
                 return {"ok": False, "video_path": None, "duration_sec": None,
                         "error": "image_de_couverture_indisponible"}
@@ -84,6 +89,28 @@ def main():
             failed.append(f"transition finale inattendue: {st2}")
         else:
             print("OK   transition generating -> done, path et duree corrects")
+        if st2.get("video_stage") is not None:
+            failed.append(f"video_stage aurait du redevenir None une fois la video terminee : {st2.get('video_stage')}")
+        else:
+            print("OK   video_stage redevient None une fois la generation terminee (done)")
+
+        # 2026-08-21 : on_complete() doit etre appele UNE FOIS a la toute
+        # fin (succes ou echec) -- utilise par server.py pour liberer le
+        # verrou d'exclusivite video des que le thread se termine.
+        fid2 = hitl_store.upsert_fact({
+            "champion": {"title": "Sujet on_complete", "source": "test", "url": "http://x/3"},
+            "contexts": [], "article": "Article suffisamment long pour depasser le seuil "
+                "minimal de caracteres requis, plusieurs phrases distinctes ici.",
+            "image": "http://x/couverture2.jpg", "image_meta": {"provider": "source"},
+            "gen_model": "test", "n_sources": 1,
+        })
+        _complete_calls = {"n": 0}
+        vid.start_video_generation(fid2, on_complete=lambda: _complete_calls.__setitem__("n", _complete_calls["n"] + 1))
+        time.sleep(1.5)
+        if _complete_calls["n"] != 1:
+            failed.append(f"on_complete() aurait du etre appele exactement 1 fois, obtenu : {_complete_calls['n']}")
+        else:
+            print("OK   on_complete() est appele exactement une fois a la fin de la generation")
 
         hitl_store.set_video_status(fid, "generating")
         res2 = vid.start_video_generation(fid)
@@ -112,6 +139,48 @@ def main():
             failed.append(f"fait sans image de couverture mal gere: {res4}")
         else:
             print("OK   generation video refusee proprement si aucune image de couverture")
+
+        # ---- Regression de revue de code (3e passage) : champion corrompu ----
+        # ne doit JAMAIS lever une exception non rattrapee -- avant ce
+        # correctif, json.loads(champion) non protege plantait ici, ce qui
+        # (cote server.py) aurait laisse le verrou d'exclusivite video pris
+        # pour toujours (verrou acquis AVANT cet appel).
+        fid_corrompu = hitl_store.upsert_fact({
+            "champion": {"title": "Sera corrompu", "source": "test", "url": "http://x/4"},
+            "contexts": [], "article": "Article suffisamment long pour depasser le seuil "
+                "minimal de caracteres requis, plusieurs phrases distinctes bien presentes ici.",
+            "image": "http://x/couverture4.jpg", "image_meta": {"provider": "source"},
+            "gen_model": "test", "n_sources": 1,
+        })
+        con, mode = db.conn()
+        cur = con.cursor()
+        ph = db.placeholder()
+        cur.execute(f"UPDATE hitl_facts SET champion='{{not valid json' WHERE fact_id={ph}", (fid_corrompu,))
+        con.commit()
+        con.close()
+        try:
+            res5 = vid.start_video_generation(fid_corrompu)
+            if res5.get("ok") is not True and res5.get("ok") is not False:
+                failed.append(f"champion corrompu: reponse inattendue (ni succes ni echec propre) : {res5}")
+            else:
+                print(f"OK   champion corrompu gere sans exception non rattrapee (ok={res5.get('ok')})")
+        except Exception as e:
+            failed.append(f"champion corrompu a leve une exception NON rattrapee (exactement le bug corrige) : {type(e).__name__}: {e}")
+
+        # ---- list_videos() : renvoie bien les faits ayant une video, non vide ----
+        # (fid2, pas fid : fid a ete reutilise plus haut pour tester la garde
+        # anti-relance, son video_status a ete force a 'generating' entre-temps)
+        vids = vid.list_videos()
+        vid_ids = {v["fact_id"] for v in vids}
+        if fid2 not in vid_ids:
+            failed.append(f"list_videos() aurait du inclure {fid2} (video_status='done') : {vid_ids}")
+        else:
+            print("OK   list_videos() retrouve bien les faits ayant une video (requete SQL directe)")
+        done_entry = next((v for v in vids if v["fact_id"] == fid2), None)
+        if not done_entry or done_entry.get("video_status") != "done" or not done_entry.get("title"):
+            failed.append(f"list_videos() : entree incomplete pour {fid2} : {done_entry}")
+        else:
+            print("OK   list_videos() renvoie titre + statut video corrects")
 
         print()
         if failed:

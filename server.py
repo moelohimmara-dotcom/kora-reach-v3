@@ -50,6 +50,38 @@ ALLOWED_ORIGIN = os.environ.get("KORA_ALLOWED_ORIGIN",
 LAST_CYCLE = {"result": None, "ts": None, "running": False}
 _LAST_LOCK = threading.Lock()
 
+# Verrou d'exclusivité génération vidéo (2026-08-21, demande explicite) :
+# pendant qu'une vidéo se génère, aucun cycle ni régénération d'article ne
+# doit démarrer (dispute CPU/ffmpeg) -- et inversement, une génération vidéo
+# ne démarre pas si un cycle tourne (garde-fou déjà existant) NI si une
+# AUTRE vidéo est déjà en cours (un seul job vidéo à la fois, refusé
+# explicitement plutôt que mis en file d'attente -- choix délibéré, VPS à
+# faible concurrence). Les actions NON génératives (approuver/rejeter/
+# modifier/brouillon/corbeille) restent libres en permanence : ce verrou ne
+# les concerne jamais, voir /api/hitl/decide et /api/hitl/bulk plus bas,
+# qui ne le consultent pas.
+VIDEO_LOCK = {"running": False, "fact_id": None, "title": None, "started_at": None}
+# RLock (reentrant) : _try_acquire_video_lock() appelle _start_video_lock()
+# tout en tenant deja le verrou (section critique unique, voir 2e passage de
+# revue de code 2026-08-21) -- un Lock() simple s'auto-bloquerait ici.
+_VIDEO_LOCK_MUTEX = threading.RLock()
+
+# Bug corrige 2026-08-21 (3e passage de revue de code) : meme apres avoir
+# rendu VIDEO_LOCK lui-meme atomique (verifier+poser en une section
+# critique), une fenetre de course RESTAIT entre les DEUX verrous distincts
+# (LAST_CYCLE et VIDEO_LOCK) : /api/cycle verifiait _video_busy() puis, PLUS
+# LOIN dans la fonction (apres avoir construit scope/demand/estimate),
+# posait LAST_CYCLE["running"]=True -- une requete /api/video/generate
+# pouvait s'intercaler dans cet intervalle et acquerir VIDEO_LOCK avant que
+# /api/cycle n'ait fini de poser le sien, laissant les deux tourner en
+# meme temps malgre l'exclusivite voulue. Meme probleme, symetrique, pour
+# /api/regenerate. Ce verrou EXTERNE serialise la sequence complete
+# "verifier que rien ne tourne, puis decider de demarrer" des TROIS
+# endpoints (cycle/regenerate/video), quel que soit le verrou interne
+# concerne -- toujours acquis EN PREMIER, avant _LAST_LOCK ou
+# _VIDEO_LOCK_MUTEX (ordre constant -> aucun risque d'interblocage).
+_GENERATION_START_LOCK = threading.Lock()
+
 
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json"):
@@ -675,8 +707,23 @@ class Handler(BaseHTTPRequestHandler):
         if p.path not in PUBLIC_POST and p.path not in LECTEUR_ALLOWED_POST and self._session_role() == "lecteur":
             return self._send(403, {"error": "forbidden", "reason": "role_lecteur_lecture_seule"})
         if p.path == "/api/cycle":
-            if reach_agent.agent.is_busy:
-                return self._send(429, {"error": "cycle_en_cours"})
+            # _GENERATION_START_LOCK (2026-08-21, 3e passage de revue de
+            # code) : les vérifications ET la pose de LAST_CYCLE["running"]
+            # doivent former UNE SEULE section critique avec le verrou vidéo
+            # -- sinon une requête /api/video/generate peut s'intercaler
+            # entre "rien ne tourne" et "je marque le cycle comme démarré",
+            # et les deux tournent en même temps malgré l'exclusivité voulue.
+            with _GENERATION_START_LOCK:
+                if reach_agent.agent.is_busy:
+                    return self._send(429, {"error": "cycle_en_cours"})
+                # Verrou d'exclusivité vidéo (2026-08-21) : voir commentaire de
+                # VIDEO_LOCK en tête de fichier et _video_busy() plus bas.
+                _vb = _video_busy()
+                if _vb:
+                    return self._send(429, _vb)
+                with _LAST_LOCK:
+                    LAST_CYCLE["running"] = True
+                    LAST_CYCLE["result"] = None
             scope = payload.get("scope")
             # REGLE METIER (2026-08-19) : Kora Agent genere TOUS les articles issus
             # des faits FRAIS et uniques collectes lors du cycle, pas un seul.
@@ -709,9 +756,10 @@ class Handler(BaseHTTPRequestHandler):
                 finally:
                     with _LAST_LOCK:
                         LAST_CYCLE["running"] = False
-            with _LAST_LOCK:
-                LAST_CYCLE["running"] = True
-                LAST_CYCLE["result"] = None
+            # LAST_CYCLE["running"]/["result"] déjà posés ci-dessus, DANS la
+            # section critique _GENERATION_START_LOCK (voir plus haut) --
+            # ne plus les reposer ici, hors de cette section, sans quoi la
+            # fenêtre de course qu'on vient de corriger réapparaît.
             threading.Thread(target=_run, daemon=True).start()
             # Estimation immediate (2026-08-19, demande explicite) : previent
             # tout de suite l'utilisateur d'un ordre de grandeur, avant meme
@@ -731,10 +779,23 @@ class Handler(BaseHTTPRequestHandler):
                     LAST_CYCLE["running"] = False
             return self._send(200, {"cancelled": True, "detail": "Demande d'interruption envoyée. Le cycle s'arrêtera après l'article en cours."})
         if p.path == "/api/regenerate":
-            # VERROU : aucune génération ne doit être possible tant qu'un cycle tourne.
-            with _LAST_LOCK:
-                if LAST_CYCLE["running"]:
-                    return self._send(429, {"error": "cycle_en_cours", "detail": "Génération verrouillée : un cycle est en cours. Interrompez ou attendez la fin."})
+            # _GENERATION_START_LOCK (2026-08-21, 3e passage de revue de
+            # code) : les deux vérifications (cycle, vidéo) doivent former
+            # UNE SEULE section critique -- sinon un /api/video/generate
+            # concurrent peut acquérir son verrou pile entre les deux checks
+            # séparés. Contrairement à /api/cycle, regenerate() lui-même
+            # (synchrone, potentiellement long) reste volontairement HORS de
+            # cette section : la verrouiller aussi serait fermer la fenêtre
+            # de course en échange de sérialiser TOUTES les régénérations
+            # entre elles, un changement de comportement bien plus lourd que
+            # ce que cette correction vise.
+            with _GENERATION_START_LOCK:
+                with _LAST_LOCK:
+                    if LAST_CYCLE["running"]:
+                        return self._send(429, {"error": "cycle_en_cours", "detail": "Génération verrouillée : un cycle est en cours. Interrompez ou attendez la fin."})
+                _vb = _video_busy()
+                if _vb:
+                    return self._send(429, _vb)
             # Régénère UN article depuis les INFOS DÉJÀ ACQUISES (hitl_facts).
             # AUCUN re-scraping : le champion/contexts source est relu depuis la base.
             fid = payload.get("fact_id")
@@ -758,13 +819,54 @@ class Handler(BaseHTTPRequestHandler):
             # inacceptable en synchrone dans une requete HTTP. Meme verrou
             # anti-cycle que /api/regenerate (le cycle et la generation video
             # se disputeraient sinon le CPU).
-            with _LAST_LOCK:
-                if LAST_CYCLE["running"]:
-                    return self._send(429, {"error": "cycle_en_cours", "detail": "Génération vidéo verrouillée : un cycle est en cours."})
             fid = payload.get("fact_id")
             if not fid:
                 return self._send(400, {"error": "fact_id_requis"})
-            res = video_orchestrator.start_video_generation(fid)
+            # get_fact() renvoie la ligne brute (champion en JSON string, pas
+            # encore parse -- meme convention que _fact_by_id() plus bas).
+            title = ""
+            fact = get_fact(fid)
+            if fact and fact.get("champion"):
+                try:
+                    title = json.loads(fact["champion"]).get("title", "")
+                except Exception:
+                    title = ""
+            # _GENERATION_START_LOCK (2026-08-21, 3e passage de revue de
+            # code) : le check cycle ET l'acquisition atomique du verrou
+            # vidéo forment maintenant UNE SEULE section critique partagée
+            # avec /api/cycle et /api/regenerate (voir commentaire en tête de
+            # fichier) -- ferme la fenêtre de course entre les deux verrous
+            # distincts, pas seulement à l'intérieur de chacun.
+            with _GENERATION_START_LOCK:
+                with _LAST_LOCK:
+                    if LAST_CYCLE["running"]:
+                        return self._send(429, {"error": "cycle_en_cours", "detail": "Génération vidéo verrouillée : un cycle est en cours."})
+                _vb = _try_acquire_video_lock(fid, title)
+                if _vb:
+                    return self._send(429, _vb)
+            # Bug corrige 2026-08-21 (revue de code) : le verrou est acquis
+            # de façon optimiste (avant même de savoir si le fait existe /
+            # a une image / etc.) -- si start_video_generation() LÈVE une
+            # exception (au lieu de renvoyer proprement ok=False, ce qui
+            # pouvait arriver sur un champion corrompu avant le correctif de
+            # orchestration/video.py), le verrou restait pris pour toujours
+            # sans ce try/finally, bloquant aussi /api/cycle et
+            # /api/regenerate. Le correctif racine (json.loads protégé) reste
+            # en place ; ce filet de sécurité couvre toute autre exception
+            # imprévue de la même famille.
+            try:
+                res = video_orchestrator.start_video_generation(fid, on_complete=_release_video_lock_state)
+            except Exception as _ve:
+                _release_video_lock_state()
+                import traceback as _tb
+                _tb.print_exc()
+                return self._send(500, {"error": f"video_generate_error: {_ve}"})
+            if not res.get("ok"):
+                # Aucun thread n'a été lancé (fait introuvable, article trop
+                # court, pas d'image...) -> le verrou posé de façon optimiste
+                # doit être libéré ici, sinon plus AUCUNE vidéo ne pourrait
+                # jamais démarrer.
+                _release_video_lock_state()
             return self._send(200 if res.get("ok") else 400, res)
         if p.path == "/api/hitl/decide":
             fid = payload.get("fact_id")
@@ -1273,6 +1375,61 @@ def _already_transmitted_skip(fid):
         return {"status": "SKIPPED_ALREADY_TRANSMITTED",
                 "detail": "Article déjà publié sur WordPress — utilisez « Annuler la décision » avant de le réapprouver."}
     return None
+
+
+def _video_busy():
+    """Verrou d'exclusivité vidéo (2026-08-21) : renvoie le dict de réponse
+    "video_en_cours" si une génération vidéo tourne déjà, sinon None.
+    Factorisé (même principe que _already_transmitted_skip ci-dessus) --
+    vivait avant en triple dans /api/cycle, /api/regenerate et
+    /api/video/generate, au même risque de dérive qu'un futur correctif
+    n'en mette à jour qu'une partie des copies."""
+    with _VIDEO_LOCK_MUTEX:
+        if VIDEO_LOCK["running"]:
+            return {"error": "video_en_cours",
+                    "detail": "Une vidéo est déjà en cours de génération — réessayez dans quelques minutes."}
+    return None
+
+
+def _try_acquire_video_lock(fid, title):
+    """Vérifie ET pose le verrou en UNE SEULE section critique (revue de
+    code 2026-08-21) : _video_busy() puis un _start_video_lock() séparé
+    laissait une fenêtre de course -- deux requêtes /api/video/generate
+    quasi simultanées pouvaient toutes les deux passer _video_busy() (encore
+    False) avant que l'une d'elles n'ait eu le temps d'appeler
+    _start_video_lock(), lançant deux jobs ffmpeg concurrents malgré
+    l'exclusivité voulue. Renvoie le dict d'erreur "video_en_cours" si déjà
+    pris, sinon None (verrou acquis)."""
+    with _VIDEO_LOCK_MUTEX:
+        # Délègue à _video_busy() (RLock : sûr d'imbriquer, même mutex) --
+        # évite de dupliquer le message d'erreur à deux endroits (revue de
+        # code 2026-08-21, 3e passage : c'est exactement le risque de dérive
+        # que _video_busy() lui-même documentait).
+        _vb = _video_busy()
+        if _vb:
+            return _vb
+        _start_video_lock(fid, title)
+    return None
+
+
+def _start_video_lock(fid, title):
+    """Pose le verrou SANS vérifier s'il est déjà pris (l'appelant --
+    _try_acquire_video_lock() -- a déjà fait la vérification dans la même
+    section critique, voir RLock ci-dessus). Existe comme fonction séparée
+    pour rester testable indépendamment (voir tests/test_smoke_video_lock.py)."""
+    with _VIDEO_LOCK_MUTEX:
+        VIDEO_LOCK["running"] = True
+        VIDEO_LOCK["fact_id"] = fid
+        VIDEO_LOCK["title"] = title
+        VIDEO_LOCK["started_at"] = datetime.now().isoformat(timespec="seconds")
+
+
+def _release_video_lock_state():
+    with _VIDEO_LOCK_MUTEX:
+        VIDEO_LOCK["running"] = False
+        VIDEO_LOCK["fact_id"] = None
+        VIDEO_LOCK["title"] = None
+        VIDEO_LOCK["started_at"] = None
 
 
 def _fact_by_id(fid):
