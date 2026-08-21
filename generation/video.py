@@ -148,26 +148,42 @@ def assemble_video(image_path: str, audio_path: str, out_path: str,
 
 def generate_video_for_article(title: str, article_text: str, image_url: str,
                                 out_dir: str, out_name: str, voice: str = None,
-                                fact_id: str = "") -> dict:
+                                fact_id: str = "", on_stage=None) -> dict:
     """Pipeline complet : narration + telechargement de l'image de couverture
     DEJA CHOISIE pour l'article + assemblage. Retourne {ok, video_path,
     duration_sec, error}. Nettoie systematiquement les fichiers de travail
     intermediaires (image, audio brut), ne laisse que la video finale dans
-    out_dir."""
+    out_dir.
+
+    `on_stage` (2026-08-21, barre de progression) : callable optionnel
+    appele avec 'narration' | 'image' | 'assemblage' au debut de chaque
+    etape -- ce module reste PUR (aucun acces DB, voir docstring en tete de
+    fichier) : c'est l'appelant (orchestration/video.py) qui persiste la
+    progression via ce callback, jamais ce module directement."""
+    def _stage(name):
+        if on_stage:
+            try:
+                on_stage(name)
+            except Exception:
+                pass  # jamais bloquant pour le pipeline video lui-meme
+
     os.makedirs(out_dir, exist_ok=True)
     work_dir = tempfile.mkdtemp(prefix="kora_video_work_")
     try:
+        _stage("narration")
         audio_path = os.path.join(work_dir, "voix.mp3")
         nres = narrate.narrate_to_file(article_text, audio_path, voice=voice)
         if not nres["ok"]:
             return {"ok": False, "video_path": None, "duration_sec": None,
                     "error": f"narration: {nres['error']}"}
 
+        _stage("image")
         image_path = fetch_cover_image(image_url, work_dir)
         if not image_path:
             return {"ok": False, "video_path": None, "duration_sec": None,
                     "error": "image_de_couverture_indisponible"}
 
+        _stage("assemblage")
         out_path = os.path.join(out_dir, out_name)
         direction = _zoom_direction(fact_id, title)
         res = assemble_video(image_path, audio_path, out_path, zoom_direction=direction)

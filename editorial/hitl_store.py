@@ -219,11 +219,15 @@ def _init_locked():
     # Video narree (2026-08-20) : statut + chemin + erreur eventuelle,
     # idempotent (meme motif que trashed_at/cycle_id ci-dessus). video_status
     # ∈ {None, 'generating', 'done', 'error'} -- None = jamais demandee.
+    # video_stage ajoute 2026-08-21 (barre de progression) : ∈ {None,
+    # 'narration', 'image', 'assemblage'} -- uniquement pertinent quand
+    # video_status='generating'.
     try:
         con, mode = db.conn()
         cur = con.cursor()
         for col, ctype in (("video_status", "TEXT"), ("video_path", "TEXT"),
-                           ("video_duration_sec", "REAL"), ("video_error", "TEXT")):
+                           ("video_duration_sec", "REAL"), ("video_error", "TEXT"),
+                           ("video_stage", "TEXT")):
             if mode == "postgres":
                 cur.execute(f"ALTER TABLE hitl_facts ADD COLUMN IF NOT EXISTS {col} {ctype}")
             else:
@@ -380,19 +384,22 @@ def get_fact(fid: str) -> dict | None:
 
 
 def set_video_status(fact_id: str, status: str, path: str = None,
-                      duration_sec: float = None, error: str = None) -> None:
+                      duration_sec: float = None, error: str = None,
+                      stage: str = None) -> None:
     """Met a jour le statut de generation video d'un fact (2026-08-20).
-    status attendu : 'generating' | 'done' | 'error'. Jamais leve (fail-open,
-    coherent avec le reste de ce module) -- une ecriture de statut qui rate
-    ne doit jamais faire planter le pipeline video appelant."""
+    status attendu : 'generating' | 'done' | 'error'. `stage` (2026-08-21,
+    barre de progression) : 'narration' | 'image' | 'assemblage', pertinent
+    uniquement pendant status='generating'. Jamais leve (fail-open, coherent
+    avec le reste de ce module) -- une ecriture de statut qui rate ne doit
+    jamais faire planter le pipeline video appelant."""
     ph = _ph()
     con, _ = db.conn()
     try:
         cur = con.cursor()
         cur.execute(
             f"UPDATE hitl_facts SET video_status={ph}, video_path={ph}, "
-            f"video_duration_sec={ph}, video_error={ph} WHERE fact_id={ph}",
-            (status, path, duration_sec, error, fact_id),
+            f"video_duration_sec={ph}, video_error={ph}, video_stage={ph} WHERE fact_id={ph}",
+            (status, path, duration_sec, error, stage, fact_id),
         )
         con.commit()
     except Exception:
