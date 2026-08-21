@@ -771,6 +771,19 @@ class Handler(BaseHTTPRequestHandler):
             edited = payload.get("edited_text", "")
             final = payload.get("final_text", edited)
             wp_status = payload.get("wp_status", "publish")  # publish | draft
+            # Garde-fou ajouté suite à la revue de code du 2026-08-20 (2e
+            # passage) : verifier le statut AVANT d'appeler decide(), pas
+            # apres. Un premier correctif appelait decide() puis inspectait
+            # from_status pour sauter la transmission -- mais decide() avait
+            # DEJA ecrase hitl_facts.status de TRANSMITTED vers APPROVED a ce
+            # moment-la (transmit() etait bien saute, mais l'article restait
+            # affiche comme "Approuve" au lieu de "Transmis" alors qu'il est
+            # toujours reellement en ligne sur WordPress). En verifiant ICI,
+            # rien n'est ecrit du tout quand l'article est deja transmis.
+            if decision == "APPROVED":
+                _skip = _already_transmitted_skip(fid)
+                if _skip:
+                    return self._send(200, {"ok": True, "fact_id": fid, "status": "TRANSMITTED", "transmission": _skip})
             res = decide(fid, decision, EDITOR_NAME, edited_text=edited, final_text=final)
             if res.get("ok"):
                 log(fid, "HITL_DECISION", f"decision={decision} by={EDITOR_NAME} wp={wp_status}", "hitl")
@@ -818,6 +831,16 @@ class Handler(BaseHTTPRequestHandler):
             for fid in ids:
                 try:
                     if action == "approve":
+                        # Même garde-fou factorisé que /api/hitl/decide (voir
+                        # _already_transmitted_skip) : vérifié AVANT decide()
+                        # pour ne jamais écraser le statut affiché "Transmis"
+                        # par "Approuvé" sur un article déjà en ligne.
+                        _skip = _already_transmitted_skip(fid)
+                        if _skip:
+                            r = {"ok": True, "status": "TRANSMITTED", "transmission": _skip}
+                            r = dict(r); r["fact_id"] = fid
+                            results.append(r)
+                            continue
                         r = decide(fid, "APPROVED", EDITOR_NAME)
                         if r.get("ok"):
                             if not can_wp:
@@ -1231,6 +1254,24 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, *a):
         pass  # silence
+
+
+def _already_transmitted_skip(fid):
+    """Garde-fou anti-double-transmission WordPress (revue de code 2026-08-20,
+    8e passage : factorisé -- vivait avant en double dans /api/hitl/decide et
+    l'action groupée "approve", au risque qu'un futur correctif n'en mette
+    qu'une des deux copies à jour et réintroduise silencieusement le bug).
+    Renvoie le dict de réponse "déjà transmis, non renvoyé" si l'article est
+    actuellement affiché comme TRANSMITTED, sinon None. Vérifié via
+    hitl_facts.status (get_fact) : c'est le statut réellement affiché à
+    l'utilisateur, celui que decide() lui-même refuse aussi de quitter par un
+    autre chemin que retract() (voir _ALLOWED["TRANSMITTED"] = set() dans
+    editorial/hitl_store.py) -- défense en profondeur, pas le seul rempart."""
+    prev = get_fact(fid)
+    if prev and prev.get("status") == "TRANSMITTED":
+        return {"status": "SKIPPED_ALREADY_TRANSMITTED",
+                "detail": "Article déjà publié sur WordPress — utilisez « Annuler la décision » avant de le réapprouver."}
+    return None
 
 
 def _fact_by_id(fid):

@@ -24,15 +24,78 @@ STATES = {
     "TRANSMITTED", "TRANSMISSION_FAILED", "RETRACTED", "TRASHED",
 }
 # Transitions autorisées depuis chaque état
+# Bug corrige 2026-08-20 (rapporte : "Rejeter" puis "Envoyer en brouillon"
+# n'aboutissait jamais, sans aucune explication visible) -- audit complet :
+# les boutons Approuver/Modifier/Rejeter du tiroir article (voir app.js,
+# renderSheet()) s'affichent SANS CONDITION quel que soit le statut actuel
+# de l'article, tout comme les actions groupees (Attente/Brouillon/
+# Approuver/Corbeille) qui s'appliquent a une selection MELANGEANT
+# n'importe quels statuts. Avant ce correctif, la table ci-dessous
+# n'autorisait qu'un sous-ensemble de ces combinaisons pourtant TOUTES
+# atteignables d'un simple clic -- chaque combinaison manquante echouait
+# silencieusement (voir decide()) sans que rien ne le signale a l'ecran.
+#
+# Principe retenu : les 5 statuts "editoriaux" ci-dessous sont TOUJOURS
+# ré-assignables entre eux par un humain (coeur du modele HITL : la
+# decision humaine prime, elle doit toujours pouvoir se corriger) --
+# aucune raison metier de bloquer par exemple REJECTED -> EDITED. Les
+# statuts "systeme" (TRANSMITTED, RETRACTED, TRANSMISSION_FAILED),
+# atteints via des fonctions dediees (transmit(), retract(),
+# mark_transmission_failed()) et non via decide() generique, restent
+# ajoutes explicitement seulement la ou ils avaient deja un sens.
+_EDITORIAL_TARGETS = {"PENDING_REVIEW", "EDITED", "APPROVED", "REJECTED", "TRASHED"}
 _ALLOWED = {
-    "PENDING_REVIEW": {"EDITED", "APPROVED", "REJECTED", "TRASHED", "PENDING_REVIEW"},  # PENDING_REVIEW -> PENDING_REVIEW autorisé (no-op, sélection multiple)
-    "EDITED": {"APPROVED", "REJECTED", "EDITED", "TRASHED", "PENDING_REVIEW"},  # PENDING_REVIEW = "terminer l'édition, ramener à la normale"
-    "APPROVED": {"TRANSMITTED", "TRANSMISSION_FAILED", "RETRACTED", "EDITED", "TRASHED"},
-    "TRANSMISSION_FAILED": {"TRANSMITTED", "APPROVED", "REJECTED", "TRASHED"},
-    "REJECTED": {"TRASHED"},
-    "TRANSMITTED": {"RETRACTED", "TRASHED"},
-    "RETRACTED": {"TRASHED"},
-    "TRASHED": {"PENDING_REVIEW"},  # restauration (corbeille, 11j)
+    "PENDING_REVIEW": _EDITORIAL_TARGETS,
+    "EDITED": _EDITORIAL_TARGETS,
+    # TRANSMITTED/TRANSMISSION_FAILED/RETRACTED retires des cibles ci-dessous
+    # (7e passage de revue de code, 2026-08-20) : ces statuts "systeme" ne
+    # doivent JAMAIS resulter de decide() (voir le garde `decision not in
+    # _EDITORIAL_TARGETS` en tete de decide()) -- uniquement d'un vrai envoi
+    # WordPress (transmit()) ou d'un retract() explicite, qui ecrivent en
+    # base directement, hors de ce garde-fou.
+    "APPROVED": _EDITORIAL_TARGETS,
+    "TRANSMISSION_FAILED": _EDITORIAL_TARGETS,
+    # Bug corrige 2026-08-20 (7e passage de revue de code) : mettre APPROVED
+    # dans les cibles de REJECTED cassait une regle metier PREEXISTANTE et
+    # DELIBEREE (verifiee par verify_hitl.py, script E2E : "re-decider un
+    # REJECTED vers APPROVED doit etre refuse -- REJECTED verrouille"). Le bug
+    # rapporte concernait uniquement REJECTED -> EDITED ("Envoyer en
+    # brouillon"), jamais REJECTED -> APPROVED direct. Un rejet reste donc
+    # verrouille contre une ré-approbation DIRECTE (evite qu'un clic sur
+    # "Approuver" -- toujours visible dans le tiroir, quel que soit le statut
+    # -- ne republie sur WordPress un article qu'un humain venait de rejeter) ;
+    # il faut d'abord le repasser par EDITED/PENDING_REVIEW (une action
+    # deliberee et distincte) avant de pouvoir l'approuver.
+    "REJECTED": _EDITORIAL_TARGETS - {"APPROVED"},
+    # Bug corrige 2026-08-20 (5e passage de revue de code) : ouvrir
+    # TRANSMITTED vers _EDITORIAL_TARGETS permettait a decide() de faire
+    # passer un article DEJA EN LIGNE sur WordPress vers EDITED/PENDING_REVIEW/
+    # REJECTED SANS aucun garde-fou (le garde-fou anti-double-transmission de
+    # server.py ne couvre que le cas APPROVED) -- une fois passe, par exemple,
+    # a EDITED via une action groupee "Brouillon", le statut affiche n'etait
+    # plus TRANSMITTED, et un decide(..., "APPROVED", ...) ulterieur
+    # re-publiait silencieusement une seconde fois sur WordPress. Seul
+    # retract() (fonction dediee, distincte de decide(), qui ramene
+    # explicitement a PENDING_REVIEW) peut desormais faire sortir un article
+    # de l'etat TRANSMITTED -- meme principe que TRASHED plus bas.
+    "TRANSMITTED": set(),
+    "RETRACTED": _EDITORIAL_TARGETS,
+    # Bug corrige 2026-08-20 (3e passage de revue de code) : mettre TRASHED
+    # ici (comme _EDITORIAL_TARGETS le ferait) rendait decide() appelable
+    # DEPUIS un fait en corbeille -- mais le mirroir hitl_facts plus bas
+    # (`UPDATE hitl_facts SET status=... WHERE ... AND status <> 'TRASHED'`)
+    # ignore volontairement toute mise a jour tant que status='TRASHED',
+    # precisement pour eviter qu'un decide() generique ne sorte un fait de la
+    # corbeille par accident. Resultat avant ce correctif : decide() renvoyait
+    # {"ok": True} (hitl_decisions bien mis a jour) mais hitl_facts restait
+    # bloque sur TRASHED -- un succes en facade qui ne changeait RIEN a
+    # l'ecran, et pire, aurait pu declencher une transmission WordPress sur
+    # un article toujours affiche comme "en corbeille". Le SEUL chemin
+    # valide pour sortir un fait de la corbeille est restore_fact() (utilise
+    # par le bouton dedie "Restaurer" de la vue Corbeille, jamais par le
+    # tiroir article generique) : ensemble vide ici, decide() doit refuser
+    # explicitement plutot que de mentir sur le resultat.
+    "TRASHED": set(),
 }
 
 
@@ -366,7 +429,37 @@ def decide(fact_id: str, decision: str, decided_by: str,
            edited_text: str = "", final_text: str = "") -> dict:
     if not decided_by or not decided_by.strip():
         return {"error": "decision_anonyme_refusee"}
+    # Bug corrige 2026-08-20 (7e passage de revue de code) : decide() est LA
+    # DECISION EDITORIALE HUMAINE (via le tiroir article / les actions
+    # groupees) -- jamais le chemin des transitions "systeme" (TRANSMITTED,
+    # TRANSMISSION_FAILED, RETRACTED), qui doivent SEULEMENT resulter d'un
+    # vrai envoi WordPress (transmit()/mark_transmitted()/
+    # mark_transmission_failed()) ou d'un retract() explicite. _ALLOWED
+    # autorisait pourtant deja ces cibles depuis APPROVED/TRANSMISSION_FAILED
+    # (pour permettre a CES fonctions dediees, qui n'appellent PAS decide(),
+    # de fonctionner -- un vestige historique). server.py ne validait pas non
+    # plus le champ `decision` recu du client avant de l'y transmettre tel
+    # quel : un appel direct a /api/hitl/decide avec decision="TRANSMITTED"
+    # aurait donc pu afficher un article comme publie sur WordPress SANS
+    # AUCUN envoi reel. Garde-fou pose ici, au niveau le plus bas (protege
+    # tout appelant present et futur, pas seulement server.py) :
+    if decision not in _EDITORIAL_TARGETS:
+        return {"error": "decision_invalide", "decision": decision}
     existing = get(fact_id)
+    # cur_state vient de hitl_decisions.status, PAS hitl_facts.status : c'est
+    # le statut "editorial" (la derniere decision humaine), qui est la
+    # colonne que _ALLOWED est concu pour gouverner. Les deux colonnes
+    # divergent volontairement dans un cas : un REJETE met hitl_facts a
+    # TRASHED tout en laissant hitl_decisions.status='REJECTED' (tracabilite,
+    # voir plus bas) -- c'est PRECISEMENT ce qui permet a "Rejeter" puis
+    # "Envoyer en brouillon" de fonctionner (REJECTED -> EDITED est autorise
+    # dans _ALLOWED) sans pour autant permettre de sortir un fait VRAIMENT en
+    # corbeille (trash_facts(), ou hitl_decisions.status='TRASHED' aussi) --
+    # celui-la est bloque des ce garde-fou par _ALLOWED["TRASHED"] = set().
+    # (Bug corrige 2026-08-20, 6e passage de revue de code : lire hitl_facts
+    # ici semblait plus "coherent avec l'ecriture protegee" mais cassait en
+    # realite le cas d'usage meme que cette tache visait a reparer -- voir
+    # tests/test_smoke_hitl_transitions.py, test 3, pour la regression exacte.)
     cur_state = existing["status"] if existing else "PENDING_REVIEW"
     if decision not in _ALLOWED.get(cur_state, set()):
         return {"error": "transition_interdite", "from": cur_state, "to": decision}
@@ -375,7 +468,51 @@ def decide(fact_id: str, decision: str, decided_by: str,
     con, _ = db.conn()
     try:
         cur = con.cursor()
-        if existing:
+        # Re-verification juste avant l'ecriture (revue de code 2026-08-20,
+        # 7e passage) : cur_state a ete lu plus haut via une connexion SEPAREE
+        # (get(fact_id) ouvre/ferme la sienne) -- entre ce moment-la et
+        # maintenant, un appel CONCURRENT (ex: trash_facts() depuis une autre
+        # requete) a pu changer hitl_decisions.status. Sans cette
+        # re-verification, l'ecriture ci-dessous se ferait "en aveugle" sur la
+        # base d'un etat perime, pouvant par exemple faire ressortir un fait
+        # d'une VRAIE corbeille sans passer par restore_fact(). Ne reduit pas
+        # la fenetre a zero (get() reste une requete separee, pas un SELECT ...
+        # FOR UPDATE dans la meme transaction), mais la ramene de "toute la
+        # duree de traitement de la requete HTTP" a "deux requetes SQL
+        # consecutives sur la meme connexion" -- attenuation proportionnee
+        # pour un outil a faible concurrence (petite equipe editoriale), pas
+        # une garantie absolue d'atomicite.
+        cur.execute(f"SELECT status FROM hitl_decisions WHERE fact_id={p}", (fact_id,))
+        _fresh = cur.fetchone()
+        _fresh_state = _fresh["status"] if _fresh else "PENDING_REVIEW"
+        if decision not in _ALLOWED.get(_fresh_state, set()):
+            return {"error": "transition_interdite", "from": _fresh_state, "to": decision,
+                    "detail": "L'état de l'article a changé entre-temps (action concurrente) — réessayez."}
+        # Bug corrige 2026-08-20 (11e passage de revue de code) : la
+        # re-verification ci-dessus reduit la fenetre de course mais ne
+        # l'annule pas -- un COMMIT concurrent (ex: trash_facts()) pouvait
+        # encore s'intercaler entre CE SELECT et l'UPDATE hitl_facts plus bas
+        # (qui n'a plus de garde "AND status <> 'TRASHED'" depuis le 6e
+        # passage, precisement pour laisser passer REJECTED -> EDITED). Pour
+        # rendre l'ecriture reellement sure sans reintroduire le blocage
+        # REJECTED/TRASHED, l'UPDATE hitl_facts ci-dessous devient une
+        # ecriture CONDITIONNELLE (compare-and-swap) : elle ne s'applique que
+        # si hitl_facts.status est TOUJOURS celui lu ICI, MAINTENANT -- si un
+        # autre thread/requete l'a change entre-temps, 0 ligne est affectee
+        # et on le detecte via rowcount plutot que d'ecraser aveuglement.
+        cur.execute(f"SELECT status FROM hitl_facts WHERE fact_id={p}", (fact_id,))
+        _facts_row = cur.fetchone()
+        _fresh_facts_status = _facts_row["status"] if _facts_row else None
+        # Bug corrige 2026-08-20 (8e passage de revue de code) : cette
+        # branche testait encore `existing` (lu plus haut, via une connexion
+        # SEPAREE, potentiellement perime -- voir re-verification ci-dessus)
+        # au lieu de `_fresh` (qu'on vient de relire sur CETTE connexion,
+        # juste avant). Avec `existing`, une premiere decide() concurrente
+        # sur un fait sans ligne hitl_decisions pouvait faire croire a TORT
+        # qu'aucune ligne n'existe encore (existing=None) alors que `_fresh`
+        # venait justement d'en trouver une -- tentative d'INSERT sur une
+        # cle deja prise (violation de contrainte) au lieu d'un UPDATE propre.
+        if _fresh:
             cur.execute(
                 f"""UPDATE hitl_decisions SET status={p}, decision={p}, edited_text={p},
                    final_text={p}, decided_by={p}, decided_at={p} WHERE fact_id={p}""",
@@ -404,24 +541,60 @@ def decide(fact_id: str, decision: str, decided_by: str,
         # propre regle ci-dessus) au lieu d'une liste blanche a maintenir a la
         # main a chaque nouvelle valeur -- exactement le genre d'oubli qui vient
         # de se produire.
-        if decision == "REJECTED":
+        # Bug corrige 2026-08-20 (6e passage de revue de code) : ces deux
+        # UPDATE portaient un garde "AND status <> 'TRASHED'" cense empecher
+        # decide() de sortir un fait de la VRAIE corbeille (trash_facts()) --
+        # mais cette protection est desormais assuree EN AMONT par le
+        # garde-fou _ALLOWED (voir cur_state/_ALLOWED["TRASHED"] = set() plus
+        # haut : decide() ne peut plus jamais atteindre ce bloc pour un fait
+        # dont hitl_decisions.status='TRASHED'). Le garde ici etait donc a la
+        # fois redondant pour ce cas ET nuisible pour un autre : un article
+        # REJETE (hitl_decisions.status='REJECTED', hitl_facts.status='TRASHED'
+        # par effet de bord) qui passe legitimement a EDITED/APPROVED/etc. via
+        # decide() se voyait bloque par ce meme "status <> 'TRASHED'", alors
+        # que le garde-fou _ALLOWED avait deja valide la transition -- exactement
+        # le bug rapporte ("Rejeter" puis "Envoyer en brouillon" sans effet).
+        if decision in ("REJECTED", "TRASHED"):
             # Rejeter = envoyer DIRECTEMENT en corbeille (demande utilisateur 2026-08-14).
             # hitl_facts passe en TRASHED + trashed_at ; la décision HITL reste REJECTED
             # (traçabilité : on distingue un rejet d'une suppression manuelle).
             cur.execute(
-                f"UPDATE hitl_facts SET status='TRASHED', trashed_at={p} "
-                f"WHERE fact_id={p} AND status <> 'TRASHED'",
-                (now, fact_id))
+                f"UPDATE hitl_facts SET status='TRASHED', trashed_at={p} WHERE fact_id={p} AND status={p}",
+                (now, fact_id, _fresh_facts_status))
         else:
-            cur.execute(f"UPDATE hitl_facts SET status={p} WHERE fact_id={p} AND status <> 'TRASHED'",
-                        (decision, fact_id))
+            cur.execute(
+                f"UPDATE hitl_facts SET status={p} WHERE fact_id={p} AND status={p}",
+                (decision, fact_id, _fresh_facts_status))
+        if cur.rowcount == 0 and _fresh_facts_status is not None:
+            # Compare-and-swap manque : hitl_facts a change entre notre
+            # lecture et notre ecriture (course concurrente). On annule
+            # PLUTOT que de laisser hitl_decisions et hitl_facts diverger
+            # silencieusement -- l'utilisateur voit une erreur claire et peut
+            # simplement rejouer l'action sur l'etat desormais a jour.
+            con.rollback()
+            return {"error": "conflit_concurrent", "detail": "L'article a été modifié entre-temps par une autre action — réessayez."}
         con.commit()
     finally:
         con.close()
-    _act = {"EDITED": "MODIFIE", "APPROVED": "APPROUVE", "REJECTED": "REJETE"}.get(decision, "MODIFIE")
+    # Bug corrige 2026-08-20 (12e passage de revue de code) : "TRASHED" est
+    # une cible decide() legitime depuis _EDITORIAL_TARGETS mais n'avait pas
+    # d'entree ici -> journal d'audit incoherent ("MODIFIE" au lieu de
+    # "CORBEILLE") selon que la mise en corbeille passe par decide() ou par
+    # trash_facts() (qui logue bien "CORBEILLE" pour le meme resultat final).
+    _act = {"EDITED": "MODIFIE", "APPROVED": "APPROUVE", "REJECTED": "REJETE",
+            "TRASHED": "CORBEILLE", "PENDING_REVIEW": "MODIFIE"}.get(decision, "MODIFIE")
     audit.log(None, f"DECIDE_{decision}", f"fact={fact_id} by={decided_by}",
               fact_id=fact_id, action=_act, editor=decided_by)
-    return {"ok": True, "fact_id": fact_id, "status": decision, "decided_by": decided_by}
+    # from_status ajoute par la revue de code du 2026-08-20 : expose le
+    # statut d'origine de la transition pour tracabilite/tests. Le garde-fou
+    # anti-double-transmission WordPress est desormais assure a DEUX niveaux :
+    # _ALLOWED["TRANSMITTED"] = set() refuse categoriquement tout decide()
+    # depuis un fait transmis (seul retract() en sort) ; server.py ajoute en
+    # plus un pre-check explicite (get_fact(fid) AVANT d'appeler decide())
+    # pour renvoyer un message clair ("deja publie") plutot que l'erreur
+    # generique "transition_interdite" -- defense en profondeur, pas le seul
+    # rempart.
+    return {"ok": True, "fact_id": fact_id, "status": decision, "decided_by": decided_by, "from_status": cur_state}
 
 
 def mark_transmitted(fact_id: str, provider: str, http_status: int,
@@ -479,7 +652,10 @@ def retract(fact_id: str, by: str) -> dict:
     cur = get(fact_id)
     if not cur:
         return {"error": "introuvable"}
-    if cur["status"] not in ("TRANSMITTED", "APPROVED"):
+    # Bug corrige 2026-08-20 : le bouton "Annuler la decision" s'affiche
+    # aussi pour status === "EDITED" (voir app.js) mais ce garde-fou l'excluait
+    # -- meme classe de bug que le trou dans _ALLOWED ci-dessus.
+    if cur["status"] not in ("TRANSMITTED", "APPROVED", "EDITED"):
         return {"error": "retrait_non_autorise_depuis", "status": cur["status"]}
     now = datetime.now(TZ).isoformat(timespec="seconds")
     p = _ph()
