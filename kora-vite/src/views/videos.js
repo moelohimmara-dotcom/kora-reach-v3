@@ -4,9 +4,9 @@
    22/08/2026 (refacto plan étape 4).
    ============================================================ */
 import { Store } from "../store.js";
-import { esc, icon, chip, statusBadge, snack, friendlyActionError, transmissionMessage, stateBox } from "../utils.js";
+import { esc, icon, chip, statusBadge, stateBox } from "../utils.js";
 import { renderSheet } from "../sheet.js";
-import { openFact, render } from "../app.js";
+import { openFact, render, openWpChoiceForFact } from "../app.js";
 
 // Page Vidéos (2026-08-21, interconnectée le 2026-08-22) : liste tous les
 // faits ayant une vidéo, quel que soit leur statut éditorial -- source :
@@ -285,17 +285,15 @@ function bindVideos() {
     if (row.classList.contains("video-row-trashed")) return;
     openFact(row.dataset.fact);
   });
-  // Publier = exactement la même action que "Approuver & transmettre" dans
-  // la fiche article (Store.decide + message de transmission) -- voir
-  // renderFactSheet() plus haut, data-decide="APPROVED".
+  // Publier = ouvre désormais le même choix Publier directement / Brouillon
+  // WordPress que la fiche article et la sélection multiple (2026-08-22,
+  // demande explicite : "l'article vidéo doit pouvoir être transféré sur
+  // wordpress dans brouillons ou en publication officielle" -- jusqu'ici ce
+  // bouton appelait Store.decide() directement, sans jamais proposer le
+  // choix, contrairement au bouton "Approuver & transmettre" de la fiche).
   document.querySelectorAll("#view [data-video-publish]").forEach(b => b.onclick = (e) => {
     e.preventDefault(); e.stopPropagation();
-    const fid = b.dataset.videoPublish;
-    b.disabled = true;
-    Store.decide(fid, "APPROVED").then(r => {
-      const msg = transmissionMessage(r?.transmission);
-      snack(msg || "Article approuvé et transmis.");
-    }).catch(e => { snack(friendlyActionError(e)); b.disabled = false; });
+    openWpChoiceForFact(b.dataset.videoPublish);
   });
   // Rejeter = ouvre la même bulle de choix (corbeille vs suppression
   // définitive) que la fiche article -- reject-confirm ne lit que

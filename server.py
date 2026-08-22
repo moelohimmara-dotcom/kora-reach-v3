@@ -1517,6 +1517,12 @@ def _fact_by_id(fid):
         "fact_id": row["fact_id"], "champion": champ, "contexts": ctx,
         "article": art, "image": row["image"], "image_meta": img_meta,
         "gen_model": row["gen_model"], "n_sources": row["n_sources"],
+        # video_status/video_path (2026-08-22, demande explicite : "l'article
+        # vidéo doit pouvoir être transféré sur wordpress") -- absents ici
+        # jusqu'à ce correctif, transmit.py n'avait donc AUCUN moyen de
+        # savoir qu'une vidéo existait pour cet article (row.get(...) via
+        # get_fact() les a bien, mais ce dict de sortie les laissait de côté).
+        "video_status": row.get("video_status"), "video_path": row.get("video_path"),
     }
 
 

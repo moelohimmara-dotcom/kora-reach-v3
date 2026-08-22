@@ -5,6 +5,7 @@ credential, aucun appel réseau). Activation WordPress/Supabase via variables en
 Aucune credential dans le code. Absente -> dry_run forcé.
 """
 import os
+import re
 import json
 import urllib.request
 import urllib.error
@@ -17,12 +18,60 @@ SB_URL = os.environ.get("SUPABASE_URL", "")
 SB_KEY = os.environ.get("SUPABASE_KEY", "")
 
 
+def _strip_leading_title(text: str) -> str:
+    """Retire la ligne de titre markdown ('# Titre...') en tête de l'article
+    stocké en interne (convention KORA : writer.py écrit TOUJOURS le titre en
+    première ligne, voir _mechanical_paragraph_split/prompt système). Le
+    frontend le masque déjà à l'affichage (voir app.js/sheet.js, même regex)
+    puisque le titre est montré séparément -- mais transmit.py envoyait le
+    texte BRUT à WordPress, qui reçoit le titre une 2e fois via son propre
+    champ "title" : le premier paragraphe du corps publié était donc une
+    copie exacte du titre (bug rapporté 2026-08-22, confirmé sur le 1er
+    brouillon réel transmis à kakilambe.com -- "featured_media":0 à part,
+    le tout premier <p> dupliquait mot pour mot le titre du post)."""
+    return re.sub(r"^#\s.*\n+", "", text or "", count=1)
+
+
+# Filet mécanique (2026-08-22, demande explicite : "rien ne doit faire croire
+# que ceci est l'oeuvre d'une IA") -- COMPLÉMENTAIRE à l'axe 6 ("LANGUE") de
+# l'auto-critique LLM ajouté le même jour dans generation/writer.py, pas un
+# remplacement : l'auto-critique peut manquer un cas (elle a raté "beginning"
+# dans l'incident qui a motivé ce correctif), un check déterministe ne peut
+# PAS être distrait. Liste volontairement COURTE et conservatrice -- mots de
+# structure anglais qui n'ont AUCUN usage légitime en français (contrairement
+# à des emprunts déjà intégrés comme "email"/"sport"/"look"/"week-end", qui
+# ne doivent surtout pas déclencher de faux positif). Ne bloque JAMAIS la
+# transmission (un faux positif ne doit pas empêcher un article correct de
+# partir) -- signale seulement, voir transmit()/content_warning ci-dessous.
+_ENGLISH_TELLS = [
+    "the", "beginning", "however", "although", "therefore", "moreover",
+    "furthermore", "nevertheless", "meanwhile", "whereas", "overall",
+    "in conclusion", "in summary", "as a result", "on the other hand",
+]
+_ENGLISH_TELL_RE = re.compile(
+    r"\b(" + "|".join(re.escape(w) for w in _ENGLISH_TELLS) + r")\b", re.IGNORECASE
+)
+
+
+def _detect_language_artifacts(text: str) -> str | None:
+    """Détecte des mots anglais isolés dans un texte censé être 100% en
+    français. Retourne une chaîne descriptive (mots trouvés) ou None. Voir
+    commentaire de _ENGLISH_TELLS ci-dessus pour le pourquoi de cette liste
+    volontairement restreinte."""
+    if not text:
+        return None
+    hits = sorted(set(m.group(0).lower() for m in _ENGLISH_TELL_RE.finditer(text)))
+    if not hits:
+        return None
+    return ", ".join(f'"{h}"' for h in hits)
+
+
 def _build_payload(fact: dict, final_text: str) -> dict:
     """Payload générique (pour dry_run / wordpress)."""
     champ = fact.get("champion", {})
     return {
         "title": champ.get("title", ""),
-        "content": final_text or fact.get("article", ""),
+        "content": _strip_leading_title(final_text or fact.get("article", "")),
         "source_url": champ.get("url", ""),
         "image": fact.get("image", ""),
         "og_image": champ.get("raw_og_image") or champ.get("image", ""),  # fallback OG champion
@@ -32,6 +81,12 @@ def _build_payload(fact: dict, final_text: str) -> dict:
         # sources du cluster, "loremflickr"/"picsum" = photo stock de repli --
         # utilise pour la legende WP (jamais "IA" desormais, voir _upload_media).
         "image_provider": (fact.get("image_meta", {}) or {}).get("provider", ""),
+        # Vidéo narrée (2026-08-22, demande explicite : "l'article vidéo doit
+        # pouvoir être transféré sur wordpress dans brouillons ou en
+        # publication officielle") -- voir _upload_video()/_to_wordpress().
+        "video_status": fact.get("video_status"),
+        "video_path": fact.get("video_path"),
+        "fact_id": fact.get("fact_id", ""),
     }
 
 
@@ -54,8 +109,15 @@ def _build_supabase_payload(fact: dict, final_text: str) -> dict:
     Ne touche JAMAIS aux colonnes wp_* (gérées par le pipeline WP séparé).
     origin = AGENT_SEMI (flux semi-auto + validation HITL humaine)."""
     champ = fact.get("champion", {})
-    corps = final_text or fact.get("article", "")
-    chapeau = corps.split("\n")[0][:280] if corps else ""
+    # Bug corrigé 2026-08-22 (même cause que _build_payload/_strip_leading_title
+    # ci-dessus) : `corps` brut commence par "# Titre" -- `corps.split("\n")[0]`
+    # ne capturait donc JAMAIS le vrai chapô, seulement la ligne de titre
+    # (souvent tronquée par la coupe à 280 caractères en plein milieu du
+    # titre). Titre retiré AVANT de dériver le chapô ; on découpe sur \n\n
+    # (frontière de paragraphe markdown) plutôt que \n seul, car le chapô
+    # réel peut lui-même être réparti sur plusieurs lignes physiques.
+    corps = _strip_leading_title(final_text or fact.get("article", ""))
+    chapeau = corps.split("\n\n")[0].strip()[:280] if corps else ""
     titre = champ.get("title", "")
     mots = ["Guinée"]
     for w in titre.replace(":", " ").split():
@@ -163,11 +225,20 @@ def _merge_both_results(results: list) -> dict:
     ok = all(r["status"] in ("TRANSMITTED", "SKIPPED_DUPLICATE") for r in results)
     failures = [r for r in results if r["status"] == "FAILED"]
     status = "TRANSMITTED" if ok else ("PARTIAL" if not failures else "FAILED")
+    # image_warning (2026-08-22) : remonté au niveau racine du dict fusionné
+    # (pas seulement dans results[]) -- transmissionMessage() côté frontend
+    # lit tx.image_warning directement, sans avoir à connaître la forme
+    # interne de "both" (WordPress + entrepôt) pour savoir si l'image de
+    # couverture a échoué.
+    wp_result = next((r for r in results if r.get("provider") == "wordpress"), None)
     return {"status": status, "provider": "both",
             "http_status": results[0]["http_status"],
             "detail": " | ".join(
                 f"{r['provider']}:{r['status']}" for r in results),
-            "results": results}
+            "results": results,
+            "image_warning": (wp_result or {}).get("image_warning"),
+            "video_warning": (wp_result or {}).get("video_warning"),
+            "content_warning": (wp_result or {}).get("content_warning")}
 
 
 def mode() -> str:
@@ -200,11 +271,23 @@ def credentials_status() -> list:
     ]
 
 
-def _upload_media(image_url: str, fallback_url: str = "", image_provider: str = "") -> int:
+def _upload_media(image_url: str, fallback_url: str = "", image_provider: str = "") -> tuple:
     """Upload l'image vers WP media. Accepte une URL ou un chemin de fichier local.
-    Retourne l'id media ou 0. Strict sur magic bytes (PNG/JPEG).
+    Retourne (media_id, error_reason) -- error_reason est None en cas de
+    succès, sinon un texte diagnostique (2026-08-22, bug rapporté : "je n'ai
+    point vu d'image" -- avant ce correctif la raison de l'échec était
+    perdue, l'appelant ne recevait qu'un media_id de 0/−1 sans indice ;
+    désormais propagée jusqu'au message affiché à l'éditeur, voir
+    _to_wordpress ci-dessous). Strict sur magic bytes (PNG/JPEG/WEBP --
+    WEBP ajouté 2026-08-22,
+    bug rapporté : "je n'ai point vu d'image" -- l'image RÉELLE de la source
+    guinee7.com était un .webp valide (confirmé : téléchargé et vérifié
+    manuellement, WordPress accepte le format nativement, HTTP 201 en test
+    direct) mais rejetée ici faute de signature reconnue -- silencieusement,
+    d'où featured_media=0 sans le moindre indice pour comprendre pourquoi).
     Fallback: si l'image générée est corrompue, tente l'OG du champion."""
     candidates = [image_url, fallback_url] if fallback_url else [image_url]
+    reasons = []
     for url in candidates:
         if not url:
             continue
@@ -217,15 +300,18 @@ def _upload_media(image_url: str, fallback_url: str = "", image_provider: str = 
                 req_img = urllib.request.Request(url, headers={"User-Agent": "KORA/1.0"})
                 with urllib.request.urlopen(req_img, timeout=40) as r:
                     data = r.read()
-        except Exception:
+        except Exception as e:
+            reasons.append(f"{url[:60]}: téléchargement échoué ({e})")
             continue
-        # Validation STRICTE: magic bytes PNG/JPEG uniquement
+        # Validation STRICTE: magic bytes PNG/JPEG/WEBP uniquement
         is_png = data[:8].startswith(b"\x89PNG")
         is_jpg = data[:3] == b"\xff\xd8\xff"
-        if not (is_png or is_jpg):
+        is_webp = data[:4] == b"RIFF" and data[8:12] == b"WEBP"
+        if not (is_png or is_jpg or is_webp):
+            reasons.append(f"{url[:60]}: format non reconnu ({data[:12]!r})")
             continue  # non-image -> essaie le fallback
-        ext = "png" if is_png else "jpg"
-        ctype = "image/png" if is_png else "image/jpeg"
+        ext = "png" if is_png else ("webp" if is_webp else "jpg")
+        ctype = "image/png" if is_png else ("image/webp" if is_webp else "image/jpeg")
         try:
             app_pass = (WP_APP_PASS or "").replace(" ", "")
             req = urllib.request.Request(
@@ -263,10 +349,78 @@ def _upload_media(image_url: str, fallback_url: str = "", image_provider: str = 
                 urllib.request.urlopen(upd, timeout=20)
             except Exception:
                 pass
-            return media_id
-        except Exception:
+            return media_id, None
+        except Exception as e:
+            reasons.append(f"{url[:60]}: envoi WP échoué ({e})")
             continue
-    return -1
+    # Aucun candidat n'a abouti -- log serveur (journalctl -u kora-reach) ET
+    # renvoyé à l'appelant, pour ne plus jamais avoir un article sans image
+    # sans savoir pourquoi (ni dans les logs, ni pour l'éditeur).
+    reason = " | ".join(reasons) if reasons else "aucune image fournie"
+    print(f"[TRANSMIT_IMAGE_ECHEC] {reason}", flush=True)
+    return -1, reason
+
+
+_VIDEO_MAX_BYTES = 80 * 1024 * 1024  # 80 Mo -- au-delà, la plupart des hébergeurs WP
+                                      # mutualisés rejettent l'upload (limite PHP
+                                      # upload_max_filesize/post_max_size courante).
+
+
+def _upload_video(video_path: str) -> tuple:
+    """Upload la vidéo narrée (generated/videos/{fact_id}.mp4) vers la
+    médiathèque WordPress. Retourne (source_url, error_reason) -- source_url
+    est None en cas d'échec (fichier absent, trop volumineux, refus WP...).
+
+    2026-08-22 (demande explicite : "l'article vidéo doit pouvoir être
+    transféré sur wordpress dans brouillons ou en publication officielle") --
+    jusqu'ici transmit.py ignorait totalement la vidéo générée, seuls le
+    texte et l'image partaient vers WordPress. Import paresseux
+    d'orchestration.video (même précaution que _derive_source_level plus
+    haut : éviter tout couplage/coût au chargement du module)."""
+    try:
+        from orchestration.video import VIDEO_OUT_DIR
+    except Exception as e:
+        return None, f"module vidéo indisponible ({e})"
+    if not video_path:
+        return None, "aucun fichier vidéo enregistré pour cet article"
+    full_path = video_path if os.path.isabs(video_path) else os.path.join(VIDEO_OUT_DIR, video_path)
+    if not os.path.exists(full_path):
+        return None, f"fichier introuvable ({full_path})"
+    size = os.path.getsize(full_path)
+    if size <= 0:
+        return None, "fichier vidéo vide"
+    if size > _VIDEO_MAX_BYTES:
+        return None, f"vidéo trop volumineuse ({size // (1024*1024)} Mo > {_VIDEO_MAX_BYTES // (1024*1024)} Mo)"
+    try:
+        with open(full_path, "rb") as f:
+            data = f.read()
+        app_pass = (WP_APP_PASS or "").replace(" ", "")
+        fname = os.path.basename(full_path) or "kora-video.mp4"
+        req = urllib.request.Request(
+            WP_URL.rstrip("/") + "/wp-json/wp/v2/media",
+            data=data, method="POST",
+            headers={"Content-Type": "video/mp4",
+                     "Authorization": "Basic " + _b64(WP_USER + ":" + app_pass),
+                     "Content-Disposition": f"attachment; filename={fname}"})
+        with urllib.request.urlopen(req, timeout=120) as r:
+            d = json.loads(r.read().decode())
+        src = d.get("source_url") or d.get("guid", {}).get("rendered")
+        if not src:
+            return None, "réponse WordPress sans source_url"
+        return src, None
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            detail = e.read().decode("utf-8", "ignore")[:200]
+        except Exception:
+            pass
+        reason = f"envoi WP échoué (HTTP {e.code}: {detail})"
+        print(f"[TRANSMIT_VIDEO_ECHEC] {reason}", flush=True)
+        return None, reason
+    except Exception as e:
+        reason = f"envoi WP échoué ({e})"
+        print(f"[TRANSMIT_VIDEO_ECHEC] {reason}", flush=True)
+        return None, reason
 
 
 def _to_wordpress(payload: dict, wp_status: str = "publish") -> dict:
@@ -275,12 +429,36 @@ def _to_wordpress(payload: dict, wp_status: str = "publish") -> dict:
     # 1) Upload de l'image à la une (visuel adaptatif obligatoire)
     #    Fallback OG du champion si l'image générée est corrompue (JSON/HTML)
     media_id = 0
+    image_error = None
     img = payload.get("image", "")
     og = payload.get("og_image", "")  # transmis par writer si dispo
     if img:
-        mid = _upload_media(img, fallback_url=og, image_provider=payload.get("image_provider", ""))
+        mid, image_error = _upload_media(img, fallback_url=og, image_provider=payload.get("image_provider", ""))
         if mid > 0:
             media_id = mid
+            image_error = None
+    else:
+        image_error = "aucune image associée à cet article"
+    # 2) Vidéo narrée (2026-08-22, demande explicite) : uploadée vers la
+    #    médiathèque WP et intégrée en tête du contenu (lecteur HTML5 natif,
+    #    poster = même image que featured_media pour un rendu cohérent avant
+    #    lecture). N'empêche JAMAIS la transmission texte si elle échoue --
+    #    voir video_warning ci-dessous, même philosophie que image_warning.
+    video_warning = None
+    if payload.get("video_status") == "done" and payload.get("video_path"):
+        video_url, video_warning = _upload_video(payload["video_path"])
+        if video_url:
+            poster_attr = f' poster="{payload.get("image", "")}"' if payload.get("image") else ""
+            payload["content"] = (
+                f'<figure class="wp-block-video"><video controls{poster_attr} '
+                f'src="{video_url}"></video></figure>\n\n' + payload["content"]
+            )
+    # 3) Filet mécanique anti-artefact (2026-08-22, demande explicite : "rien
+    #    ne doit faire croire que ceci est l'oeuvre d'une IA") -- scanne titre
+    #    ET corps juste avant l'envoi. Ne bloque JAMAIS la transmission (voir
+    #    commentaire de _ENGLISH_TELLS) -- signale seulement, à charge pour
+    #    l'éditeur de relire et corriger manuellement avant republication.
+    content_warning = _detect_language_artifacts(payload["title"] + "\n" + payload["content"])
     body = json.dumps({
         "title": payload["title"],
         "content": payload["content"],
@@ -296,9 +474,22 @@ def _to_wordpress(payload: dict, wp_status: str = "publish") -> dict:
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
             d = json.loads(r.read().decode())
+            # image_warning (2026-08-22, bug rapporté : "je n'ai point vu
+            # d'image") : le POST WordPress réussit MÊME sans image (WP
+            # accepte featured_media=0 sans broncher) -- avant ce correctif,
+            # ce succès partiel était indiscernable d'un succès complet
+            # (status "TRANSMITTED" dans les deux cas, transmissionMessage()
+            # côté frontend ne montre AUCUN message pour "TRANSMITTED").
+            # Le champ ci-dessous permet au frontend de le signaler quand
+            # même à l'éditeur, sans changer le statut (le post EST bien en
+            # ligne, seule l'image manque).
             return {"status": "TRANSMITTED", "provider": "wordpress",
                     "http_status": r.status, "detail": "OK (media_id=%s)" % media_id,
-                    "wp_post_id": d.get("id"), "wp_url": d.get("link")}
+                    "wp_post_id": d.get("id"), "wp_url": d.get("link"),
+                    "image_warning": image_error, "video_warning": video_warning,
+                    "content_warning": (
+                        f"mot(s) non francophone(s) détecté(s) : {content_warning} — relire avant publication"
+                        if content_warning else None)}
     except urllib.error.HTTPError as e:
         return {"status": "FAILED", "provider": "wordpress",
                 "http_status": e.code, "detail": e.reason}

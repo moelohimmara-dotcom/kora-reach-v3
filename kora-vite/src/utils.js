@@ -195,7 +195,26 @@ function friendlyActionError(e) {
 // que ce diff visait à corriger.
 function transmissionMessage(tx) {
   if (!tx || !tx.status) return null;
-  if (tx.status === "TRANSMITTED" || tx.status === "DRY_RUN_OK") return null;
+  if (tx.status === "TRANSMITTED" || tx.status === "DRY_RUN_OK") {
+    // image_warning (2026-08-22, bug rapporté : "je n'ai point vu d'image") :
+    // le post WordPress peut très bien réussir SANS image de couverture --
+    // WP accepte featured_media=0 sans broncher, donc ce cas se confondait
+    // avec un succès complet (aucun message affiché auparavant). On le
+    // signale désormais explicitement, sans pour autant crier à l'échec :
+    // l'article EST en ligne, seule l'image manque.
+    // content_warning (2026-08-22, demande explicite : "rien ne doit faire
+    // croire que ceci est l'oeuvre d'une IA") : filet mécanique côté serveur
+    // (transmit.py::_detect_language_artifacts), complémentaire à l'auto-
+    // critique LLM -- signale à l'éditeur qu'une relecture manuelle s'impose
+    // AVANT de rendre l'article public, sans jamais bloquer la transmission.
+    const parts = [];
+    if (tx.image_warning && tx.video_warning) parts.push(`SANS image (${tx.image_warning}) ni vidéo (${tx.video_warning})`);
+    else if (tx.image_warning) parts.push(`SANS image de couverture (${tx.image_warning})`);
+    else if (tx.video_warning) parts.push(`SANS la vidéo narrée (${tx.video_warning})`);
+    if (tx.content_warning) parts.push(tx.content_warning);
+    if (!parts.length) return null;
+    return `Article transmis, mais ${parts.join(" — ")}.`;
+  }
   if (tx.status === "SKIPPED_NO_WP_RIGHT" || tx.status === "SKIPPED_ALREADY_TRANSMITTED") return tx.detail;
   // FAILED / ERROR / PARTIAL / SKIPPED_DUPLICATE / tout autre statut inattendu.
   return `Article approuvé mais l'envoi WordPress a échoué (${tx.status}) — vérifiez la configuration ou réessayez.`;
