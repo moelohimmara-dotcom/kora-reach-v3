@@ -6,7 +6,7 @@
 import { Store } from "../store.js";
 import { esc, icon, chip, isAdvancedRole, ROLE_LABEL_FR, snack, guardClick, friendlyActionError } from "../utils.js";
 import { confirmAction } from "../sheet.js";
-import { navigate } from "../app.js";
+import { navigate, render } from "../app.js";
 import { startTour } from "../tour.js";
 import { bindPasswordToggles } from "./auth.js";
 
