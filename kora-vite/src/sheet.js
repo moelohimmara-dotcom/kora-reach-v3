@@ -366,10 +366,10 @@ function renderSheet(s) {
     ` : `
     <div class="sheet-actions">
       <button class="btn btn-primary" data-decide="APPROVED">${icon("i-send")} Approuver &amp; transmettre</button>
-      <div class="sheet-actions-row">
-        <button class="btn btn-tonal" data-edit="1">${icon("i-edit")} Modifier</button>
-        <button class="btn btn-tonal" data-regen="1">${icon("i-refresh")} Régénérer</button>
-        <button class="btn btn-danger-ghost" data-decide="REJECTED">${icon("i-reject")} Rejeter</button>
+      <div class="sheet-actions-row sheet-actions-row-secondary">
+        <button class="btn btn-tonal" data-edit="1" aria-label="Modifier">${icon("i-edit")}<span class="btn-label">Modifier</span></button>
+        <button class="btn btn-tonal" data-regen="1" aria-label="Régénérer">${icon("i-refresh")}<span class="btn-label">Régénérer</span></button>
+        <button class="btn btn-danger-ghost" data-decide="REJECTED" aria-label="Rejeter">${icon("i-reject")}<span class="btn-label">Rejeter</span></button>
       </div>
       ${(status === "APPROVED" || status === "EDITED" || status === "TRANSMITTED") ? `<button class="btn btn-tonal btn-block" data-retract="1">${icon("i-undo")} Annuler la décision</button>` : ""}
       <div class="regen-panel" id="regenPanel" hidden>

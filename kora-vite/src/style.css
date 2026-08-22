@@ -631,7 +631,12 @@ html.icons-ready .material-icons { visibility: visible; }
 .btn-error { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
 .btn-danger { background: linear-gradient(135deg, #E8615A, #C23B34); color: #fff; box-shadow: 0 8px 24px rgba(224,97,90,0.4); }
 .btn-danger:hover { filter: brightness(1.06); }
-.btn-tonal { background: var(--glass-bg); color: var(--md-sys-color-on-surface); border: 1px solid var(--glass-border); }
+/* Bordure corrigée 2026-08-22 (audit mobile réel) : --glass-border vaut
+   transparent dans les 3 thèmes -- un bouton .btn-tonal (ex. "Régénérer")
+   se fondait presque totalement dans son environnement, sans repère
+   visuel de forme. --border (voir .text-input, même correctif) donne un
+   contour réel et cohérent par thème. */
+.btn-tonal { background: var(--glass-bg); color: var(--md-sys-color-on-surface); border: 1px solid var(--border); }
 .btn-tonal:hover { background: var(--glass-bg-hover); }
 .btn-block { width: 100%; }
 
@@ -823,6 +828,17 @@ html.icons-ready .material-icons { visibility: visible; }
 .video-ctrl-btn .ic { width: 16px; height: 16px; }
 .video-player-controls { flex-wrap: wrap; }
 .video-ctrl-time { font-size: var(--t-label-sm); color: var(--text-secondary); font-variant-numeric: tabular-nums; margin-left: auto; }
+/* Cibles tactiles ≥44px sur mobile (2026-08-22, revue ui-ux-pro-max :
+   Touch/Target Size, sévérité High) -- 34px convient à la souris (desktop)
+   mais reste sous le minimum tactile recommandé (44px iOS/48dp Android).
+   Le minuteur passe pleine largeur avant les boutons secondaires (mute/
+   plein écran) pour un enroulement propre plutôt qu'un minuteur écrasé
+   entre deux rangées de boutons. */
+@media (max-width: 700px) {
+  .video-ctrl-btn { width: 44px; height: 44px; }
+  .video-ctrl-btn .ic { width: 20px; height: 20px; }
+  .video-ctrl-time { flex-basis: 100%; text-align: center; margin-left: 0; order: 3; }
+}
 /* Barre de progression cliquable (seek) -- absente des controles ajoutes le
    2026-08-22 (Lecture/Pause/Stop seuls), corrige sur demande explicite. */
 .video-progress {
@@ -888,10 +904,26 @@ html.icons-ready .material-icons { visibility: visible; }
      retrecit pas un item sous sa largeur de contenu naturelle (min-width:auto
      par defaut), donc 3 boutons + icones + libelles ne rentraient jamais dans
      ~390px une fois le padding agrandi ci-dessus pour le tactile. Empile-les
-     en pleine largeur, comme "Approuver" et "Annuler la decision" juste a
-     cote -- coherent, et garantit qu'aucune largeur de texte ne peut deborder. */
-  .sheet-actions-row { flex-direction: column; }
-  .sheet-actions-row .btn { width: 100%; }
+     en pleine largeur -- s'applique ici au SEUL sheet-actions-row qui n'a
+     pas la classe -secondary (le bloc Annuler/Enregistrer le brouillon en
+     mode edition, toujours 2 boutons a libelle complet). */
+  .sheet-actions-row:not(.sheet-actions-row-secondary) { flex-direction: column; }
+  .sheet-actions-row:not(.sheet-actions-row-secondary) .btn { width: 100%; }
+  /* Refonte 2026-08-22 (demande explicite : "revois toute la mise en page
+     mobile") : le trio Modifier/Régénérer/Rejeter empilé (3 lignes pleine
+     largeur) poussait le corps de l'article presque entièrement hors
+     écran dès l'ouverture de la fiche (la barre d'actions est sticky en
+     bas -- voir .sheet-actions). Repassé en boutons icône compacts (même
+     convention que .video-ctrl-btn) : reste UNE seule ligne courte, texte
+     conservé pour l'accessibilité via aria-label + .btn-label (masqué
+     visuellement, toujours lu par un lecteur d'écran). "Approuver &
+     transmettre" (action principale) et "Annuler la décision" gardent
+     leur libellé complet -- seules les 3 actions secondaires se compactent. */
+  .sheet-actions-row-secondary { gap: 10px; justify-content: center; }
+  .sheet-actions-row-secondary .btn {
+    flex: none; width: 48px; height: 48px; padding: 0; border-radius: 50%;
+  }
+  .sheet-actions-row-secondary .btn-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
   .sheet-close { width: 44px; height: 44px; }
   /* le corps laisse de la place sous les boutons sticky (pas de chevauchement) */
   .sheet-textwrap { padding-bottom: 16px; }
@@ -1144,7 +1176,15 @@ html.icons-ready .material-icons { visibility: visible; }
 @media (max-width: 520px) { .setting-card .field-row { grid-template-columns: 1fr; } }
 .setting-card .actions { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
 .setting-col { flex-direction: column; align-items: stretch; }
-.text-input { width: 100%; margin-top: 8px; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--glass-border-strong); background: var(--glass-bg); color: var(--md-sys-color-on-surface); font-size: var(--t-body); font-family: inherit; }
+/* Bordure corrigée 2026-08-22 (audit mobile réel : les champs de mot de
+   passe étaient litéralement invisibles -- --glass-border-strong vaut
+   transparent dans les 3 thèmes, et --glass-bg est ici identique au fond
+   de la carte parente (.setting-card) : aucun repère visuel ne montrait
+   où saisir. --border (= --md-sys-color-outline, une vraie couleur non
+   transparente par thème) donne enfin un contour visible, sans toucher
+   --glass-border-strong lui-même (utilisé par ~30 autres composants qui
+   s'appuient plutôt sur une ombre neumorphique pour leur relief). */
+.text-input { width: 100%; margin-top: 8px; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--glass-bg); color: var(--md-sys-color-on-surface); font-size: var(--t-body); font-family: inherit; }
 .text-input:focus { outline: none; border-color: var(--coral); box-shadow: 0 0 0 3px rgba(242,169,140,0.18); }
 /* ---- Bouton afficher/masquer le mot de passe ---- */
 .pw-wrap { position: relative; display: block; }
@@ -1195,9 +1235,32 @@ html.icons-ready .material-icons { visibility: visible; }
    horizontalement de ~120px (confirmé : window.innerWidth passait de 390 à
    513 sur la page Vidéos). Corrigé en repassant .video-row en colonne sur
    mobile -- actions sur leur propre ligne, pleine largeur, alignées à droite. */
+/* Refonte carte mobile (2026-08-22, demande explicite : "la page vidéo
+   version mobile n'est pas optimisée") -- le correctif précédent
+   (flex-wrap sur la ligne desktop) éliminait le débordement horizontal
+   mais restait un patch, pas une vraie mise en page mobile : miniature
+   minuscule (72px) noyée à côté d'un titre qui s'étire sur 4-6 lignes,
+   boutons d'action alignés à droite sans rapport visuel clair avec le
+   contenu. Repensé en carte verticale (convention appli vidéo mobile,
+   confirmée via ui-ux-pro-max : vignette 16:9 pleine largeur, titre
+   limité à 2 lignes avec ellipse -- Content/Truncation -- puis rangée
+   d'actions pleine largeur, cibles tactiles ≥44px -- Touch/Target Size). */
 @media (max-width: 700px) {
-  .video-row { flex-wrap: wrap; row-gap: 8px; }
-  .video-row-actions { flex-basis: 100%; margin-left: 0; justify-content: flex-end; flex-wrap: wrap; }
+  .video-row { flex-direction: column; align-items: stretch; gap: 10px; padding: var(--space-3); }
+  .video-row .name {
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; font-size: var(--t-label); line-height: 1.35;
+  }
+  .video-row .sub { flex-wrap: wrap; gap: 4px 8px; }
+  /* Le chip de statut (Générée/Échec/Inconnu) : déjà entre .meta et les
+     actions dans l'ordre naturel du DOM -- juste aligné à gauche en
+     colonne (au lieu de centré par align-items:stretch hérité). */
+  .video-row > .chip { align-self: flex-start; }
+  .video-row-actions {
+    flex-basis: auto; width: 100%; margin-left: 0;
+    justify-content: stretch; flex-wrap: wrap;
+  }
+  .video-row-actions .btn { flex: 1 1 auto; min-height: 44px; min-width: 100px; }
 }
 /* Miniature de la ligne Vidéos (2026-08-22, amélioration UX) : réutilise
    l'image de couverture déjà chargée par le lecteur -- rend la liste
@@ -1216,6 +1279,17 @@ html.icons-ready .material-icons { visibility: visible; }
   position: absolute; right: 3px; bottom: 3px; padding: 1px 4px; border-radius: 3px;
   background: rgba(0, 0, 0, .75); color: #fff; font-size: 10px; font-weight: 700;
   font-variant-numeric: tabular-nums; line-height: 1.4;
+}
+/* Vignette pleine largeur sur mobile (2026-08-22, refonte carte) -- DOIT
+   rester APRÈS la règle de base .video-thumb ci-dessus : même spécificité
+   (une seule classe des deux côtés), donc l'ordre dans le fichier tranche
+   -- une media query placée AVANT la règle de base perd face à elle même
+   quand elle s'applique (bug constaté en test réel : la vignette restait
+   collée à 72px sur mobile malgré cette règle, tant qu'elle précédait la
+   base dans le fichier). */
+@media (max-width: 700px) {
+  .video-thumb { width: 100%; height: auto; aspect-ratio: 16 / 9; }
+  .video-thumb-duration { font-size: 12px; padding: 2px 6px; }
 }
 /* Mini-stepper d'étapes de génération (2026-08-22, amélioration UX) --
    remplace le simple libellé texte qui changeait ("Narration…" puis
