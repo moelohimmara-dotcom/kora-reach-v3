@@ -699,6 +699,106 @@ function viewSources(s) {
       ${gn.map(srcRow).join("") || `<div class="muted" style="padding:8px 0">Aucune source nationale.</div>`}
     </section>`;
 }
+// Page Vidéos (2026-08-21, interconnectée le 2026-08-22) : liste tous les
+// faits ayant une vidéo, quel que soit leur statut éditorial -- source :
+// Store.loadVideos() -> GET /api/videos (voir orchestration/video.py
+// list_videos()). Ligne cliquable -> ouvre la fiche article complète (même
+// principe que data-fact sur les cartes de la vue Articles), MAIS chaque
+// ligne porte aussi ses propres actions rapides (Publier/Rejeter, ou
+// Restaurer/Supprimer si déjà à la corbeille) -- demande explicite : cette
+// page doit être fonctionnelle par elle-même, pas juste un renvoi vers la
+// fiche pour la moindre action. decide()/deleteForever()/restoreFact()
+// recharge déjà cette liste (voir Store, 2026-08-22) : toute action prise
+// ICI ou depuis la fiche/la vue Articles/la Corbeille reste cohérente
+// partout, y compris via un autre onglet/appareil (prochain rafraîchissement).
+function videoStatusChip(v) {
+  if (v.video_status === "generating") {
+    const STAGE_LABELS = { narration: "Narration", image: "Image", assemblage: "Assemblage" };
+    const stage = STAGE_LABELS[v.video_stage] || "";
+    return chip("Génération en cours" + (stage ? ` (${stage})` : "") + "…", "warning", "i-spark");
+  }
+  if (v.video_status === "done") return chip("Générée", "tertiary", "i-check");
+  if (v.video_status === "error") return chip("Échec", "error");
+  return chip(v.video_status || "Inconnu", "secondary");
+}
+function viewVideos(s) {
+  const videos = s.videos || [];
+  if (!videos.length) return stateBox("i-spark", "Aucune vidéo", "Génère une vidéo narrée depuis la fiche d'un article (section « Vidéo narrée ») -- elle apparaîtra ici.", !!s.ui.loading);
+  // Rôle Lecteur : consultation seule (même garde que la fiche article, voir
+  // renderSheet()) -- aucune action rapide, la ligne reste cliquable en lecture seule.
+  const readOnly = s.auth && s.auth.role === "lecteur";
+  const row = (v) => {
+    const trashed = v.status === "TRASHED";
+    let actions = "";
+    if (!readOnly) {
+      if (trashed) {
+        // data-restore/data-del : câblés GLOBALEMENT dans render() (voir plus
+        // bas, "Corbeille : boutons restaurer / supprimer") -- pas besoin de
+        // re-câbler ici, ces attributs suffisent quelle que soit la page.
+        actions = `
+          <button type="button" class="btn btn-tonal btn-sm" data-restore="${esc(v.fact_id)}">${icon("i-undo")} Restaurer</button>
+          <button type="button" class="btn btn-danger btn-sm" data-del="${esc(v.fact_id)}">${icon("i-trash")} Supprimer</button>`;
+      } else {
+        actions = `
+          ${v.status !== "TRANSMITTED" ? `<button type="button" class="btn btn-tonal btn-sm" data-video-publish="${esc(v.fact_id)}">${icon("i-send")} Publier</button>` : ""}
+          <button type="button" class="btn btn-danger-ghost btn-sm" data-video-reject="${esc(v.fact_id)}" data-video-reject-title="${esc(v.title || "")}">${icon("i-reject")} Rejeter</button>`;
+      }
+    }
+    return `
+    <div class="list-row video-row ${trashed ? "video-row-trashed" : ""}" data-fact="${esc(v.fact_id)}">
+      <span class="meta-ic">${icon("i-spark")}</span>
+      <div class="meta">
+        <div class="name">${esc(v.title || "(sans titre)")}</div>
+        <div class="sub">
+          ${v.created_at ? esc(new Date(v.created_at).toLocaleString("fr-FR")) : "Date inconnue"}
+          ${v.video_status === "done" && v.video_duration_sec ? ` · ${Math.round(v.video_duration_sec / 60)} min` : ""}
+          ${v.status ? ` · ${statusBadge(v.status)}` : ""}
+        </div>
+      </div>
+      ${videoStatusChip(v)}
+      <div class="video-row-actions">${actions}</div>
+    </div>`;
+  };
+  return `<div class="section-title">Vidéos (${videos.length})</div>
+    <p class="muted" style="margin-bottom:16px">Toutes les vidéos narrées générées depuis les fiches article, quel que soit leur statut éditorial. Publie, rejette ou gère la corbeille directement depuis cette page.</p>
+    <section class="fact-group">${videos.map(row).join("")}</section>`;
+}
+function bindVideos() {
+  // Ouverture de la fiche complète -- .video-row n'est pas un <button> (elle
+  // contient elle-même des boutons d'action, imbrication invalide en HTML),
+  // donc pas captée par le listener document-wide de bind() (.fact-card
+  // uniquement) : câblage manuel, en ignorant les clics qui viennent d'un
+  // bouton d'action inline (Publier/Rejeter/Restaurer/Supprimer) ou d'une
+  // ligne déjà à la corbeille (même principe que trash-card dans bind()).
+  document.querySelectorAll("#view .video-row").forEach(row => row.onclick = (e) => {
+    if (e.target.closest("button")) return;
+    if (row.classList.contains("video-row-trashed")) return;
+    openFact(row.dataset.fact);
+  });
+  // Publier = exactement la même action que "Approuver & transmettre" dans
+  // la fiche article (Store.decide + message de transmission) -- voir
+  // renderFactSheet() plus haut, data-decide="APPROVED".
+  document.querySelectorAll("#view [data-video-publish]").forEach(b => b.onclick = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const fid = b.dataset.videoPublish;
+    b.disabled = true;
+    Store.decide(fid, "APPROVED").then(r => {
+      const msg = transmissionMessage(r?.transmission);
+      snack(msg || "Article approuvé et transmis.");
+    }).catch(e => { snack(friendlyActionError(e)); b.disabled = false; });
+  });
+  // Rejeter = ouvre la même bulle de choix (corbeille vs suppression
+  // définitive) que la fiche article -- reject-confirm ne lit que
+  // fact_id/champion.title, un objet minimal suffit (pas besoin de l'article
+  // complet, absent de la réponse allégée de /api/videos).
+  document.querySelectorAll("#view [data-video-reject]").forEach(b => b.onclick = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const fid = b.dataset.videoReject;
+    const title = b.dataset.videoRejectTitle || "";
+    Store.openSheet({ type: "reject-confirm", fact: { fact_id: fid, champion: { title } } });
+    renderSheet(Store.state);
+  });
+}
 function bindSources() {
   document.querySelectorAll("[data-source-detail]").forEach(b => b.onclick = () => {
     const src = (Store.state.sources || []).find(e => e.id === b.dataset.sourceDetail);
@@ -1461,6 +1561,9 @@ const CYCLE_MESSAGES = [
 ];
 const CYCLE_PATIENCE_MS = 45000; // au-delà, message de patience supplémentaire
 let _wasBusy = false;
+// Suivi de transition du bandeau vidéo global (2026-08-21) -- voir render().
+let _lastVideoJobId = null;
+let _lastVideoJobStatus = null;
 let _loaderDismissed = false;
 let _cycleMsgTimer = null;
 let _cycleMsgIdx = 0;
@@ -1786,28 +1889,13 @@ function renderSheet(s) {
   const startVideoFlow = async (btn) => {
     if (btn) { btn.disabled = true; btn.textContent = "Démarrage…"; }
     try {
-      await Store.startVideoGeneration(f.fact_id);
+      // Sondage désormais géré par le Store (Store.startVideoJob), pas ici --
+      // il pilote le bandeau global #videoJobBanner et survit à la fermeture
+      // de cette fiche (2026-08-21). Le rendu de la fiche se met à jour tout
+      // seul via renderSheet() rappelé depuis render() à chaque tick du Store.
+      await Store.startVideoJob(f.fact_id, f.title || "");
       f.video_status = "generating";
       renderSheet(s);
-      // Sondage toutes les 8s jusqu'à done/error -- s'arrête tout seul si
-      // la fiche est refermée entre-temps (sheet retiré du DOM).
-      const poll = async () => {
-        if (!document.getElementById("videoGenBtn") && !document.querySelector(".video-generating")) return; // fiche fermée/changée
-        try {
-          const st = await Store.getVideoStatus(f.fact_id);
-          if (st.video_status === "generating") { setTimeout(poll, 8000); return; }
-          f.video_status = st.video_status;
-          f.video_path = st.video_path;
-          f.video_duration_sec = st.video_duration_sec;
-          f.video_error = st.video_error;
-          const inList = (Store.state.facts || []).find(x => x.fact_id === f.fact_id);
-          if (inList) Object.assign(inList, { video_status: st.video_status, video_path: st.video_path, video_duration_sec: st.video_duration_sec, video_error: st.video_error });
-          if (Store.state.sheet && Store.state.sheet.fact && Store.state.sheet.fact.fact_id === f.fact_id) renderSheet(Store.state);
-          if (st.video_status === "done") snack("Vidéo narrée générée.");
-          else if (st.video_status === "error") snack("Erreur génération vidéo : " + (st.video_error || "inconnue"));
-        } catch (e) { setTimeout(poll, 8000); }
-      };
-      setTimeout(poll, 8000);
     } catch (e) {
       snack("Erreur : " + (e.message || "échec du démarrage"));
       renderSheet(s);
@@ -2566,7 +2654,7 @@ function render() {
   }
   const view = document.getElementById("view");
   if (!view) return;
-  const map = { cockpit: viewCockpit, facts: viewFacts, sources: viewSources, audit: viewAudit, drafts: viewDrafts, settings: viewSettings, trash: viewTrash, styleguide: viewStyleGuide };
+  const map = { cockpit: viewCockpit, facts: viewFacts, sources: viewSources, videos: viewVideos, audit: viewAudit, drafts: viewDrafts, settings: viewSettings, trash: viewTrash, styleguide: viewStyleGuide };
   // Garde de rôle au niveau du routage (13.3) : jusqu'ici seul le LIEN vers
   // /style-guide était masqué pour un rôle non-advanced, mais la route
   // elle-même restait accessible en tapant #styleguide directement (aucune
@@ -2717,6 +2805,41 @@ function render() {
     const cbCancel = document.getElementById("cycleBannerCancel");
     if (cbCancel) cbCancel.onclick = cancelHandler;
   }
+  // Bandeau vidéo global (2026-08-21) : visible depuis N'IMPORTE QUELLE page
+  // tant que Store.state.videoJob est non-nul -- piloté par Store.startVideoJob,
+  // pas par cette fonction (même principe que cycleBanner/cycleBusy ci-dessus,
+  // mais ici l'état vit dans le Store car aucun "cycleBusy" global n'existait
+  // pour la vidéo). _lastVideoJobStatus permet de détecter la TRANSITION vers
+  // done/error une seule fois (sinon le snack se répéterait à chaque render).
+  const vj = s.videoJob;
+  const vjBanner = document.getElementById("videoJobBanner");
+  if (vjBanner) {
+    vjBanner.hidden = !vj;
+    if (vj) {
+      const STAGE_LABELS = { narration: "Narration…", image: "Image de couverture…", assemblage: "Assemblage…" };
+      const vjText = document.getElementById("videoJobText");
+      const vjStage = document.getElementById("videoJobStage");
+      const vjOpen = document.getElementById("videoJobOpen");
+      if (vj.status === "generating") {
+        if (vjText) vjText.textContent = "Génération vidéo en cours" + (vj.title ? ` — ${vj.title}` : "") + "…";
+        if (vjStage) vjStage.textContent = STAGE_LABELS[vj.stage] || "";
+      } else if (vj.status === "done") {
+        if (vjText) vjText.textContent = "Vidéo générée" + (vj.title ? ` — ${vj.title}` : "");
+        if (vjStage) vjStage.textContent = "";
+      } else if (vj.status === "error") {
+        if (vjText) vjText.textContent = "Échec de la génération vidéo" + (vj.title ? ` — ${vj.title}` : "") + " : " + (vj.error || "erreur inconnue");
+        if (vjStage) vjStage.textContent = "";
+      }
+      if (vjOpen) vjOpen.onclick = () => { navigate("facts"); openFact(vj.fact_id); };
+    }
+    if (vj && vj.fact_id !== _lastVideoJobId) { _lastVideoJobId = vj.fact_id; _lastVideoJobStatus = null; }
+    if (vj && vj.status !== "generating" && vj.status !== _lastVideoJobStatus) {
+      _lastVideoJobStatus = vj.status;
+      if (vj.status === "done") snack("Vidéo narrée générée.");
+      else if (vj.status === "error") snack("Erreur génération vidéo : " + (vj.error || "inconnue"));
+    }
+    if (!vj) { _lastVideoJobId = null; _lastVideoJobStatus = null; }
+  }
   // Ne pas ré-exécuter renderSheet pendant l'édition (sinon le poll périodique
   // écrase le brouillon en cours) — sauf si le panneau a été fermé entre-temps
   // (ex. Échap), auquel cas il faut bien le masquer.
@@ -2725,6 +2848,7 @@ function render() {
   }
   try { if (s.route === "audit") bindAudit(); } catch (e) { console.error("bindAudit", e); }
   try { if (s.route === "sources") bindSources(); } catch (e) { console.error("bindSources", e); }
+  try { if (s.route === "videos") bindVideos(); } catch (e) { console.error("bindVideos", e); }
   try { if (s.route === "settings" && !settingsAlreadyMounted) bindSettings(); } catch (e) { console.error("bindSettings", e); }
   // Barre d'action de sélection multiple
   try {
@@ -3088,7 +3212,7 @@ function snack(msg) {
 // (mauvaise résolution relative), une URL à un seul segment reste sûre.
 const ROUTE_SLUGS = {
   cockpit: "", facts: "articles", drafts: "brouillons", trash: "corbeille",
-  sources: "sources", audit: "historique", settings: "parametres", styleguide: "style-guide",
+  sources: "sources", videos: "videos", audit: "historique", settings: "parametres", styleguide: "style-guide",
 };
 const SLUG_ROUTES = Object.fromEntries(
   Object.entries(ROUTE_SLUGS).filter(([, slug]) => slug).map(([route, slug]) => [slug, route])
@@ -3109,6 +3233,7 @@ function navigate(route, push = true) {
   else if (route === "trash") Store.loadTrash();
   else if (route === "audit") Store.loadAudit();
   else if (route === "sources") Store.loadSources();
+  else if (route === "videos") Store.loadVideos();
   else if (route === "cockpit") { Store.loadLast(); Store.loadHITL(); }
   render();
 }
@@ -3653,6 +3778,10 @@ function boot() {
         // été interrompue alors qu'elle continuait réellement en arrière-plan.
         // Seul le bouton "Interrompre" doit pouvoir stopper un cycle.
         Store.resumeCycleWatch();
+        // Même chose côté bandeau vidéo global (2026-08-21) : reconnecte le
+        // suivi si une génération tourne déjà côté serveur (F5, ou lancée
+        // depuis un autre onglet/appareil).
+        Store.resumeVideoWatch();
         // Comptes/invitations : role deja connu ici (checkAuth resolu) -> pas
         // d'appel pour rien (403 systematique) pour lecteur/editeur.
         if (Store.state.auth && isAdvancedRole(Store.state.auth.role)) {

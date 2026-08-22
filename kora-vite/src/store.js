@@ -23,6 +23,13 @@ export const Store = (() => {
     audit: [],
     auditFilter: { type: "all", q: "" },
     sources: [],
+    videos: [],
+    // videoJob (2026-08-21) : job de génération vidéo en cours, suivi au
+    // niveau du Store (pas du sheet) pour survivre à la navigation -- c'est
+    // lui qui pilote le bandeau global #videoJobBanner (visible depuis
+    // n'importe quelle page). Forme : { fact_id, title, status, stage, error }
+    // ou null si aucune génération en cours. status: "generating"|"done"|"error".
+    videoJob: null,
     sheet: null,
     trash: [],
     // trashLoaded (2026-08-19, bug corrigé : "Corbeille vide" s'affichait une
@@ -370,6 +377,11 @@ export const Store = (() => {
     try { setState({ sources: await api("/api/whitelist") }); }
     catch (e) { setState({ ui: { ...state.ui, error: e.message } }); }
   }
+  // Page Vidéos (2026-08-21) : liste toutes les vidéos, quel que soit leur statut.
+  async function loadVideos() {
+    try { setState({ videos: (await api("/api/videos")).videos || [] }); }
+    catch (e) { setState({ ui: { ...state.ui, error: e.message } }); }
+  }
   // Gouvernance des sources ouverte à l'UI (2026-08-19, advanced uniquement
   // côté backend — voir permissions.py "gerer_sources"). addSource lève en
   // cas d'échec (id dupliqué, champs manquants) : à catcher par l'appelant.
@@ -669,6 +681,11 @@ export const Store = (() => {
       await loadHITL();
       try { await loadTrash(); } catch (_) {}
       try { await loadStats(); } catch (_) {}
+      // Page Vidéos interconnectée (2026-08-22, demande explicite) : un
+      // Publier/Rejeter pris DEPUIS cette page (ou depuis la fiche article,
+      // la vue Articles...) doit se refléter partout -- y compris ici, que
+      // cette session ait ou non déjà visité /videos.
+      try { await loadVideos(); } catch (_) {}
       setState({ ui: { ...state.ui, busy: false, overlay: null } });
       return r;
     } catch (e) {
@@ -694,6 +711,7 @@ export const Store = (() => {
       if (r.error) throw new Error(r.error);
       await loadHITL();
       try { await loadStats(); } catch (_) {}
+      try { await loadVideos(); } catch (_) {} // interconnexion page Vidéos, voir decide()
       setState({ ui: { ...state.ui, busy: false, overlay: null } });
       // Bug corrigé 2026-08-20 (10e passage de revue) : contrairement à
       // decide() (voir plus haut, `return r;`), le succès ne renvoyait rien
@@ -867,6 +885,7 @@ export const Store = (() => {
       if (r.error) throw new Error(r.error);
       await loadHITL();
       try { await loadStats(); } catch (_) {}
+      try { await loadVideos(); } catch (_) {} // interconnexion page Vidéos, voir decide()
       setState({ selection: {}, selectMode: false, ui: { ...state.ui, busy: false, overlay: null } });
       return r;
     } catch (e) {
@@ -886,6 +905,7 @@ export const Store = (() => {
       await loadTrash();
       await loadHITL();
       try { await loadStats(); } catch (_) {}
+      try { await loadVideos(); } catch (_) {} // interconnexion page Vidéos, voir decide()
       setState({ ui: { ...state.ui, busy: false, overlay: null } });
       return r;
     } catch (e) {
@@ -908,11 +928,16 @@ export const Store = (() => {
       const set = new Set(ids);
       const curFacts = (state.facts || []).filter(f => !set.has(f.fact_id));
       const curTrash = (state.trash || []).filter(f => !set.has(f.fact_id));
+      // Retrait immédiat aussi de la page Vidéos (même principe que
+      // facts/trash ci-dessus) -- sinon une vidéo supprimée définitivement
+      // depuis CETTE page resterait affichée jusqu'au prochain rechargement.
+      const curVideos = (state.videos || []).filter(f => !set.has(f.fact_id));
       closeSheet();
-      setState({ facts: curFacts, trash: curTrash });
+      setState({ facts: curFacts, trash: curTrash, videos: curVideos });
       await loadTrash();
       await loadHITL();
       try { await loadStats(); } catch (_) {}
+      try { await loadVideos(); } catch (_) {}
       setState({ ui: { ...state.ui, busy: false, overlay: null } });
       return r;
     } catch (e) {
@@ -1011,6 +1036,7 @@ export const Store = (() => {
         // onglet) pendant que cette session tournait déjà -- sinon son
         // écran de progression n'apparaît jamais ici (voir _onVisibilityChange).
         resumeCycleWatch();
+        resumeVideoWatch();
       }
     }, intervalMs);
     // Recharge aussi quand l'onglet redevient visible
@@ -1030,8 +1056,9 @@ export const Store = (() => {
       // Y") si le cycle a démarré APRÈS le chargement initial de CETTE
       // session. resumeCycleWatch() est sans effet si aucun cycle ne tourne
       // (un seul GET /api/last), donc sûr à appeler à chaque retour au
-      // premier plan.
+      // premier plan. Même chose pour resumeVideoWatch() (bandeau vidéo).
       resumeCycleWatch();
+      resumeVideoWatch();
     }
   }
 
@@ -1082,11 +1109,77 @@ export const Store = (() => {
     return api(`/api/video/status?fact_id=${encodeURIComponent(fact_id)}`);
   }
 
+  // Applique un patch de statut vidéo partout où le fait apparaît (liste
+  // Actifs, page Vidéos, fiche ouverte) -- même principe que le sondage
+  // local qui vivait avant dans app.js (2026-08-20), mais déplacé ici pour
+  // continuer à tourner même si la fiche/page d'origine a été quittée.
+  function _patchVideoEverywhere(fact_id, patch) {
+    const inFacts = (state.facts || []).find(x => x.fact_id === fact_id);
+    if (inFacts) Object.assign(inFacts, patch);
+    const inVideos = (state.videos || []).find(x => x.fact_id === fact_id);
+    if (inVideos) Object.assign(inVideos, patch);
+    if (state.sheet && state.sheet.fact && state.sheet.fact.fact_id === fact_id) {
+      Object.assign(state.sheet.fact, patch);
+    }
+  }
+
+  // Bandeau vidéo global (2026-08-21, demande explicite) : démarre le job ET
+  // le sondage -- survit à la navigation/fermeture de la fiche d'origine,
+  // contrairement à l'ancien sondage local scopé au DOM du sheet.
+  async function startVideoJob(fact_id, title) {
+    await startVideoGeneration(fact_id); // laisse l'appelant catcher l'échec de démarrage
+    setState({ videoJob: { fact_id, title: title || "", status: "generating", stage: null, error: null } });
+    setTimeout(() => _pollVideoJob(fact_id), 8000);
+  }
+  async function _pollVideoJob(fact_id) {
+    // Un autre job a démarré entre-temps (ou celui-ci a déjà été refermé) -> on arrête.
+    if (!state.videoJob || state.videoJob.fact_id !== fact_id) return;
+    try {
+      const st = await getVideoStatus(fact_id);
+      _patchVideoEverywhere(fact_id, {
+        video_status: st.video_status, video_stage: st.video_stage,
+        video_path: st.video_path, video_duration_sec: st.video_duration_sec,
+        video_error: st.video_error,
+      });
+      if (st.video_status === "generating") {
+        setState({ videoJob: { ...state.videoJob, status: "generating", stage: st.video_stage } });
+        setTimeout(() => _pollVideoJob(fact_id), 8000);
+        return;
+      }
+      setState({ videoJob: { ...state.videoJob, status: st.video_status, stage: null, error: st.video_error } });
+      // Laisse le message final (fait / erreur) visible quelques secondes
+      // avant de masquer le bandeau -- sinon la réussite/l'échec passe inaperçu.
+      setTimeout(() => {
+        if (state.videoJob && state.videoJob.fact_id === fact_id) setState({ videoJob: null });
+      }, 6000);
+    } catch (e) {
+      setTimeout(() => _pollVideoJob(fact_id), 8000);
+    }
+  }
+  // Reconnexion au bandeau vidéo global (2026-08-21) — même principe que
+  // resumeCycleWatch() : /api/last expose désormais aussi video_lock (verrou
+  // serveur, voir server.py VIDEO_LOCK), déjà polle toutes les 30s / à chaque
+  // retour au premier plan. Sans ceci, le bandeau ne réapparaissait qu'à la
+  // session ayant elle-même déclenché la génération -- un F5, un cycle
+  // suivi depuis un autre onglet/appareil, ou l'ouverture d'un tout nouvel
+  // onglet pendant qu'une vidéo tourne déjà laissait le bandeau invisible
+  // jusqu'à rouvrir la fiche de l'article concerné.
+  async function resumeVideoWatch() {
+    try {
+      const r = await api("/api/last");
+      const vl = r && r.video_lock;
+      if (vl && vl.running && vl.fact_id && (!state.videoJob || state.videoJob.fact_id !== vl.fact_id)) {
+        setState({ videoJob: { fact_id: vl.fact_id, title: vl.title || "", status: "generating", stage: null, error: null } });
+        _pollVideoJob(vl.fact_id);
+      }
+    } catch (e) { /* silencieux : même principe que resumeCycleWatch() */ }
+  }
+
   return {
     state, setState, subscribe, api,
-    loadHealth, loadLast, loadHITL, loadAudit, loadSources, addSource, updateSource, loadSettings, applySettings,
+    loadHealth, loadLast, loadHITL, loadAudit, loadSources, loadVideos, addSource, updateSource, loadSettings, applySettings,
     startCycle, resumeCycleWatch, cancelCycle, decide, retract, setRoute, openSheet, closeSheet, wait,
-    startVideoGeneration, getVideoStatus,
+    startVideoGeneration, getVideoStatus, startVideoJob, resumeVideoWatch,
     formatEta: _formatEta,
     wasCycleActiveBeforeLoad,
     getFactFilter, setFactFilter,

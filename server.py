@@ -496,6 +496,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": "fact_id_requis"})
             res = video_orchestrator.video_status(fid)
             return self._send(200 if res.get("ok") else 404, res)
+        if path == "/api/videos":
+            # Liste toutes les videos (page dediee, 2026-08-21). Meme garde
+            # d'authentification que /api/video/status -- lecture seule,
+            # ouverte a tout role connecte (pas de restriction "advanced").
+            if not self._require_auth():
+                return
+            return self._send(200, {"videos": video_orchestrator.list_videos()})
         if path == "/api/settings":
             # GET = lecture du branding (nom/logo/couleurs) -> public pour l'écran de connexion.
             # La MODIFICATION (POST) reste advanced (voir do_POST).
@@ -521,6 +528,17 @@ class Handler(BaseHTTPRequestHandler):
             if not self._require_auth():
                 return
             with _LAST_LOCK:
+                # video_lock (2026-08-21) : exposé ici -- DEJA polle par le
+                # frontend toutes les 30s / a chaque retour au premier plan
+                # (meme mecanisme que "running" ci-dessus pour reconnecter
+                # resumeCycleWatch()) -- pour que Store.resumeVideoWatch()
+                # puisse reconnecter le bandeau video global apres un F5 ou
+                # un cycle demarre depuis un autre appareil/onglet, plutot
+                # que de ne s'accrocher QUE si CETTE session a elle-meme
+                # declenche la generation (sinon le bandeau reste invisible
+                # tant qu'on ne rouvre pas la fiche de l'article concerne).
+                with _VIDEO_LOCK_MUTEX:
+                    vlock = dict(VIDEO_LOCK)
                 return self._send(200, {
                     "running": LAST_CYCLE["running"],
                     "result": LAST_CYCLE["result"],
@@ -528,6 +546,7 @@ class Handler(BaseHTTPRequestHandler):
                     # Progression "Article X sur Y" du cycle en cours (loader
                     # plein écran) — 0/0 si aucun cycle actif.
                     "progress": reach_agent.get_progress() if LAST_CYCLE["running"] else None,
+                    "video_lock": vlock,
                 })
         if path == "/api/auth/me":
             sid = auth.read_cookie_sid(self.headers)

@@ -74,6 +74,20 @@ export const SHELL = `
     </div>
   </div>
 
+  <!-- Bandeau vidéo en cours (2026-08-21, demande explicite) : visible depuis
+       N'IMPORTE QUELLE page tant qu'une vidéo se génère en arrière-plan --
+       même principe que #cycleBanner (DOM direct, hors du Store réactif,
+       pour ne jamais refermer un tiroir ouvert ailleurs pendant le sondage). -->
+  <div class="cycle-banner" id="videoJobBanner" hidden>
+    <div class="cycle-banner-track"><div class="cycle-banner-bar" id="videoJobBar"></div></div>
+    <div class="cycle-banner-row">
+      ${ic("i-spark")}
+      <span id="videoJobText">Génération vidéo en cours…</span>
+      <span class="cycle-banner-progress" id="videoJobStage"></span>
+      <button class="btn btn-ghost btn-sm" id="videoJobOpen" style="margin-left:auto">Voir l'article</button>
+    </div>
+  </div>
+
   <!-- LEFT DRAWER — Mobile (≤819px) : hamburger → 248px slide-in -->
   <nav class="left-drawer" id="leftDrawer" hidden>
     <div class="left-drawer-header">
@@ -85,6 +99,7 @@ export const SHELL = `
       <button class="navitem" data-route="facts"><svg class="ic"><use href="#i-facts"/></svg><span>Actifs</span><span class="nav-badge" data-badge="facts"></span></button>
       <button class="navitem" data-route="audit"><svg class="ic"><use href="#i-check"/></svg><span>Historique</span></button>
       <button class="navitem" data-route="drafts"><svg class="ic"><use href="#i-edit"/></svg><span>Brouillons</span></button>
+      <button class="navitem" data-route="videos"><svg class="ic"><use href="#i-spark"/></svg><span>Vidéos</span></button>
       <button class="navitem" data-route="sources"><svg class="ic"><use href="#i-sources"/></svg><span>Sources</span><span class="nav-badge" data-badge="sources"></span></button>
       <div class="rail-sep"></div>
       <button class="navitem" data-route="trash"><svg class="ic"><use href="#i-trash"/></svg><span>Corbeille</span></button>
@@ -121,6 +136,7 @@ export const SHELL = `
     <div class="rail-group">Contenu</div>
     <button class="item" data-route="facts"><span class="ico">${ic("i-facts")}</span><span class="lbl">Actifs</span><span class="ct" data-badge="facts"></span></button>
     <button class="item" data-route="drafts"><span class="ico">${ic("i-edit")}</span><span class="lbl">Brouillons</span><span class="ct" data-badge="drafts"></span></button>
+    <button class="item" data-route="videos"><span class="ico">${ic("i-spark")}</span><span class="lbl">Vidéos</span></button>
     <button class="item" data-route="trash"><span class="ico">${ic("i-trash")}</span><span class="lbl">Corbeille</span><span class="ct" data-badge="trash"></span></button>
 
     <div class="rail-group">Système</div>
@@ -138,6 +154,7 @@ export const SHELL = `
     <div class="right-drawer-body">
       <button class="navitem" data-route="audit"><svg class="ic"><use href="#i-check"/></svg><span>Historique</span></button>
       <button class="navitem" data-route="drafts"><svg class="ic"><use href="#i-edit"/></svg><span>Brouillons</span><span class="nav-badge" data-badge="drafts"></span></button>
+      <button class="navitem" data-route="videos"><svg class="ic"><use href="#i-spark"/></svg><span>Vidéos</span></button>
       <button class="navitem" data-route="trash"><svg class="ic"><use href="#i-trash"/></svg><span>Corbeille</span><span class="nav-badge" data-badge="trash"></span></button>
       <button class="navitem" data-route="settings"><svg class="ic"><use href="#i-settings"/></svg><span>Paramètres</span></button>
     </div>
@@ -170,6 +187,7 @@ export const SHELL = `
   <div class="nav-scrim" id="navScrim" hidden></div>
   <div class="overflow-menu" id="overflowMenu" hidden>
     <button class="overflow-item" data-route="drafts"><svg class="ic"><use href="#i-edit"/></svg><span>Brouillons</span></button>
+    <button class="overflow-item" data-route="videos"><svg class="ic"><use href="#i-spark"/></svg><span>Vidéos</span></button>
     <button class="overflow-item" data-route="audit"><svg class="ic"><use href="#i-check"/></svg><span>Historique</span></button>
     <button class="overflow-item" data-route="sources"><svg class="ic"><use href="#i-sources"/></svg><span>Sources</span></button>
     <button class="overflow-item" data-route="settings"><svg class="ic"><use href="#i-settings"/></svg><span>Paramètres</span></button>

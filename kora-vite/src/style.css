@@ -1133,11 +1133,22 @@ html.icons-ready .material-icons { visibility: visible; }
 .list-row .meta { flex: 1; }
 .list-row .name { font-weight: 700; }
 .list-row .sub { font-size: var(--t-label-sm); color: var(--md-sys-color-on-surface-variant); }
-.src-row, .audit-row { align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-2); border-radius: var(--radius-md); border-bottom: 1px solid var(--glass-border); }
+.src-row, .audit-row, .video-row { align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-2); border-radius: var(--radius-md); border-bottom: 1px solid var(--glass-border); }
 .src-row:hover, .audit-row:hover { background: var(--glass-bg-hover); }
-.src-row .meta-ic, .audit-row .meta-ic { flex: none; width: 36px; height: 36px; border-radius: var(--radius-sm); display: grid; place-items: center; background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
-.src-row .meta-ic .ic { width: 18px; height: 18px; }
-.src-row .meta, .audit-row .meta { flex: 1; min-width: 0; }
+.src-row .meta-ic, .audit-row .meta-ic, .video-row .meta-ic { flex: none; width: 36px; height: 36px; border-radius: var(--radius-sm); display: grid; place-items: center; background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+.src-row .meta-ic .ic, .video-row .meta-ic .ic { width: 18px; height: 18px; }
+.src-row .meta, .audit-row .meta, .video-row .meta { flex: 1; min-width: 0; }
+/* .video-row (2026-08-22, page Vidéos interconnectée) : DIV (pas .src-row,
+   qui est un <button> -- imbriquer les boutons d'action rapide dedans serait
+   du HTML invalide), ouverture de la fiche câblée manuellement dans
+   bindVideos() (voir app.js). trash-card équivalent : pas de curseur pointeur
+   ni d'ouverture de fiche pour une vidéo déjà à la corbeille (actions
+   Restaurer/Supprimer uniquement, même logique que trashCard()). */
+.video-row { display: flex; cursor: pointer; }
+.video-row:hover { background: var(--glass-bg-hover); }
+.video-row.video-row-trashed { cursor: default; }
+.video-row.video-row-trashed:hover { background: none; }
+.video-row-actions { display: flex; gap: 8px; margin-left: auto; flex: none; }
 /* .src-row est un <button> (wireframe 7.2, clic -> détail source) : reset des
    styles natifs de bouton pour hériter du gabarit .list-row existant. */
 .src-row { display: flex; width: 100%; background: none; border: none; border-bottom: 1px solid var(--glass-border); font: inherit; color: inherit; text-align: left; cursor: pointer; }
