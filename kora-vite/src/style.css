@@ -1188,6 +1188,17 @@ html.icons-ready .material-icons { visibility: visible; }
 .video-row.video-row-trashed { cursor: default; }
 .video-row.video-row-trashed:hover { background: none; }
 .video-row-actions { display: flex; gap: 8px; margin-left: auto; flex: none; }
+/* Bug corrigé 2026-08-22 (audit mobile réel, Playwright) : .video-row-actions
+   (Écouter/Publier/Rejeter, flex:none) exigeait toujours sa largeur naturelle
+   -- sur mobile (≤700px), thumb (72px) + titre + boutons ne tiennent jamais
+   sur une seule ligne flex sans wrap : la ligne entière débordait
+   horizontalement de ~120px (confirmé : window.innerWidth passait de 390 à
+   513 sur la page Vidéos). Corrigé en repassant .video-row en colonne sur
+   mobile -- actions sur leur propre ligne, pleine largeur, alignées à droite. */
+@media (max-width: 700px) {
+  .video-row { flex-wrap: wrap; row-gap: 8px; }
+  .video-row-actions { flex-basis: 100%; margin-left: 0; justify-content: flex-end; flex-wrap: wrap; }
+}
 /* Miniature de la ligne Vidéos (2026-08-22, amélioration UX) : réutilise
    l'image de couverture déjà chargée par le lecteur -- rend la liste
    scannable en un coup d'œil (avant : icône générique identique partout).
