@@ -816,7 +816,23 @@ html.icons-ready .material-icons { visibility: visible; }
 }
 .video-ctrl-btn:hover, .video-ctrl-btn:focus-visible { border-color: var(--accent); outline: none; }
 .video-ctrl-btn .ic { width: 16px; height: 16px; }
-.video-ctrl-time { font-size: var(--t-label-sm); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.video-ctrl-time { font-size: var(--t-label-sm); color: var(--text-secondary); font-variant-numeric: tabular-nums; margin-left: auto; }
+/* Barre de progression cliquable (seek) -- absente des controles ajoutes le
+   2026-08-22 (Lecture/Pause/Stop seuls), corrige sur demande explicite. */
+.video-progress {
+  height: 6px; border-radius: 999px; background: var(--glass-border-strong);
+  cursor: pointer; position: relative; overflow: hidden;
+}
+.video-progress-fill { height: 100%; width: 0%; background: var(--accent); border-radius: 999px; }
+/* Effet zoom (Ken Burns) sur l'image de couverture (2026-08-22, demande
+   explicite) : anime DOUCEMENT tant que la video n'a pas demarre (le poster
+   est affiche) -- s'arrete des la lecture, la video elle-meme integre deja
+   son propre zoom Ken Burns cote generation (voir generation/video.py). */
+.video-preview-wrap { overflow: hidden; border-radius: var(--radius-md); background: #000; }
+.video-preview { width: 100%; max-height: 360px; display: block; transform-origin: center; }
+.video-preview.video-idle-zoom { animation: video-poster-zoom 8s ease-in-out infinite alternate; }
+@keyframes video-poster-zoom { from { transform: scale(1); } to { transform: scale(1.08); } }
+@media (prefers-reduced-motion: reduce) { .video-preview.video-idle-zoom { animation: none; } }
 .regen-panel-title { font-size: var(--t-label-sm); font-weight: 700; color: var(--coral-text); }
 .regen-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .regen-chip {

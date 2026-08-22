@@ -768,11 +768,16 @@ function viewVideos(s) {
       </div>
       ${playable ? `
       <div class="video-player-wrap" id="videoPlayer-${esc(v.fact_id)}" hidden>
-        <video class="video-preview" preload="none" data-video-el="${esc(v.fact_id)}"></video>
+        <div class="video-preview-wrap">
+          <video class="video-preview" preload="none" ${v.image ? `poster="${esc(v.image)}"` : ""} data-video-el="${esc(v.fact_id)}"></video>
+        </div>
+        <div class="video-progress" data-video-progress="${esc(v.fact_id)}">
+          <div class="video-progress-fill" data-video-progress-fill="${esc(v.fact_id)}"></div>
+        </div>
         <div class="video-player-controls">
           <button type="button" class="video-ctrl-btn" data-video-play="${esc(v.fact_id)}" title="Lecture / Pause" aria-label="Lecture / Pause">${icon("i-play")}</button>
           <button type="button" class="video-ctrl-btn" data-video-stop="${esc(v.fact_id)}" title="Stop" aria-label="Stop">${icon("i-stop")}</button>
-          <span class="video-ctrl-time" data-video-time="${esc(v.fact_id)}">0:00</span>
+          <span class="video-ctrl-time" data-video-time="${esc(v.fact_id)}">0:00 / 0:00</span>
         </div>
       </div>` : ""}
     </div>`;
@@ -821,21 +826,38 @@ function bindVideoPlayers(videos) {
     vidEl.pause();
     vidEl.currentTime = 0;
   });
+  // Barre de progression cliquable (seek) -- absente de la 1re version
+  // (Lecture/Pause/Stop seuls), ajoutée sur demande explicite (2026-08-22).
+  document.querySelectorAll("#view [data-video-progress]").forEach(bar => bar.onclick = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const fid = bar.dataset.videoProgress;
+    const wrap = document.getElementById(`videoPlayer-${fid}`);
+    const vidEl = wrap && wrap.querySelector("[data-video-el]");
+    if (!vidEl || !vidEl.duration) return;
+    const rect = bar.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    vidEl.currentTime = ratio * vidEl.duration;
+  });
+  const _fmtT = (sec) => { const s = Math.floor(sec || 0), m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, "0")}`; };
   // Icône Play<->Pause synchronisée sur l'état RÉEL de lecture (pas au clic) :
   // un seul jeu de listeners par <video>, posé une fois (data-bound évite de
-  // les empiler à chaque render()/toggle).
+  // les empiler à chaque render()/toggle). Même écoute pilote la barre de
+  // progression, le minuteur "écoulé / total", et l'effet zoom du poster
+  // (actif tant que la vidéo n'a pas démarré -- coupé dès la lecture,
+  // demande explicite : "les effets zoom sur l'image").
   document.querySelectorAll("#view [data-video-el]").forEach(vidEl => {
     if (vidEl.dataset.bound) return;
     vidEl.dataset.bound = "1";
+    vidEl.classList.add("video-idle-zoom");
     const fid = vidEl.dataset.videoEl;
     const syncIcon = () => {
       const btn = document.querySelector(`[data-video-play="${fid}"]`);
       if (btn) btn.innerHTML = (vidEl.paused || vidEl.ended) ? icon("i-play") : icon("i-pause");
+      vidEl.classList.toggle("video-idle-zoom", vidEl.paused || vidEl.ended);
+      const fill = document.querySelector(`[data-video-progress-fill="${fid}"]`);
+      if (fill && vidEl.duration) fill.style.width = `${Math.min(100, (vidEl.currentTime / vidEl.duration) * 100)}%`;
       const t = document.querySelector(`[data-video-time="${fid}"]`);
-      if (t) {
-        const cur = Math.floor(vidEl.currentTime || 0), m = Math.floor(cur / 60), s = cur % 60;
-        t.textContent = `${m}:${String(s).padStart(2, "0")}`;
-      }
+      if (t) t.textContent = `${_fmtT(vidEl.currentTime)} / ${_fmtT(vidEl.duration)}`;
     };
     ["play", "pause", "ended", "timeupdate", "loadedmetadata"].forEach(ev => vidEl.addEventListener(ev, syncIcon));
   });
