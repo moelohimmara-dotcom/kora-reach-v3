@@ -53,4 +53,12 @@ else
   exit 1
 fi
 
+echo "==> Parcours C (Vidéos/Bandeau de cycle/Notifications, 2026-08-22)"
+if node test_parcours_c.mjs "https://213-156-135-139.sslip.io/kora-v2"; then
+  echo "SMOKE_C_PASS"
+else
+  echo "SMOKE_C_FAIL"
+  exit 1
+fi
+
 echo "DEPLOY_OK_ALL_PASS"
