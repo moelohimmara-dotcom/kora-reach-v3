@@ -8,7 +8,7 @@
    ============================================================ */
 import { Store } from "./store.js";
 import {
-  esc, icon, chip, factMeta, isAdvancedRole, mdToHtml, mdToHtmlInline,
+  $, $$, esc, icon, chip, factMeta, isAdvancedRole, mdToHtml, mdToHtmlInline,
   rteWrapSelection, rtePrefixLines, rteHeading, rteLink, placeholderSvg,
   imgSrc, guardClick, snack, friendlyActionError, transmissionMessage,
 } from "./utils.js";

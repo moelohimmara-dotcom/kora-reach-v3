@@ -9,7 +9,7 @@
    (un import ES ne peut de toute façon pas être réassigné par l'importeur).
    ============================================================ */
 import { Store } from "../store.js";
-import { esc, icon, snack } from "../utils.js";
+import { esc, icon, snack, isAdvancedRole } from "../utils.js";
 import { navigate, render } from "../app.js";
 
 let _authRendered = false;  // évite de reconstruire le formulaire à chaque setState
