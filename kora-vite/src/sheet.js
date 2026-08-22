@@ -317,7 +317,10 @@ function renderSheet(s) {
   const status = f.status || "PENDING_REVIEW";
   // Séparation chapeau / corps : le chapeau = 1er paragraphe, le corps = RESTE (évite la duplication)
   // Nettoyage : on retire le "# Titre" markdown (déjà affiché séparément) du corps
-  let _clean = text.replace(/^#\s.*\n+/, "");
+  // Filet 2026-08-23 : un titre parfois rendu en gras seul ("**Titre**") par le LLM
+  // au lieu du "# Titre" attendu (writer.py le normalise désormais à la source,
+  // mais un article généré avant ce correctif peut encore traîner en base).
+  let _clean = text.replace(/^#\s.*\n+/, "").replace(/^\*\*[^\n]+\*\*\n+/, "");
   const _rawParas = _clean.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
   let _paras = _rawParas;
   if (_paras.length <= 1 && _clean.includes("\n")) {

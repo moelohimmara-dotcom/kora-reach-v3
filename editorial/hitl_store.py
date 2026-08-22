@@ -846,8 +846,14 @@ def delete_facts(ids: list) -> dict:
     try:
         cur = con.cursor()
         cur.execute(f"DELETE FROM hitl_facts WHERE fact_id IN ({ph})", tuple(ids))
-        cur.execute(f"DELETE FROM hitl_decisions WHERE fact_id IN ({ph})", tuple(ids))
+        # Bug trouvé 2026-08-22 (suppression en masse d'articles défectueux) :
+        # `n` était lu APRÈS la 2e requête -- cur.rowcount reflétait donc le
+        # nombre de lignes hitl_decisions supprimées (souvent moins que le
+        # nombre de faits, une décision n'existant pas toujours), jamais le
+        # nombre RÉEL de faits supprimés. Capturé immédiatement après le
+        # DELETE qui compte réellement.
         n = cur.rowcount
+        cur.execute(f"DELETE FROM hitl_decisions WHERE fact_id IN ({ph})", tuple(ids))
         con.commit()
     finally:
         con.close()

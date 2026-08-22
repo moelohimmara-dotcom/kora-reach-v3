@@ -594,6 +594,91 @@ def _is_title_or_signature(block: str) -> bool:
     return b.startswith("#") or b.lower().startswith("par la r")
 
 
+# Normalisation du titre (2026-08-22, découvert en vérifiant le correctif
+# anti-intertitres ci-dessous sur une VRAIE génération) : le prompt système
+# demande '# TITRE' en 1ère ligne, mais le LLM rend parfois le titre en gras
+# markdown ('**Titre...**') au lieu d'un vrai heading -- rien ne le
+# détectait, donc _strip_leading_title (transmit.py) ET le nettoyage
+# d'affichage (sheet.js, même regex '^#\\s') ne reconnaissaient PAS ce titre
+# comme tel : il restait tel quel en tête du CORPS, dupliquant le champ
+# "title" séparé de WordPress -- exactement le bug déjà corrigé pour le cas
+# '# Titre', mais réapparu sous une autre forme. Normalisé ICI, à la source,
+# plutôt que dans chaque consommateur en aval.
+_BOLD_ONLY_LINE_RE = re.compile(r"^\*\*(.+?)\*\*$")
+
+
+def _normalize_title_line(article: str) -> str:
+    """Si le tout premier bloc est un titre en gras SEUL ('**Texte**', rien
+    d'autre sur le bloc), le convertit en '# Texte' -- convention attendue
+    par tout le reste du pipeline (structure, transmission, affichage)."""
+    blocks = _article_blocks(article)
+    if not blocks or blocks[0].startswith("#"):
+        return article
+    m = _BOLD_ONLY_LINE_RE.match(blocks[0].strip())
+    if not m:
+        return article
+    blocks[0] = "# " + m.group(1).strip()
+    return "\n\n".join(blocks)
+
+
+# Filet mécanique anti-intertitres (2026-08-22, bug rapporté : "présence de
+# '#', de 'décryptage', 'à noter', des gros titres...") -- le prompt système
+# INTERDIT explicitement ces intertitres depuis le début (règle 1, "INTERDIT
+# formellement : '## Décryptage', '## À noter', '## Conclusion', ..."), mais
+# rien ne vérifiait ni ne corrigeait leur ABSENCE réelle : le LLM peut très
+# bien désobéir, et _structure_ok()/_is_title_or_signature() ci-dessus
+# EXCLUAIT déjà tout bloc commençant par '#' du comptage de paragraphes --
+# ce qui neutralisait accidentellement la détection au lieu de la bannir :
+# un intertitre glissé au milieu de l'article passait la validation de
+# structure sans jamais être repéré ni retiré, direction WordPress et
+# l'écran HITL tel quel ('#' littéral affiché si le rendu n'interprète pas
+# le Markdown, ou "gros titre" (h2/h3) sinon). Corrige en STRIPPANT
+# mécaniquement toute ligne d'en-tête markdown apparaissant ailleurs qu'en
+# première ligne (le vrai titre) -- ne peut jamais échouer, contrairement à
+# une correction LLM qui dépend elle-même de l'obéissance du modèle.
+_GENERIC_HEADING_LABELS = {
+    "décryptage", "decryptage", "à noter", "a noter", "conclusion",
+    "contexte et perspectives", "analyse", "résumé", "resume", "synthèse",
+    "synthese", "en bref", "pour résumer", "pour resumer", "à retenir",
+    "a retenir", "point clé", "point cle", "l'essentiel", "essentiel",
+}
+
+
+def _strip_body_headings(article: str) -> str:
+    """Retire tout intertitre markdown ('#' à '######') qui n'est pas le
+    TITRE en toute première ligne. Un bloc réduit à un label générique
+    ('Décryptage', 'À noter'...) est supprimé entièrement (aucun contenu
+    informatif) ; un intertitre suivi d'un vrai texte ('## Impact
+    économique\\nLe secteur...') ne perd que le préfixe '#', le texte est
+    conservé comme paragraphe normal — jamais de perte de contenu factuel."""
+    blocks = _article_blocks(article)
+    if not blocks:
+        return article
+    out = []
+    n = len(blocks)
+    for i, b in enumerate(blocks):
+        if i == 0 and b.startswith("#"):
+            out.append(b)  # vrai titre de l'article -> conservé tel quel
+            continue
+        if i == n - 1 and b.lower().startswith("par la r"):
+            out.append(b)  # signature -> conservée telle quelle
+            continue
+        cleaned_lines = []
+        for line in b.split("\n"):
+            m = re.match(r"^#{1,6}\s*(.+)$", line.strip())
+            if m:
+                text = m.group(1).strip()
+                if text.lower().rstrip(":").strip() in _GENERIC_HEADING_LABELS:
+                    continue  # label générique sans contenu -> ligne retirée
+                cleaned_lines.append(text)  # garde le texte, sans le '#'
+            else:
+                cleaned_lines.append(line)
+        cleaned = "\n".join(cleaned_lines).strip()
+        if cleaned:
+            out.append(cleaned)
+    return "\n\n".join(out)
+
+
 def _structure_ok(article: str) -> bool:
     """Vrai si l'article respecte la structure minimale de la règle 1 du
     prompt système (chapô + paragraphes de corps distincts). Seuil TOLÉRANT
@@ -715,6 +800,16 @@ def _finalize_article(art: str, fact: Dict, lt: Dict, should_cancel=None) -> Dic
     à son terme (impossible d'interrompre un appel HTTP bloquant sans
     complexité disproportionnée) ; seul le déclenchement de la PASSE
     SUIVANTE est évité."""
+    # Filet mécanique anti-intertitres (2026-08-22, voir _strip_body_headings) --
+    # appliqué EN PREMIER, avant toute autre passe : garantit que l'extension
+    # de longueur, l'auto-critique et le garde-fou de structure ci-dessous
+    # travaillent tous sur un texte déjà propre, jamais sur un intertitre
+    # qui aurait autrement été silencieusement exclu du comptage de blocs.
+    # _normalize_title_line() d'abord : un titre en gras doit devenir '# ...'
+    # AVANT _strip_body_headings, sinon celle-ci ne reconnaît pas le bloc 0
+    # comme titre légitime (elle ne fait confiance qu'à un '#' réel).
+    art = _normalize_title_line(art)
+    art = _strip_body_headings(art)
     _cancelled = should_cancel() if should_cancel else False
     if not _cancelled and len(art.split()) < lt.get("target", 879):
         art = _ensure_min_length(art, fact, lt, max_attempts=1)
@@ -751,6 +846,13 @@ def _finalize_article(art: str, fact: Dict, lt: Dict, should_cancel=None) -> Dic
                       f"trop court en phrases pour {_MIN_STRUCTURE_PARAGRAPHS} "
                       f"paragraphes) -- article conservé tel quel, mieux structuré "
                       f"qu'avant mais sous le seuil idéal.")
+    # Re-passage du filet anti-intertitres : les étapes ci-dessus (extension,
+    # correction ciblée, réparation LLM de structure) sont chacune un appel
+    # LLM séparé qui pourrait réintroduire un intertitre sans que rien d'autre
+    # ne le revérifie -- ce filet est idempotent (rien à faire sur un texte
+    # déjà propre) donc aucun coût si tout s'est bien passé en amont.
+    art = _normalize_title_line(art)
+    art = _strip_body_headings(art)
     _v = validate_article(art, fact)
     if _v["flags"]:
         print("[INJECTION_BLOCKED]", "; ".join(_v["flags"]))

@@ -28,8 +28,17 @@ def _strip_leading_title(text: str) -> str:
     champ "title" : le premier paragraphe du corps publié était donc une
     copie exacte du titre (bug rapporté 2026-08-22, confirmé sur le 1er
     brouillon réel transmis à kakilambe.com -- "featured_media":0 à part,
-    le tout premier <p> dupliquait mot pour mot le titre du post)."""
-    return re.sub(r"^#\s.*\n+", "", text or "", count=1)
+    le tout premier <p> dupliquait mot pour mot le titre du post).
+
+    Filet supplémentaire (2026-08-23) : writer.py normalise désormais le
+    titre en '# ...' même quand le LLM le rend en gras ('**Titre**') --
+    mais au cas où un article généré AVANT ce correctif traînerait encore en
+    base avec un titre en gras seul sur sa 1ère ligne, on le retire aussi
+    ici, en dernier filet avant l'envoi à WordPress."""
+    t = re.sub(r"^#\s.*\n+", "", text or "", count=1)
+    if t == (text or ""):
+        t = re.sub(r"^\*\*[^\n]+\*\*\n+", "", text or "", count=1)
+    return t
 
 
 # Filet mécanique (2026-08-22, demande explicite : "rien ne doit faire croire
