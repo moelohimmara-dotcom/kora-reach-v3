@@ -697,6 +697,27 @@ export const Store = (() => {
       setState({ ui: { ...state.ui, overlay: "Interruption demandée — arrêt après l'article en cours…" } });
     } catch (e) { setState({ ui: { ...state.ui, error: e.message } }); }
   }
+  // Chaîne de rafraîchissement post-mutation (2026-08-22, refacto dette #2) :
+  // decide()/retract()/restoreFact()/deleteForever()/bulkAction() rechargeaient
+  // chacune facts+corbeille+stats+vidéos en 4-5 lignes quasi identiques,
+  // dupliquées 5 fois -- tout oubli lors d'un futur correctif (ex: le lien
+  // avec la page Vidéos, ajouté le 2026-08-22) devait alors être répété
+  // manuellement dans chaque fonction. Centralisé ici. En prime : les 4
+  // lectures sont indépendantes (facts/trash/stats/videos ne partagent
+  // aucune clé d'état), donc lancées en parallèle (Promise.allSettled) au
+  // lieu d'enchaînées en série -- gain de vitesse en plus de la factorisation
+  // (chaque await série coûtait un aller-retour réseau complet).
+  // `includeTrash: true` pour decide() (peut trasher via la décision
+  // "TRASHED")/restoreFact()/deleteForever() -- retract()/bulkAction() ne
+  // touchent pas la corbeille. `includeVideos: false` uniquement pour
+  // finishDraft() (remise en brouillon, jamais visible en page Vidéos).
+  async function _refreshAfterMutation({ includeTrash = false, includeVideos = true } = {}) {
+    const tasks = [loadHITL(), loadStats()];
+    if (includeTrash) tasks.push(loadTrash());
+    if (includeVideos) tasks.push(loadVideos());
+    await Promise.allSettled(tasks);
+  }
+
   async function decide(factId, decision, editedText = "") {
     setState({ ui: { ...state.ui, busy: true, overlay: "Enregistrement…" } });
     try {
@@ -710,16 +731,11 @@ export const Store = (() => {
       // (friendlyActionError() dans app.js) ne pouvait alors matcher que le
       // code générique, jamais le message plus précis.
       if (r.error) throw new Error(r.detail || r.error);
-      // Rafraîchit facts + corbeille + stats (SSOT) pour refléter la décision immédiatement
-      // (sinon l'article semble "ne rien faire" à l'écran et les cartes restent figées).
-      await loadHITL();
-      try { await loadTrash(); } catch (_) {}
-      try { await loadStats(); } catch (_) {}
-      // Page Vidéos interconnectée (2026-08-22, demande explicite) : un
-      // Publier/Rejeter pris DEPUIS cette page (ou depuis la fiche article,
-      // la vue Articles...) doit se refléter partout -- y compris ici, que
-      // cette session ait ou non déjà visité /videos.
-      try { await loadVideos(); } catch (_) {}
+      // Rafraîchit facts + corbeille + stats + vidéos (SSOT) pour refléter la
+      // décision immédiatement (sinon l'article semble "ne rien faire" à
+      // l'écran) -- corbeille incluse (une décision peut trasher l'article),
+      // vidéos incluses (interconnexion page Vidéos, demande du 2026-08-22).
+      await _refreshAfterMutation({ includeTrash: true });
       setState({ ui: { ...state.ui, busy: false, overlay: null } });
       return r;
     } catch (e) {
@@ -743,9 +759,7 @@ export const Store = (() => {
     try {
       const r = await api("/api/hitl/retract", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fact_id: factId }) });
       if (r.error) throw new Error(r.error);
-      await loadHITL();
-      try { await loadStats(); } catch (_) {}
-      try { await loadVideos(); } catch (_) {} // interconnexion page Vidéos, voir decide()
+      await _refreshAfterMutation(); // pas de corbeille : retract() ne trashe jamais
       setState({ ui: { ...state.ui, busy: false, overlay: null } });
       // Bug corrigé 2026-08-20 (10e passage de revue) : contrairement à
       // decide() (voir plus haut, `return r;`), le succès ne renvoyait rien
@@ -917,9 +931,7 @@ export const Store = (() => {
         body: JSON.stringify(body),
       });
       if (r.error) throw new Error(r.error);
-      await loadHITL();
-      try { await loadStats(); } catch (_) {}
-      try { await loadVideos(); } catch (_) {} // interconnexion page Vidéos, voir decide()
+      await _refreshAfterMutation(); // pas de corbeille : bulkAction() (publier/rejeter) ne trashe jamais
       setState({ selection: {}, selectMode: false, ui: { ...state.ui, busy: false, overlay: null } });
       return r;
     } catch (e) {
@@ -936,10 +948,7 @@ export const Store = (() => {
         body: JSON.stringify({ fact_id: factId }),
       });
       if (r.error) throw new Error(r.error);
-      await loadTrash();
-      await loadHITL();
-      try { await loadStats(); } catch (_) {}
-      try { await loadVideos(); } catch (_) {} // interconnexion page Vidéos, voir decide()
+      await _refreshAfterMutation({ includeTrash: true });
       setState({ ui: { ...state.ui, busy: false, overlay: null } });
       return r;
     } catch (e) {
@@ -968,10 +977,7 @@ export const Store = (() => {
       const curVideos = (state.videos || []).filter(f => !set.has(f.fact_id));
       closeSheet();
       setState({ facts: curFacts, trash: curTrash, videos: curVideos });
-      await loadTrash();
-      await loadHITL();
-      try { await loadStats(); } catch (_) {}
-      try { await loadVideos(); } catch (_) {}
+      await _refreshAfterMutation({ includeTrash: true });
       setState({ ui: { ...state.ui, busy: false, overlay: null } });
       return r;
     } catch (e) {
@@ -989,8 +995,7 @@ export const Store = (() => {
         body: JSON.stringify({ fact_id: factId, decision: "PENDING_REVIEW", decided_by: "chef_de_secteur" })
       });
       if (r.error) throw new Error(r.error);
-      await loadHITL();
-      try { await loadStats(); } catch (_) {}
+      await _refreshAfterMutation({ includeVideos: false }); // brouillon : jamais visible en page Vidéos
       setState({ ui: { ...state.ui, busy: false, overlay: null } });
       return r;
     } catch (e) {
