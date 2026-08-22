@@ -115,6 +115,12 @@ export const SPRITE = `<svg xmlns="http://www.w3.org/2000/svg" style="display:no
   <symbol id="i-chevron-left" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <path d="m15 18-6-6 6-6" />
 </g></symbol>
+  <!-- i-play/i-pause/i-stop (2026-08-22, lecture des videos generees) : PLEINS
+       (fill=currentColor, pas outline) -- convention media-player standard,
+       distincte du reste du sprite (navigation/statut). -->
+  <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M6.75 3.68c-.9-.53-2 .13-2 1.17v14.3c0 1.04 1.1 1.7 2 1.17l12.14-7.15a1.36 1.36 0 0 0 0-2.34z" /></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><g fill="currentColor"><rect x="6" y="4" width="4.5" height="16" rx="1" /><rect x="13.5" y="4" width="4.5" height="16" rx="1" /></g></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect fill="currentColor" x="5.5" y="5.5" width="13" height="13" rx="2" /></symbol>
   <symbol id="i-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <circle cx="12" cy="12" r="4" />
   <path d="M12 2v2" />
