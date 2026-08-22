@@ -3100,18 +3100,15 @@ function _resetIdleTimer() {
 }
 
 // ============================================================================
-// CENTRE DE NOTIFICATIONS (wireframe 10.2) — historique des toasts (snack()),
-// groupé par récence, avec badge de compteur non-lus sur la cloche.
-//
-// État volontairement LOCAL à ce module, PAS dans le Store réactif : un
-// setState() ici déclencherait un re-render complet de toute l'app à chaque
-// snack() (40 sites d'appel), ce qui refermerait n'importe quel tiroir/panneau
-// ouvert ailleurs (constaté : sauvegarde d'un avatar refermant le panneau
-// Paramètres > Compte qu'elle venait elle-même de rouvrir). Le centre de
-// notifications est un pur affichage dérivé, sans impact sur le reste de l'UI.
+// CENTRE DE NOTIFICATIONS (2026-08-22, refonte) — PERSISTANT côté serveur
+// (editorial/notifications.py, table `notifications`), plus un simple
+// historique local des toasts snack() de la session courante : survit au
+// rechargement, partagé entre onglets/appareils, signale un cycle ou une
+// vidéo terminés même si personne ne regardait au bon moment (voir
+// Store.loadNotifications(), appelée au boot + toutes les 30s + retour au
+// premier plan). Source de vérité = Store.state.notifications ; ce module
+// ne fait QUE l'affichage + le clic -> navigation.
 // ============================================================================
-const NOTIF_MAX = 30; // borne mémoire, les plus anciennes sont évincées
-let _notifications = [];
 function _notifGroupLabel(ts) {
   const d = new Date(ts), now = new Date();
   const sameDay = d.toDateString() === now.toDateString();
@@ -3119,35 +3116,62 @@ function _notifGroupLabel(ts) {
   const diffDays = Math.floor((now - d) / 86400000);
   return diffDays <= 7 ? "Cette semaine" : "Plus ancien";
 }
+// Horodatage relatif court ("à l'instant", "12 min", "3 h", puis heure exacte
+// au-delà d'une journée) -- avant ce correctif, seul le groupe du jour
+// ("Aujourd'hui") était affiché, aucune indication de l'heure précise.
+function _notifTime(ts) {
+  const d = new Date(ts);
+  const diffMin = Math.floor((Date.now() - d.getTime()) / 60000);
+  if (diffMin < 1) return "à l'instant";
+  if (diffMin < 60) return `${diffMin} min`;
+  if (diffMin < 1440) return `${Math.floor(diffMin / 60)} h`;
+  return d.toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+function _notifIcon(type) {
+  if (type === "video_error" || type === "cycle_error") return icon("i-close", "notif-ic-error");
+  if (type === "video_done" || type === "cycle_done") return icon("i-check", "notif-ic-success");
+  return icon("i-info");
+}
 function renderNotifCenter() {
   const countEl = document.getElementById("notifCount");
   const bodyEl = document.getElementById("notifBody");
   if (!countEl || !bodyEl) return;
-  const unread = _notifications.filter(n => !n.read).length;
+  const list = Store.state.notifications || [];
+  const unread = Store.state.notifUnreadCount || 0;
   countEl.hidden = unread === 0;
   countEl.textContent = unread > 9 ? "9+" : String(unread);
-  if (!_notifications.length) {
+  if (!list.length) {
     bodyEl.innerHTML = `<p class="muted notif-empty">Aucune notification pour l'instant.</p>`;
     return;
   }
   const groups = {};
-  for (const n of _notifications) {
+  for (const n of list) {
     const g = _notifGroupLabel(n.ts);
     (groups[g] = groups[g] || []).push(n);
   }
-  const iconFor = (t) => t === "error" ? icon("i-close", "notif-ic-error") : t === "success" ? icon("i-check", "notif-ic-success") : icon("i-info");
+  // data-notif-id/data-route/data-fact-id (2026-08-22) : clic -> marque lu +
+  // navigue vers l'élément concerné (page Vidéos, fiche article...) --
+  // avant ce correctif, une notification n'était qu'un texte inerte.
   bodyEl.innerHTML = Object.entries(groups).map(([label, items]) => `
     <div class="notif-group-label">${esc(label)}</div>
     ${items.map(n => `
-      <div class="notif-item ${n.read ? "" : "notif-unread"}">
-        ${iconFor(n.type)}
-        <span class="notif-item-msg">${esc(n.message)}</span>
-      </div>`).join("")}
+      <button type="button" class="notif-item ${n.read ? "" : "notif-unread"}" data-notif-id="${esc(n.id)}" data-route="${esc(n.route || "")}" data-fact-id="${esc(n.fact_id || "")}">
+        ${_notifIcon(n.type)}
+        <span class="notif-item-body">
+          <span class="notif-item-msg">${esc(n.message)}</span>
+          <span class="notif-item-time">${esc(_notifTime(n.ts))}</span>
+        </span>
+      </button>`).join("")}
   `).join("");
-}
-function markAllNotificationsRead() {
-  _notifications = _notifications.map(n => ({ ...n, read: true }));
-  renderNotifCenter();
+  bodyEl.querySelectorAll("[data-notif-id]").forEach(b => b.onclick = () => {
+    const id = parseInt(b.dataset.notifId, 10);
+    if (id) Store.markNotificationRead(id);
+    const route = b.dataset.route;
+    const factId = b.dataset.factId;
+    document.getElementById("notifPanel").hidden = true;
+    if (route) navigate(route);
+    if (factId) setTimeout(() => openFact(factId), 50); // laisse navigate() charger la liste d'abord
+  });
 }
 // Traduit les codes d'erreur bruts renvoyés par le backend HITL (decide()/
 // retract()) en messages compréhensibles. Ajouté 2026-08-20 : avant ce
@@ -3182,6 +3206,11 @@ function transmissionMessage(tx) {
   // FAILED / ERROR / PARTIAL / SKIPPED_DUPLICATE / tout autre statut inattendu.
   return `Article approuvé mais l'envoi WordPress a échoué (${tx.status}) — vérifiez la configuration ou réessayez.`;
 }
+// snack() = toast ÉPHÉMÈRE local à cette session, pour le retour immédiat
+// d'une action que l'utilisateur vient de faire lui-même (2026-08-22 :
+// découplé du centre de notifications, désormais persistant côté serveur
+// -- voir renderNotifCenter() -- et alimenté séparément, uniquement pour
+// les évènements de FOND qui méritent de survivre à un rechargement).
 function snack(msg) {
   const sn = document.getElementById("snackbar");
   if (sn) {
@@ -3193,11 +3222,6 @@ function snack(msg) {
     const dur = Math.max(2600, Math.min(9000, msg.length * 60));
     clearTimeout(sn._t); sn._t = setTimeout(() => sn.hidden = true, dur);
   }
-  // Type inféré du message : la convention existante préfixe déjà les erreurs
-  // par "Erreur" (40 sites d'appel) — pas besoin de réécrire chaque appelant.
-  const type = /^erreur/i.test(msg) ? "error" : "success";
-  _notifications = [{ id: "n" + Date.now() + Math.random().toString(36).slice(2, 6), type, message: msg, ts: Date.now(), read: false }, ..._notifications].slice(0, NOTIF_MAX);
-  try { renderNotifCenter(); } catch (e) { /* jamais bloquant */ }
 }
 // URLs distinctes par page (2026-08-20, demande explicite : "plusieurs URLs
 // comme les autres applis" plutôt qu'une seule adresse + fragment #hash
@@ -3346,10 +3370,14 @@ function bind() {
       const willOpen = notifPanel.hidden;
       notifPanel.hidden = !willOpen;
       notifBell.setAttribute("aria-expanded", String(willOpen));
-      if (willOpen) renderNotifCenter();
+      // Rafraîchit depuis le serveur à l'ouverture (2026-08-22) : le badge
+      // peut avoir bougé depuis le dernier poll de 30s (cycle/vidéo tout
+      // juste terminés ailleurs) -- autant afficher l'état le plus frais
+      // au moment précis où l'utilisateur regarde.
+      if (willOpen) Store.loadNotifications().then(renderNotifCenter);
     };
   }
-  if (notifMarkAll) notifMarkAll.onclick = markAllNotificationsRead;
+  if (notifMarkAll) notifMarkAll.onclick = () => Store.markAllNotificationsRead().then(renderNotifCenter);
   // Fermeture au clic extérieur — bind() est rappelée à chaque render, donc
   // on garde un flag pour n'enregistrer CE listener document qu'une seule
   // fois (sinon il s'empilerait à chaque re-render).
@@ -3782,6 +3810,8 @@ function boot() {
         // suivi si une génération tourne déjà côté serveur (F5, ou lancée
         // depuis un autre onglet/appareil).
         Store.resumeVideoWatch();
+        // Centre de notifications persistant (2026-08-22).
+        Store.loadNotifications();
         // Comptes/invitations : role deja connu ici (checkAuth resolu) -> pas
         // d'appel pour rien (403 systematique) pour lecteur/editeur.
         if (Store.state.auth && isAdvancedRole(Store.state.auth.role)) {
