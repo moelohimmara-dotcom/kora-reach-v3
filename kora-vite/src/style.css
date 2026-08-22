@@ -1289,8 +1289,17 @@ html.icons-ready .material-icons { visibility: visible; }
 }
 .stat-card:hover { transform: translateY(-3px); border-color: var(--accent); }
 .stat-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-/* 7e carte "Supprimés" : pleine largeur pour équilibrer la grille 2 colonnes (aligné maquette) */
-.stat-card.stat-full { grid-column: 1 / -1; }
+/* 7e carte "Supprimés" : pleine largeur pour équilibrer la grille 2 colonnes (aligné maquette).
+   2026-08-22 (bug rapporté, capture d'écran) : hérite par défaut du gabarit
+   .stat-card EMPILÉ + CENTRÉ (icône au-dessus du nombre au-dessus du libellé) --
+   sur une carte 2-3x plus large que les autres, ce petit bloc centré se
+   retrouve isolé au milieu d'un grand vide, perçu à tort comme une carte
+   flottante/superposée. Réagencé ici en LIGNE (icône · nombre · libellé),
+   alignée à gauche, cohérente avec sa largeur réelle.*/
+.stat-card.stat-full { grid-column: 1 / -1; flex-direction: row; justify-content: flex-start; align-items: center; gap: 16px; text-align: left; }
+.stat-card.stat-full .stat-icon { width: 28px; height: 28px; margin-bottom: 0; flex: none; }
+.stat-card.stat-full .stat-value { width: auto; margin-bottom: 0; text-align: left; }
+.stat-card.stat-full .stat-label { justify-content: flex-start; }
 .stat-card.loading { opacity: 0.6; pointer-events: none; }
 .stat-card.error { border-color: var(--danger); }
 .stat-icon { width: 20px; height: 20px; color: var(--text-secondary); opacity: .7; margin-bottom: 16px; }
