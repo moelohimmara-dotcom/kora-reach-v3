@@ -1,5 +1,10 @@
 # README-DEPLOY.md — Déploiement VPS blindé de KORA Reach
 
+> Ce fichier couvre l'INSTALLATION INITIALE d'un VPS neuf. Pour déployer
+> une mise à jour sur le VPS de production déjà en place, voir
+> [`DEPLOY-RUNBOOK.md`](DEPLOY-RUNBOOK.md) — architecture réelle, procédure
+> humaine (`deploy_check.sh`) et procédure agent (`agent-deploy.sh`).
+
 ## Prérequis
 - VPS Debian/Ubuntu (ex. 213.156.135.139), accès root
 - nginx, python3.11+, git, ufw, fail2ban

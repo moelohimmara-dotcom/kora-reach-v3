@@ -39,7 +39,7 @@ nginx  (sites-enabled/kora-reach)
 ### Sources du repo
 - `kora-vite/` — frontend (Vite, build → `dist/`)
 - `*.py` à la racine — backend (server.py, db.py, auth.py, hitl_store.py, …)
-- `deploy/` — scripts de déploiement
+- `deploy/` — scripts de déploiement ; voir **[`deploy/DEPLOY-RUNBOOK.md`](deploy/DEPLOY-RUNBOOK.md)** pour la procédure de mise à jour du VPS de production (à lire avant tout déploiement, humain ou agent)
 - `maquettes-dark/` — référence visuelle (HTML dark, counts live)
 - `nginx_kora-reach.conf` — config nginx de référence (copiée dans sites-enabled)
 
