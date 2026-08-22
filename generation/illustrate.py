@@ -26,26 +26,87 @@ import urllib.parse
 TIMEOUT = int(os.environ.get("FAL_TIMEOUT_SEC", "45"))
 
 
-def _extract_keywords(title: str) -> list:
-    """Extrait 1-3 mots-clés pertinents pour une recherche photo Flickr."""
+GEO_KEYWORDS = (
+    "guinée", "guinea", "conakry", "labé", "labe", "n'zérékoré", "nzerekore",
+    "kankan", "kindia", "boké", "boke", "mamou", "fria", "yomou", "kouroussa",
+    "faranah", "kissidougou", "dabola", "dinguiraye", "gueckedou", "guéckédou",
+    "macenta", "beyla", "lola", "siguiri", "dalaba", "pita", "télimélé", "telimele",
+    "coyah", "forecariah", "dubréka", "dubreka", "kaloum", "matam", "matoto", "ratoma",
+)
+# Sujets génériques d'actualité (2026-08-21, renfort mots-clés) : regroupés par
+# thème éditorial, chaque thème listant PLUSIEURS variantes/synonymes -- la
+# version précédente ne matchait qu'un mot isolé par thème (ex: "minière" seul
+# ratait "mine", "or", "bauxite"...), ce qui faisait tomber trop souvent sur
+# Picsum (dernier recours sans rapport) faute de match sur le titre seul.
+# Le TAG associé à chaque thème est le mot envoyé à LoremFlickr -- gardé en
+# français (comportement existant, déjà en prod) mais choisi comme le terme
+# le plus généraliste du groupe pour maximiser les résultats Flickr.
+SUBJECT_THEMES = {
+    "accident": ("accident", "collision", "renversement", "noyade", "incendie", "explosion"),
+    "inondation": ("inondation", "crue", "pluie", "pluies", "intempérie", "intemperie"),
+    "élection": ("élection", "election", "scrutin", "urnes", "vote", "referendum", "référendum"),
+    # "marche" (sans accent) volontairement absent : trop ambigu (se confond
+    # avec "marché" -- économie -- une fois l'accent omis dans une source).
+    "manifestation": ("manifestation", "grève", "greve", "sit-in", "protestation", "cortège", "cortege"),
+    "santé": ("santé", "sante", "hôpital", "hopital", "épidémie", "epidemie", "vaccin", "maladie", "clinique"),
+    "économie": ("économie", "economie", "marché", "marche", "commerce", "inflation", "prix", "monnaie", "franc guinéen"),
+    "minière": ("minière", "miniere", "mine", "bauxite", "or", "diamant", "fer", "simfer", "cbg"),
+    "football": ("football", "sport", "match", "syli", "championnat", "coupe"),
+    "politique": ("politique", "gouvernement", "ministre", "président", "president", "cndd", "junte", "assemblée", "assemblee"),
+    "justice": ("justice", "tribunal", "procès", "proces", "juge", "condamnation", "arrestation"),
+    "sécurité": ("sécurité", "securite", "police", "gendarmerie", "armée", "armee", "attaque", "braquage"),
+    "éducation": ("éducation", "education", "école", "ecole", "université", "universite", "examen", "bac", "élève", "eleve"),
+    "environnement": ("environnement", "climat", "déforestation", "deforestation", "pollution", "sécheresse", "secheresse"),
+    "transport": ("transport", "route", "circulation", "taxi", "aéroport", "aeroport", "port", "carburant", "essence"),
+    "agriculture": ("agriculture", "agricole", "récolte", "recolte", "riz", "élevage", "elevage", "paysan"),
+}
+
+
+def _word_in(needle: str, haystack: str) -> bool:
+    """Match sur FRONTIÈRE DE MOT (pas une simple sous-chaîne) : "or" ne doit
+    pas matcher dans "record", "mine" ne doit pas matcher dans "détermine"
+    (bug rencontré lors du renfort du 2026-08-21 -- des mots-clés courts
+    collisionnaient avec des mots sans rapport). "\\b" fonctionne correctement
+    sur l'accentué en unicode (re par défaut) ; l'espace final gère les
+    expressions à tiret ("sit-in") en les laissant matcher tel quel."""
     import re
-    t = (title or "").lower()
-    # Mots géographiques prioritaires (pertinence Guinée)
-    geo = []
-    for kw in ("guinée", "guinea", "conakry", "labé", "labe", "n'zérékoré", "nzerekore",
-              "kankan", "kindia", "boké", "boke", "mamou", "fria", "yomou", "kouroussa"):
-        if kw in t:
-            geo.append(kw)
-    # Sujets génériques d'actualité
+    return re.search(r"\b" + re.escape(needle) + r"\b", haystack) is not None
+
+
+def _extract_keywords(text: str) -> list:
+    """Extrait jusqu'à 4 mots-clés pertinents pour une recherche photo Flickr :
+    1-2 géographiques + 1-2 thématiques, ordonnés par pertinence géo d'abord.
+    `text` (2026-08-21, renfort) : peut désormais être bien plus que le seul
+    titre -- typiquement titre + résumé + extrait du contenu brut de la
+    source (voir _build_search_text()) -- pour repérer un thème même quand
+    le titre seul est trop vague ("Nouvelle annonce du gouvernement", sans
+    plus de détail, mais le corps parle clairement d'économie)."""
+    t = (text or "").lower()
+    geo = [kw for kw in GEO_KEYWORDS if _word_in(kw, t)][:2]
     subj = []
-    for kw in ("accident", "inondation", "pluie", "élection", "manifestation", "santé",
-              "économie", "minière", "football", "politique", "justice", "sécurité"):
-        if kw in t:
-            subj.append(kw)
+    for theme, variants in SUBJECT_THEMES.items():
+        if any(_word_in(v, t) for v in variants):
+            subj.append(theme)
+        if len(subj) >= 2:
+            break
     kws = geo + subj
     if not kws:
         kws = ["guinea", "conakry"]  # défaut pertinent
-    return kws[:3]
+    return kws[:4]
+
+
+def _build_search_text(champion: dict, contexts: list, title: str = "") -> str:
+    """Assemble un texte de recherche plus riche que le seul titre : titre +
+    résumé + extrait du contenu brut de la meilleure source disponible
+    (champion, puis à défaut le premier contexte) -- augmente les chances de
+    repérer le vrai thème de l'article (voir _extract_keywords())."""
+    champ = champion or {}
+    parts = [title or champ.get("title", ""), champ.get("summary", ""), champ.get("raw_content", "")[:400]]
+    if not champ.get("raw_content") and contexts:
+        first_ctx = (contexts or [{}])[0] or {}
+        parts.append(first_ctx.get("summary", ""))
+        parts.append(first_ctx.get("raw_content", "")[:400])
+    return " ".join(p for p in parts if p)
 
 
 def _call_loremflickr(title: str, salt: str = "", lock_override: int = None):
@@ -121,10 +182,14 @@ def illustrate(champion: dict, contexts: list, title: str = "", fact_id: str = "
         return {"image": src_img, "provider": "source", "generated": False,
                 "detail": "Image réelle issue d'une source du cluster (champion ou contexte)."}
     # Aucune source du cluster n'a d'image (ou toutes déjà utilisées par un
-    # autre article de ce cycle) -> repli sur une vraie photo générique.
+    # autre article de ce cycle) -> repli sur une vraie photo générique, avec
+    # un texte de recherche enrichi (titre + résumé + extrait du contenu
+    # source, pas le titre seul -- 2026-08-21, renfort mots-clés) pour mieux
+    # cerner le thème réel de l'article.
+    search_text = _build_search_text(champion, contexts, title)
     lf_err = ""
     try:
-        url, provider = _call_loremflickr(title, salt=fact_id)
+        url, provider = _call_loremflickr(search_text, salt=fact_id)
         if url:
             return {"image": url, "provider": provider, "generated": True,
                     "detail": "Aucune image dans les sources du cluster -> photo réelle (LoremFlickr) liée au sujet."}
@@ -163,10 +228,11 @@ def illustrate_all(facts: list) -> list:
         # retente avec un lock différent jusqu'à 8 fois avant d'accepter le
         # doublon (mieux qu'une boucle infinie sur un cas limite).
         if res["provider"] in ("loremflickr", "picsum") and res["image"] in used:
+            search_text = _build_search_text(champ, contexts, title)
             for attempt in range(1, 8):
                 seed = (i * 1009 + attempt * 137) % 90000
                 try:
-                    url, provider = _call_loremflickr(title, lock_override=seed)
+                    url, provider = _call_loremflickr(search_text, lock_override=seed)
                 except Exception:
                     url, provider = f"https://picsum.photos/seed/{seed}/800/450", "picsum"
                 if url not in used:
