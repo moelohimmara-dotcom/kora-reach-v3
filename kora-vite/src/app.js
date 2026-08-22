@@ -2947,6 +2947,33 @@ function render() {
     }
     if (!vj) { _lastVideoJobId = null; _lastVideoJobStatus = null; }
   }
+  // Bug rapporté (2026-08-22, capture d'écran) : les cartes de la grille
+  // Articles se déforment (débordement horizontal, cartes coupées) au
+  // déclenchement d'une génération (article ou vidéo) -- confirmé par
+  // l'utilisateur qu'un F5 OU un simple redimensionnement de fenêtre suffit
+  // à tout remettre en place SANS recharger les données. Signature connue
+  // d'un bug de mise en page Chromium : le calcul flex/grid reste figé sur
+  // une largeur périmée quand une animation CSS continue tourne ailleurs
+  // (barre du bandeau de cycle, zoom du lecteur vidéo...) pendant qu'un
+  // élément est montré/masqué (gl/cb/vjBanner ci-dessus) -- le navigateur
+  // saute le recalcul de layout par optimisation. Un redimensionnement le
+  // force ; on force la MÊME chose nous-mêmes en lisant offsetHeight (accès
+  // qui déclenche un reflow synchrone, sans effet de bord visible) sur le
+  // conteneur de la grille juste après CE genre de changement.
+  // Un simple offsetHeight (force un reflow synchrone) ne suffit pas
+  // toujours pour CE bug precis -- confirme par le rapport : un
+  // redimensionnement de fenetre (qui invalide franchement le layout de
+  // TOUS les elements) corrige, mais pas n'importe quelle autre lecture de
+  // geometrie ailleurs sur la page pendant que l'animation continue tourne.
+  // Le "hack" display:none -> reflow -> display:'' est plus fort : il
+  // INVALIDE explicitement le flex layout de la grille elle-meme (pas
+  // seulement force sa LECTURE), au lieu de compter sur un recalcul que le
+  // navigateur peut continuer d'eviter par optimisation.
+  document.querySelectorAll("#view .fact-grid").forEach(grid => {
+    grid.style.display = "none";
+    void grid.offsetHeight;
+    grid.style.display = "";
+  });
   // Ne pas ré-exécuter renderSheet pendant l'édition (sinon le poll périodique
   // écrase le brouillon en cours) — sauf si le panneau a été fermé entre-temps
   // (ex. Échap), auquel cas il faut bien le masquer.
