@@ -1,19 +1,27 @@
 """narrate.py — texte d'article -> fichier audio (voix off).
 
-Fournisseur PRIORITAIRE (2026-08-22, demande explicite) : ElevenLabs, si
-ELEVENLABS_API_KEY est renseignee dans l'environnement -- qualite de voix
-nettement superieure, cle personnelle de l'utilisateur. Repli AUTOMATIQUE
+Fournisseur PRIORITAIRE (2026-08-22, demande explicite) : Fish Audio, si
+FISH_AUDIO_API_KEY est renseignee dans l'environnement. Repli AUTOMATIQUE
 sur edge-tts (voix neuronales Microsoft Edge, gratuit, sans cle) si la cle
-est absente, ou si l'appel ElevenLabs echoue pour quelque raison que ce
-soit (quota epuise, reseau, cle revoquee...) -- meme philosophie de
+est absente, ou si l'appel Fish Audio echoue pour quelque raison que ce
+soit (credit API epuise, reseau, cle revoquee...) -- meme philosophie de
 cascade resiliente que generation/writer.py (fournisseurs LLM) et
 generation/illustrate.py (image) : ne JAMAIS laisser une panne d'un
 fournisseur externe bloquer la generation video.
 
+Historique (2026-08-22) : ElevenLabs essaye en premier, retire le jour
+meme -- credit epuise des le 1er test reel (quota_exceeded, compte
+gratuit). Fish Audio choisi a la place (cle fournie par l'utilisateur),
+MAIS son credit API est lui aussi vide au moment de l'integration (402
+"Insufficient API credit" des le test de la cle -- credit API distinct du
+credit plateforme, cf. https://fish.audio/app/developers). L'integration
+reste branchee : elle fonctionnera automatiquement des que du credit API
+est ajoute sur ce compte, sans changement de code.
+
 edge-tts est un paquet TIERS (pas stdlib) : ajoute a requirements.txt.
 Fonctionne de facon 100% equivalente a illustrate.py cote philosophie
 (pas de cle, pas de compte) -- seule difference : c'est une bibliotheque
-Python (API asyncio), pas un simple GET HTTP. L'appel ElevenLabs, lui,
+Python (API asyncio), pas un simple GET HTTP. L'appel Fish Audio, lui,
 est un simple POST HTTP (urllib stdlib, zero dependance supplementaire).
 """
 import asyncio
@@ -22,15 +30,18 @@ import os
 import urllib.request
 import urllib.error
 
-ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "").strip()
-# Voix par defaut ElevenLabs : "Daniel" (Steady Broadcaster), premade --
-# verifiee EN CONDITIONS REELLES le 2026-08-22 avec la cle du compte (le
-# defaut generique "Rachel" ne fonctionne PAS : 402 payment_required, "Free
-# users cannot use library voices via the API" -- Daniel fait partie des
-# voix propres au compte, testee sans erreur). Surchargeable par
-# ELEVENLABS_VOICE_ID (voir GET /v1/voices pour la liste du compte).
-ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "onwK4e9ZLuTAKqWW03F9")
-ELEVENLABS_TIMEOUT = int(os.environ.get("ELEVENLABS_TIMEOUT_SEC", "60"))
+FISH_AUDIO_API_KEY = os.environ.get("FISH_AUDIO_API_KEY", "").strip()
+# reference_id (voix) : laisse vide -> voix par defaut du modele cote Fish
+# Audio (aucune voix specifique au compte verifiee -- credit API epuise au
+# moment de l'integration, impossible de tester en conditions reelles,
+# voir docstring plus haut). Surchargeable par FISH_AUDIO_VOICE_ID des
+# qu'une voix du compte aura pu etre choisie/testee.
+FISH_AUDIO_VOICE_ID = os.environ.get("FISH_AUDIO_VOICE_ID", "").strip()
+# Modele TTS (en-tete "model", PAS le corps JSON -- voir doc API) : "s1" =
+# le plus econome en credit, raisonnable par defaut vu le peu de credit
+# disponible sur ce compte. Surchargeable par FISH_AUDIO_MODEL.
+FISH_AUDIO_MODEL = os.environ.get("FISH_AUDIO_MODEL", "s1")
+FISH_AUDIO_TIMEOUT = int(os.environ.get("FISH_AUDIO_TIMEOUT_SEC", "60"))
 
 # Voix francaises neuronales disponibles (verifie 2026-08-20, liste complete
 # via `python -m edge_tts --list-voices`). HenriNeural (homme) retenu par
@@ -50,32 +61,34 @@ DEFAULT_VOICE = VOICES_FR["henri"]
 MAX_CHARS = 8000
 
 
-def _narrate_elevenlabs(clean: str, out_path: str) -> dict:
+def _narrate_fish_audio(clean: str, out_path: str) -> dict:
     """POST direct (urllib stdlib) -- pas de SDK tiers ajoute pour un simple
-    appel HTTP. Renvoie {ok, path, error} comme narrate_to_file()."""
-    url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}"
-    body = json.dumps({
-        "text": clean,
-        "model_id": "eleven_multilingual_v2",
-        "voice_settings": {"stability": 0.5, "similarity_boost": 0.75},
-    }).encode("utf-8")
-    req = urllib.request.Request(url, data=body, method="POST", headers={
-        "xi-api-key": ELEVENLABS_API_KEY,
-        "Content-Type": "application/json",
-        "Accept": "audio/mpeg",
-    })
+    appel HTTP. Renvoie {ok, path, error} comme narrate_to_file(). Schema
+    verifie contre la doc officielle (docs.fish.audio/api-reference, 2026-
+    08-22) : POST /v1/tts, auth Bearer, modele via l'EN-TETE "model" (pas le
+    corps JSON), reference_id optionnel (voix par defaut du modele si absent)."""
+    body = {"text": clean, "format": "mp3", "normalize": True}
+    if FISH_AUDIO_VOICE_ID:
+        body["reference_id"] = FISH_AUDIO_VOICE_ID
+    req = urllib.request.Request(
+        "https://api.fish.audio/v1/tts", data=json.dumps(body).encode("utf-8"),
+        method="POST", headers={
+            "Authorization": f"Bearer {FISH_AUDIO_API_KEY}",
+            "Content-Type": "application/json",
+            "model": FISH_AUDIO_MODEL,
+        })
     try:
-        with urllib.request.urlopen(req, timeout=ELEVENLABS_TIMEOUT) as r:
+        with urllib.request.urlopen(req, timeout=FISH_AUDIO_TIMEOUT) as r:
             audio = r.read()
     except urllib.error.HTTPError as e:
         detail = ""
         try: detail = e.read().decode("utf-8", "ignore")[:300]
         except Exception: pass
-        return {"ok": False, "path": None, "error": f"elevenlabs_http_{e.code}: {detail}"}
+        return {"ok": False, "path": None, "error": f"fish_audio_http_{e.code}: {detail}"}
     except Exception as e:
-        return {"ok": False, "path": None, "error": f"elevenlabs_{type(e).__name__}: {e}"}
+        return {"ok": False, "path": None, "error": f"fish_audio_{type(e).__name__}: {e}"}
     if len(audio) < 1024:
-        return {"ok": False, "path": None, "error": "elevenlabs_audio_vide"}
+        return {"ok": False, "path": None, "error": "fish_audio_audio_vide"}
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     with open(out_path, "wb") as f:
         f.write(audio)
@@ -109,8 +122,8 @@ def narrate_to_file(text: str, out_path: str, voice: str = None) -> dict:
     et renvoyee dans le dict (coherent avec illustrate.illustrate(), qui ne
     fait jamais planter le cycle appelant).
 
-    Cascade (2026-08-22) : ElevenLabs d'abord si une cle est configuree,
-    edge-tts en repli automatique (cle absente OU appel ElevenLabs en echec)
+    Cascade (2026-08-22) : Fish Audio d'abord si une cle est configuree,
+    edge-tts en repli automatique (cle absente OU appel Fish Audio en echec)
     -- jamais d'echec total de narration a cause d'un seul fournisseur."""
     voice = voice or DEFAULT_VOICE
     clean = (text or "").strip()
@@ -119,14 +132,14 @@ def narrate_to_file(text: str, out_path: str, voice: str = None) -> dict:
     if len(clean) > MAX_CHARS:
         clean = clean[:MAX_CHARS]
 
-    if ELEVENLABS_API_KEY:
-        res = _narrate_elevenlabs(clean, out_path)
+    if FISH_AUDIO_API_KEY:
+        res = _narrate_fish_audio(clean, out_path)
         if res["ok"]:
             return res
-        # Repli silencieux vers edge-tts, mais le detail de l'echec ElevenLabs
+        # Repli silencieux vers edge-tts, mais le detail de l'echec Fish Audio
         # est conserve dans le message si edge-tts echoue aussi (diagnostic).
         fallback = _narrate_edge_tts(clean, out_path, voice)
         if not fallback["ok"]:
-            fallback["error"] = f"elevenlabs_echec({res['error']}) puis {fallback['error']}"
+            fallback["error"] = f"fish_audio_echec({res['error']}) puis {fallback['error']}"
         return fallback
     return _narrate_edge_tts(clean, out_path, voice)
