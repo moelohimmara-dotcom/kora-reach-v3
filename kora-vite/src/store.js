@@ -24,6 +24,13 @@ export const Store = (() => {
     auditFilter: { type: "all", q: "" },
     sources: [],
     videos: [],
+    // Centre de notifications PERSISTANT (2026-08-22) : remplace l'ancien
+    // historique local de toasts (app.js, _notifications) -- survit au
+    // rechargement, partagé entre onglets/appareils, signale les évènements
+    // de fond (cycle/vidéo terminés) même si personne ne regardait au bon
+    // moment. Voir editorial/notifications.py.
+    notifications: [],
+    notifUnreadCount: 0,
     // videoJob (2026-08-21) : job de génération vidéo en cours, suivi au
     // niveau du Store (pas du sheet) pour survivre à la navigation -- c'est
     // lui qui pilote le bandeau global #videoJobBanner (visible depuis
@@ -381,6 +388,33 @@ export const Store = (() => {
   async function loadVideos() {
     try { setState({ videos: (await api("/api/videos")).videos || [] }); }
     catch (e) { setState({ ui: { ...state.ui, error: e.message } }); }
+  }
+  // Centre de notifications persistant (2026-08-22). Silencieux en cas
+  // d'échec (comme loadStats()) : un centre de notifications qui ne charge
+  // pas ne doit jamais faire planter le reste du dashboard.
+  async function loadNotifications() {
+    try {
+      const r = await api("/api/notifications");
+      setState({ notifications: r.notifications || [], notifUnreadCount: r.unread_count || 0 });
+    } catch (e) { /* silencieux */ }
+  }
+  async function markNotificationRead(id) {
+    // Optimiste : coche tout de suite côté client, confirmé par le prochain
+    // loadNotifications() (30s ou action explicite) -- pas la peine
+    // d'attendre l'aller-retour réseau pour que le badge se corrige.
+    const n = (state.notifications || []).find(x => x.id === id);
+    if (n && !n.read) {
+      n.read = true;
+      setState({ notifications: state.notifications, notifUnreadCount: Math.max(0, state.notifUnreadCount - 1) });
+    }
+    try { await api("/api/notifications/read", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }); }
+    catch (e) { /* silencieux, corrige par le prochain loadNotifications() */ }
+  }
+  async function markAllNotificationsRead() {
+    const marked = (state.notifications || []).map(n => ({ ...n, read: true }));
+    setState({ notifications: marked, notifUnreadCount: 0 });
+    try { await api("/api/notifications/read", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }); }
+    catch (e) { /* silencieux */ }
   }
   // Gouvernance des sources ouverte à l'UI (2026-08-19, advanced uniquement
   // côté backend — voir permissions.py "gerer_sources"). addSource lève en
@@ -1037,6 +1071,7 @@ export const Store = (() => {
         // écran de progression n'apparaît jamais ici (voir _onVisibilityChange).
         resumeCycleWatch();
         resumeVideoWatch();
+        loadNotifications();
       }
     }, intervalMs);
     // Recharge aussi quand l'onglet redevient visible
@@ -1059,6 +1094,7 @@ export const Store = (() => {
       // premier plan. Même chose pour resumeVideoWatch() (bandeau vidéo).
       resumeCycleWatch();
       resumeVideoWatch();
+      loadNotifications();
     }
   }
 
@@ -1178,6 +1214,7 @@ export const Store = (() => {
   return {
     state, setState, subscribe, api,
     loadHealth, loadLast, loadHITL, loadAudit, loadSources, loadVideos, addSource, updateSource, loadSettings, applySettings,
+    loadNotifications, markNotificationRead, markAllNotificationsRead,
     startCycle, resumeCycleWatch, cancelCycle, decide, retract, setRoute, openSheet, closeSheet, wait,
     startVideoGeneration, getVideoStatus, startVideoJob, resumeVideoWatch,
     formatEta: _formatEta,

@@ -13,6 +13,7 @@ import threading
 
 import generation.video as gvideo
 from editorial.hitl_store import get_fact, set_video_status
+import editorial.notifications as notifications
 
 # Racine du repo (voir commentaire equivalent dans editorial/audit.py,
 # identity/auth.py, core/db.py -- meme piege deja rencontre et evite lors
@@ -61,6 +62,10 @@ def _run_generation(fact_id: str, title: str, article_text: str, image_url: str,
             on_stage=_on_stage)
     except Exception as e:
         set_video_status(fact_id, "error", error=f"{type(e).__name__}: {e}")
+        # Notification persistante (2026-08-22) : generation 1-3 min, souvent
+        # lancee puis on quitte la page -- sans ceci, l'echec passe inapercu
+        # tant qu'on n'a pas rouvert la fiche de l'article par hasard.
+        notifications.create("video_error", f"Échec de la génération vidéo : {title}", route="videos", fact_id=fact_id)
         if on_complete:
             try: on_complete()
             except Exception: pass
@@ -69,8 +74,10 @@ def _run_generation(fact_id: str, title: str, article_text: str, image_url: str,
         # Chemin stocke = nom de fichier seul (le dossier est fixe et connu
         # cote serveur -- voir server.py, endpoint de service des videos).
         set_video_status(fact_id, "done", path=out_name, duration_sec=res["duration_sec"])
+        notifications.create("video_done", f"Vidéo narrée générée : {title}", route="videos", fact_id=fact_id)
     else:
         set_video_status(fact_id, "error", error=res["error"])
+        notifications.create("video_error", f"Échec de la génération vidéo : {title}", route="videos", fact_id=fact_id)
     if on_complete:
         try: on_complete()
         except Exception: pass

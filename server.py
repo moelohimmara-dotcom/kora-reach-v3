@@ -34,6 +34,7 @@ from editorial.hitl_store import (
 import publishing.transmit as transmit
 import generation.writer as writer
 import orchestration.video as video_orchestrator
+import editorial.notifications as notifications
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.environ.get("KORA_STATIC", os.path.join(ROOT, "static"))
@@ -548,6 +549,14 @@ class Handler(BaseHTTPRequestHandler):
                     "progress": reach_agent.get_progress() if LAST_CYCLE["running"] else None,
                     "video_lock": vlock,
                 })
+        if path == "/api/notifications":
+            # Centre de notifications PERSISTANT (2026-08-22) : remplace le
+            # simple historique de toasts local au frontend -- signale les
+            # evenements de fond (cycle/video termines) meme si personne ne
+            # regardait au bon moment, partage entre onglets/appareils.
+            if not self._require_auth():
+                return
+            return self._send(200, notifications.list_recent())
         if path == "/api/auth/me":
             sid = auth.read_cookie_sid(self.headers)
             u = auth.get_session_user(sid) if sid else None
@@ -766,12 +775,21 @@ class Handler(BaseHTTPRequestHandler):
                     with _LAST_LOCK:
                         LAST_CYCLE["result"] = result
                         LAST_CYCLE["ts"] = datetime.now().isoformat(timespec="seconds")
+                    # Notification persistante (2026-08-22) : un cycle dure
+                    # facilement 20-60 min -- sans ceci, personne ne l'apprend
+                    # si tout le monde a quitte la page entre-temps.
+                    n = len(facts)
+                    if n > 0:
+                        notifications.create("cycle_done", f"Cycle terminé : {n} article(s) généré(s).", route="facts")
+                    else:
+                        notifications.create("info", "Cycle terminé : rien de nouveau à générer.", route="cockpit")
                 except Exception as _cyc:
                     import traceback as _tb
                     _tb.print_exc()
                     with _LAST_LOCK:
                         LAST_CYCLE["result"] = {"error": str(_cyc)}
                         LAST_CYCLE["ts"] = datetime.now().isoformat(timespec="seconds")
+                    notifications.create("cycle_error", f"Le cycle a échoué : {str(_cyc)[:200]}", route="cockpit")
                 finally:
                     with _LAST_LOCK:
                         LAST_CYCLE["running"] = False
@@ -934,6 +952,15 @@ class Handler(BaseHTTPRequestHandler):
                                 tx["provider"])
                             res["transmission"] = tx
             return self._send(200, res)
+        if p.path == "/api/notifications/read":
+            if not self._require_auth():
+                return
+            nid = payload.get("id")
+            if nid is not None:
+                notifications.mark_read(nid)
+            else:
+                notifications.mark_all_read()
+            return self._send(200, {"ok": True})
         if p.path == "/api/hitl/retract":
             fid = payload.get("fact_id")
             res = retract(fid, EDITOR_NAME)

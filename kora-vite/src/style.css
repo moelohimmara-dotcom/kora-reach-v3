@@ -2123,10 +2123,17 @@ html.icons-ready .material-icons { visibility: visible; }
 .notif-panel-body { padding: 6px; }
 .notif-empty { padding: 16px; text-align: center; }
 .notif-group-label { font-size: 11px; color: var(--text-secondary); padding: 8px 8px 4px; }
-.notif-item { display: flex; align-items: flex-start; gap: 8px; padding: 8px; border-radius: 8px; }
+/* .notif-item est un <button> depuis le 2026-08-22 (clic -> marque lu +
+   navigue vers l'élément concerné) -- reset des styles natifs de bouton,
+   même principe que .src-row (voir plus haut). */
+.notif-item { display: flex; align-items: flex-start; gap: 8px; padding: 8px; border-radius: 8px; width: 100%; background: none; border: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.notif-item:hover, .notif-item:focus-visible { background: var(--surface-raised); outline: none; }
 .notif-item .ic { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 1px; }
+.notif-item-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .notif-item-msg { font-size: 13px; color: var(--text-primary); }
+.notif-item-time { font-size: 11px; color: var(--text-secondary); }
 .notif-unread { background: var(--surface-raised); }
+.notif-unread .notif-item-msg { font-weight: 600; }
 .notif-ic-error { color: var(--danger); }
 .notif-ic-success { color: var(--success); }
 .link-btn { background: none; border: none; color: var(--coral); font-size: 12px; cursor: pointer; padding: 0; }
