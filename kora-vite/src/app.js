@@ -3939,6 +3939,16 @@ function boot() {
       Store.checkAuth().then((ok) => {
         if (!ok) { renderAuth("login"); return; }
         Store.loadAll();   // charge facts/health/sources dès la session validée
+        // Bug corrigé (2026-08-22, rapporté : "F5 sur la page Vidéos
+        // n'affiche plus aucune vidéo") : loadAll() ci-dessus ne couvre que
+        // facts/health/sources/audit/stats -- SEULE la navigation SPA
+        // (navigate(), plus bas) chargeait les vidéos, jamais un
+        // rechargement complet de page. Le backend renvoyait pourtant bien
+        // les 3 vidéos (vérifié directement) -- s.videos restait juste à []
+        // (valeur initiale du Store) faute d'appel. Même logique que le
+        // switch de navigate() : ne recharge QUE si la route au démarrage
+        // en a besoin (pas de requête inutile sur les autres routes).
+        if (Store.state.route === "videos") Store.loadVideos();
         // Reconnexion au cycle en cours côté serveur (2026-08-19) : un cycle
         // tourne dans un thread détaché, jamais affecté par un F5 — mais SANS
         // ceci, l'écran de progression ("Article X sur Y") disparaissait au
