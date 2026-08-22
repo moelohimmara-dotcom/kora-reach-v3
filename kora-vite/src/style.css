@@ -814,8 +814,14 @@ html.icons-ready .material-icons { visibility: visible; }
   border-radius: 50%; border: 1px solid var(--glass-border-strong);
   background: var(--surface-raised); color: var(--text-primary); cursor: pointer;
 }
-.video-ctrl-btn:hover, .video-ctrl-btn:focus-visible { border-color: var(--accent); outline: none; }
+.video-ctrl-btn:hover { border-color: var(--accent); }
+/* Anneau de focus renforcé (2026-08-22, revue ui-ux-pro-max : un focus
+   custom doit rester clairement visible, pas juste un changement de couleur
+   de bordure) -- outline conservé, pas supprimé, en plus du changement de
+   couleur de bordure existant. */
+.video-ctrl-btn:focus-visible { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 2px; }
 .video-ctrl-btn .ic { width: 16px; height: 16px; }
+.video-player-controls { flex-wrap: wrap; }
 .video-ctrl-time { font-size: var(--t-label-sm); color: var(--text-secondary); font-variant-numeric: tabular-nums; margin-left: auto; }
 /* Barre de progression cliquable (seek) -- absente des controles ajoutes le
    2026-08-22 (Lecture/Pause/Stop seuls), corrige sur demande explicite. */
@@ -1182,6 +1188,41 @@ html.icons-ready .material-icons { visibility: visible; }
 .video-row.video-row-trashed { cursor: default; }
 .video-row.video-row-trashed:hover { background: none; }
 .video-row-actions { display: flex; gap: 8px; margin-left: auto; flex: none; }
+/* Miniature de la ligne Vidéos (2026-08-22, amélioration UX) : réutilise
+   l'image de couverture déjà chargée par le lecteur -- rend la liste
+   scannable en un coup d'œil (avant : icône générique identique partout).
+   Durée incrustée en coin bas-droit (convention YouTube/Netflix), posée
+   uniquement une fois la vidéo générée (video_duration_sec connu). */
+.video-thumb {
+  flex: none; width: 72px; height: 44px; border-radius: var(--radius-sm);
+  overflow: hidden; position: relative; background: var(--md-sys-color-primary-container);
+  display: grid; place-items: center;
+}
+.video-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.video-thumb-fallback { color: var(--md-sys-color-on-primary-container); display: grid; place-items: center; }
+.video-thumb-fallback .ic { width: 18px; height: 18px; }
+.video-thumb-duration {
+  position: absolute; right: 3px; bottom: 3px; padding: 1px 4px; border-radius: 3px;
+  background: rgba(0, 0, 0, .75); color: #fff; font-size: 10px; font-weight: 700;
+  font-variant-numeric: tabular-nums; line-height: 1.4;
+}
+/* Mini-stepper d'étapes de génération (2026-08-22, amélioration UX) --
+   remplace le simple libellé texte qui changeait ("Narration…" puis
+   "Image…" etc.) par une vraie indication de progression (bonne pratique
+   confirmée : un processus multi-étapes doit montrer où on en est, pas
+   juste l'étape courante isolée). */
+.video-stage-stepper { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+.video-stage-step { display: flex; align-items: center; gap: 3px; font-size: var(--t-label-sm); color: var(--text-secondary); }
+.video-stage-step:not(:last-child)::after { content: ""; width: 10px; height: 1px; background: var(--glass-border-strong); margin: 0 2px; }
+.video-stage-step .ic { width: 12px; height: 12px; }
+.video-stage-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--glass-border-strong); flex: none; }
+.video-stage-done { color: var(--md-sys-color-tertiary, var(--news)); }
+.video-stage-done .ic { color: var(--md-sys-color-tertiary, var(--news)); }
+.video-stage-active { color: var(--text-primary); font-weight: 700; }
+.video-stage-active .video-stage-dot { background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); animation: video-stage-pulse 1.2s ease-in-out infinite; }
+.video-stage-pending .video-stage-label { opacity: .6; }
+@keyframes video-stage-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+@media (prefers-reduced-motion: reduce) { .video-stage-active .video-stage-dot { animation: none; } }
 /* .src-row est un <button> (wireframe 7.2, clic -> détail source) : reset des
    styles natifs de bouton pour hériter du gabarit .list-row existant. */
 .src-row { display: flex; width: 100%; background: none; border: none; border-bottom: 1px solid var(--glass-border); font: inherit; color: inherit; text-align: left; cursor: pointer; }
