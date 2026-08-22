@@ -121,6 +121,32 @@ export const SPRITE = `<svg xmlns="http://www.w3.org/2000/svg" style="display:no
   <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M6.75 3.68c-.9-.53-2 .13-2 1.17v14.3c0 1.04 1.1 1.7 2 1.17l12.14-7.15a1.36 1.36 0 0 0 0-2.34z" /></symbol>
   <symbol id="i-pause" viewBox="0 0 24 24"><g fill="currentColor"><rect x="6" y="4" width="4.5" height="16" rx="1" /><rect x="13.5" y="4" width="4.5" height="16" rx="1" /></g></symbol>
   <symbol id="i-stop" viewBox="0 0 24 24"><rect fill="currentColor" x="5.5" y="5.5" width="13" height="13" rx="2" /></symbol>
+  <!-- i-volume/i-mute/i-fullscreen/i-back10/i-forward10 (2026-08-22, lecteur
+       vidéo enrichi) : même convention media-player que i-play/i-pause/i-stop. -->
+  <symbol id="i-volume" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor" stroke="none" />
+  <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+  <path d="M18 6a8.5 8.5 0 0 1 0 12" />
+</g></symbol>
+  <symbol id="i-mute" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor" stroke="none" />
+  <path d="m16 9 5 6" />
+  <path d="m21 9-5 6" />
+</g></symbol>
+  <symbol id="i-fullscreen" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+  <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+  <path d="M21 16v3a2 2 0 0 1-2 2h-3" />
+  <path d="M8 21H5a2 2 0 0 1-2-2v-3" />
+</g></symbol>
+  <symbol id="i-back10" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M3 12a9 9 0 1 0 3-6.7" />
+  <path d="M3 4v5h5" />
+</g><text x="12" y="16" font-size="8" font-weight="700" fill="currentColor" stroke="none" text-anchor="middle">10</text></symbol>
+  <symbol id="i-forward10" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M21 12a9 9 0 1 1-3-6.7" />
+  <path d="M21 4v5h-5" />
+</g><text x="12" y="16" font-size="8" font-weight="700" fill="currentColor" stroke="none" text-anchor="middle">10</text></symbol>
   <symbol id="i-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <circle cx="12" cy="12" r="4" />
   <path d="M12 2v2" />
