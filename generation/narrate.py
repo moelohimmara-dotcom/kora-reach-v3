@@ -27,6 +27,7 @@ est un simple POST HTTP (urllib stdlib, zero dependance supplementaire).
 import asyncio
 import json
 import os
+import re
 import urllib.request
 import urllib.error
 
@@ -45,6 +46,25 @@ FISH_AUDIO_VOICE_ID = os.environ.get("FISH_AUDIO_VOICE_ID", "da31468f7d024883854
 # superieur (s2.1-pro, s2-pro) est prefere.
 FISH_AUDIO_MODEL = os.environ.get("FISH_AUDIO_MODEL", "s2.1-pro-free")
 FISH_AUDIO_TIMEOUT = int(os.environ.get("FISH_AUDIO_TIMEOUT_SEC", "60"))
+# Expressivite / prosodie (2026-08-23, demande explicite : "sa lecture doit
+# etre vivante et realiste, comme le ferait un lecteur humain") -- parametres
+# CONFIRMES contre la doc officielle (docs.fish.audio/api-reference/endpoint/
+# openapi-v1/text-to-speech, verifie 2026-08-23), jamais devines :
+# - temperature (0-1, defaut API 0.7) : "Controls expressiveness. Higher is
+#   more varied, lower is more consistent." Releve legerement au-dessus du
+#   defaut pour une intonation moins plate qu'une lecture mecanique, sans
+#   aller jusqu'a l'instabilite (recommande < 0.9 par la doc).
+# - prosody.speed (0.5-2.0, defaut 1.0) : legerement < 1.0, debit d'actu
+#   naturel (un present­ateur ne debite pas a vitesse machine).
+# - condition_on_previous_chunks : le texte d'un article depasse souvent
+#   chunk_length (300 caracteres, decoupage interne cote Fish Audio) --
+#   sans ce flag, chaque nouveau segment repart "a froid" et la voix peut
+#   changer legerement de ton entre deux paragraphes ; active, elle garde
+#   la MEME intonation tout du long, essentiel pour un rendu credible sur
+#   un article de plusieurs paragraphes.
+FISH_AUDIO_TEMPERATURE = float(os.environ.get("FISH_AUDIO_TEMPERATURE", "0.85"))
+FISH_AUDIO_TOP_P = float(os.environ.get("FISH_AUDIO_TOP_P", "0.7"))
+FISH_AUDIO_SPEED = float(os.environ.get("FISH_AUDIO_SPEED", "0.97"))
 
 # Voix francaises neuronales disponibles (verifie 2026-08-20, liste complete
 # via `python -m edge_tts --list-voices`). HenriNeural (homme) retenu par
@@ -70,7 +90,12 @@ def _narrate_fish_audio(clean: str, out_path: str) -> dict:
     verifie contre la doc officielle (docs.fish.audio/api-reference, 2026-
     08-22) : POST /v1/tts, auth Bearer, modele via l'EN-TETE "model" (pas le
     corps JSON), reference_id optionnel (voix par defaut du modele si absent)."""
-    body = {"text": clean, "format": "mp3", "normalize": True}
+    body = {
+        "text": clean, "format": "mp3", "normalize": True,
+        "temperature": FISH_AUDIO_TEMPERATURE, "top_p": FISH_AUDIO_TOP_P,
+        "prosody": {"speed": FISH_AUDIO_SPEED, "volume": 0, "normalize_loudness": True},
+        "condition_on_previous_chunks": True,
+    }
     if FISH_AUDIO_VOICE_ID:
         body["reference_id"] = FISH_AUDIO_VOICE_ID
     req = urllib.request.Request(
@@ -106,7 +131,14 @@ def _narrate_edge_tts(clean: str, out_path: str, voice: str) -> dict:
                 "error": "edge_tts_non_installe (pip install edge-tts)"}
 
     async def _run():
-        communicate = edge_tts.Communicate(clean, voice)
+        # rate legerement ralenti (2026-08-23, meme demande que Fish Audio
+        # ci-dessus : "lecture vivante et realiste") -- edge-tts n'a pas de
+        # parametre d'expressivite comme "temperature" (voix neuronale a
+        # prosodie fixe), seul le debit est ajustable ici ; ce chemin n'est
+        # de toute facon qu'un REPLI (Fish Audio est prioritaire), garde
+        # coherent avec le reglage principal plutot que de laisser un debit
+        # different selon le fournisseur qui a fini par repondre.
+        communicate = edge_tts.Communicate(clean, voice, rate="-3%")
         await communicate.save(out_path)
 
     try:
@@ -117,6 +149,89 @@ def _narrate_edge_tts(clean: str, out_path: str, voice: str) -> dict:
         return {"ok": True, "path": out_path, "error": None}
     except Exception as e:
         return {"ok": False, "path": None, "error": f"{type(e).__name__}: {e}"}
+
+
+# Réécriture "édito" (2026-08-23, demande explicite : "sa lecture doit être
+# vivante et réaliste, comme le ferait un lecteur humain. Il doit le faire
+# sous forme d'édito") -- l'article ECRIT (titre markdown '# ...', chapô,
+# corps, signature 'Par La Rédaction') est rédigé pour être LU DES YEUX, pas
+# pour être dit à voix haute : le lire tel quel à une voix de synthèse
+# produit une lecture plate et mécanique, symboles markdown compris. Cette
+# fonction transforme le texte en un script d'édito radio AVANT narration --
+# même contenu factuel, mais restructuré pour l'oral (accroche, connecteurs
+# parlés, rythme varié, clôture naturelle). Aucune invention : mêmes règles
+# anti-hallucination que generation/writer.py (le LLM ne fait que reformuler
+# ce qui est déjà dans l'article fourni).
+_EDITO_SYSTEM_PROMPT = (
+    "Tu es un ÉDITORIALISTE RADIO chevronné qui présente les actualités de KORA, "
+    "média d'information guinéen (Conakry), à l'oral. On te donne un article DÉJÀ "
+    "RÉDIGÉ (titre + texte, pour la lecture des yeux). Ta mission : le transformer "
+    "en un texte destiné à être LU À HAUTE VOIX par une voix de synthèse, sous "
+    "forme d'ÉDITO -- vivant, naturel, incarné, comme le ferait un vrai "
+    "présentateur humain en studio. JAMAIS une lecture plate mot à mot de "
+    "l'article écrit.\n\n"
+    "RÈGLES STRICTES :\n"
+    "1. ANTI-HALLUCINATION : tu ne dois RIEN ajouter comme fait, chiffre, date, "
+    "nom ou citation qui n'est pas déjà présent dans l'article fourni. Tu "
+    "reformules et restructures pour l'oral, tu n'inventes JAMAIS de contenu "
+    "nouveau, tu ne complètes JAMAIS une information manquante.\n"
+    "2. OUVERTURE : commence par une phrase d'accroche naturelle et vivante qui "
+    "capte l'attention, comme le ferait un présentateur -- jamais 'Titre :', "
+    "jamais de symbole markdown ('#', '**', '##'), jamais de label.\n"
+    "3. STYLE ORAL : phrases courtes et rythmées, connecteurs parlés naturels "
+    "('Alors,', 'Et c'est là que...', 'Concrètement,', 'Sur le terrain,'), "
+    "variation du rythme (alterne phrases courtes et longues), AUCUN symbole "
+    "markdown, AUCUNE liste à puces, AUCUN intertitre. Le texte doit se lire "
+    "naturellement à voix haute, avec une ponctuation qui marque les "
+    "respirations (virgules, points courts).\n"
+    "4. TON : chaleureux mais professionnel, factuel et neutre sur le fond -- "
+    "l'énergie vient du RYTHME et de la construction des phrases, jamais d'un "
+    "avis personnel, d'une opinion ou d'un jugement de valeur absent de "
+    "l'article source.\n"
+    "5. CLÔTURE : termine par une courte phrase de sortie naturelle et orale "
+    "(par exemple 'Voilà pour cette édition.' ou 'On en reste là pour cette "
+    "actualité.') -- jamais 'Par La Rédaction' tel quel, c'est une signature "
+    "écrite, pas une formule orale.\n"
+    "6. ANONYMAT : ne mentionne jamais que ce texte ou cette voix est généré "
+    "par une IA, un modèle, un assistant ou un robot -- l'auditeur doit croire "
+    "à une vraie voix de rédaction humaine.\n"
+    "7. LANGUE : français uniquement, aucun mot ni expression dans une autre "
+    "langue.\n"
+    "Réponds UNIQUEMENT par le texte de l'édito, prêt à être lu à voix haute, "
+    "rien d'autre (pas de titre, pas de commentaire, pas de guillemets "
+    "englobants)."
+)
+
+
+def build_edito_script(title: str, article_text: str) -> str:
+    """Transforme un article ÉCRIT (titre markdown + chapô + corps + signature)
+    en un script destiné à être LU À HAUTE VOIX sous forme d'édito. Réutilise
+    le même LLM que la rédaction d'article (generation.writer.simple_completion,
+    cascade de fournisseurs identique) -- import paresseux pour éviter tout
+    couplage/coût au chargement de ce module (même précaution que
+    _derive_source_level dans publishing/transmit.py).
+
+    Repli MÉCANIQUE (jamais de blocage de la génération vidéo pour ça) : si
+    l'appel LLM échoue (réseau, disjoncteur ouvert, réponse vide/suspecte),
+    renvoie le texte source dégrossi (titre markdown et signature retirés)
+    plutôt qu'un texte d'article brut avec ses symboles."""
+    clean_fallback = re.sub(r"^#\s.*\n+", "", article_text or "", count=1)
+    clean_fallback = re.sub(r"\n*Par La R[ée]daction\s*$", "", clean_fallback,
+                             flags=re.IGNORECASE).strip()
+    try:
+        import generation.writer as writer
+    except Exception:
+        return clean_fallback
+    user = f"TITRE : {title}\n\nARTICLE :\n{article_text}"
+    try:
+        out = writer.simple_completion(_EDITO_SYSTEM_PROMPT, user, max_tokens=1400)
+    except Exception:
+        out = None
+    # Reponse vide ou anormalement courte (LLM en echec silencieux, sortie
+    # tronquee...) -> repli mecanique, jamais un edito manifestement casse.
+    if not out or len(out.split()) < 20:
+        return clean_fallback
+    return out.strip()
 
 
 def narrate_to_file(text: str, out_path: str, voice: str = None) -> dict:

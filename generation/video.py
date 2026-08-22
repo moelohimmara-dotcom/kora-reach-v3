@@ -171,8 +171,16 @@ def generate_video_for_article(title: str, article_text: str, image_url: str,
     work_dir = tempfile.mkdtemp(prefix="kora_video_work_")
     try:
         _stage("narration")
+        # Édito (2026-08-23, demande explicite : "sa lecture doit être vivante
+        # et réaliste, comme le ferait un lecteur humain. Il doit le faire sous
+        # forme d'édito") -- l'article ECRIT (titre markdown, chapô, corps,
+        # signature) n'est pas narré tel quel : voir
+        # generation/narrate.py::build_edito_script pour la transformation en
+        # script oral. Repli mécanique intégré à cette fonction (jamais de
+        # blocage de la vidéo si le LLM édito échoue).
+        edito_text = narrate.build_edito_script(title, article_text)
         audio_path = os.path.join(work_dir, "voix.mp3")
-        nres = narrate.narrate_to_file(article_text, audio_path, voice=voice)
+        nres = narrate.narrate_to_file(edito_text, audio_path, voice=voice)
         if not nres["ok"]:
             return {"ok": False, "video_path": None, "duration_sec": None,
                     "error": f"narration: {nres['error']}"}
