@@ -156,7 +156,7 @@ def list_videos() -> list:
         cur = con.cursor()
         cur.execute(
             """SELECT fact_id, champion, status, video_status, video_stage,
-                      video_path, video_duration_sec, video_error, created_at
+                      video_path, video_duration_sec, video_error, created_at, image
                FROM hitl_facts
                WHERE video_status IS NOT NULL
                ORDER BY created_at DESC""")
@@ -170,9 +170,14 @@ def list_videos() -> list:
             champ = json.loads(d["champion"]) if d["champion"] else {}
         except Exception:
             champ = {}
+        # image (2026-08-22, poster du lecteur page Videos) : priorite a
+        # l'image reelle deja choisie pour l'article (colonne dediee), repli
+        # sur celle du champion si jamais absente (bases anciennes).
+        img = d.get("image") or (champ or {}).get("image", "")
         out.append({
             "fact_id": d["fact_id"],
             "title": (champ or {}).get("title", ""),
+            "image": img,
             "status": d.get("status"),
             "video_status": d.get("video_status"),
             "video_stage": d.get("video_stage"),
