@@ -520,6 +520,19 @@ html.icons-ready .material-icons { visibility: visible; }
 .chip-tertiary { background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); border-color: transparent; }
 .chip-warning { background: var(--md-sys-color-warning-container); color: var(--md-sys-color-on-warning-container); border-color: transparent; }
 .chip-error { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); border-color: transparent; }
+/* .role-badge (2026-08-22, audit mobile approfondi) : utilisé 2 fois
+   (titre "Paramètres Avancé", en-tête du tiroir "Agent Zone sensible")
+   mais AUCUNE règle CSS ne le stylait -- rendu en texte brut collé au
+   titre, sans repère visuel de "badge" (contrairement à .chip/.badge
+   partout ailleurs dans l'app). Même gabarit que .chip-warning : le rôle
+   avancé/la zone sensible méritent un signal visuel d'attention cohérent
+   avec l'icône ⚠ déjà présente dans le corps du tiroir Agent. */
+.role-badge {
+  display: inline-flex; align-items: center; height: 22px; padding: 0 9px;
+  border-radius: var(--radius-pill); font-size: var(--t-label-xs); font-weight: 700;
+  letter-spacing: .2px; vertical-align: middle; margin-left: 8px; white-space: nowrap;
+}
+.role-badge.role-advanced { background: var(--md-sys-color-warning-container); color: var(--md-sys-color-on-warning-container); }
 
 .pulse-card {
   position: relative; overflow: hidden; padding: var(--space-6); margin-bottom: var(--space-5);

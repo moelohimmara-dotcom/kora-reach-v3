@@ -54,6 +54,7 @@ CAPABILITIES = {
     "voir_prompts_agent": "advanced",         # GET /api/agent-prompts
     "voir_comptes": "advanced",               # GET /api/auth/users
     "purger_audit": "advanced",               # POST /api/audit/purge
+    "voir_audit_admin": "advanced",           # GET /api/audit/admin (2026-08-22, route manquante -- tiroir "Journal d'audit")
     "modifier_identite": "advanced",          # POST /api/settings
     "modifier_prompts_agent": "advanced",     # POST /api/agent-prompts
     "reinitialiser_prompts_agent": "advanced",  # POST /api/agent-prompts/reset

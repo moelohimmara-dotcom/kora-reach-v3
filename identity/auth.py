@@ -106,6 +106,71 @@ def log_auth_event(event, detail, ip=None):
         pass  # jamais bloquant
 
 
+# Libellés FR des événements (2026-08-22, bug corrigé : le tiroir "Journal
+# d'audit" de Paramètres n'avait AUCUNE route API pour lire auth_audit.log
+# -- accumulé silencieusement depuis le début (login_success/failure,
+# password_changed, role_changed, user_created/deleted, invitation_*...)
+# mais jamais exposé : le tiroir affichait "Aucune action admin enregistrée"
+# à chaque ouverture, laissant croire à tort qu'aucun événement de sécurité
+# n'avait eu lieu. Trouvé lors d'un audit mobile réel (22/08/2026).
+_ADMIN_EVENT_LABELS = {
+    "login_success": "Connexion réussie", "login_success_2fa": "Connexion réussie (2FA)",
+    "login_failure": "Échec de connexion", "login_failure_2fa": "Échec de connexion (2FA)",
+    "login_mfa_required": "Code 2FA demandé", "logout": "Déconnexion",
+    "password_changed": "Mot de passe changé", "mfa_enabled": "2FA activée",
+    "mfa_disabled": "2FA désactivée", "mfa_backup_code_used": "Code de secours 2FA utilisé",
+    "user_created": "Compte créé", "user_deleted": "Compte supprimé",
+    "role_changed": "Rôle modifié", "wp_publish_changed": "Droit d'envoi WP modifié",
+    "invitation_created": "Invitation envoyée", "invitation_revoked": "Invitation révoquée",
+    "invitation_resent": "Invitation renvoyée", "invitation_accepted": "Invitation acceptée",
+}
+
+
+def _admin_audit_day_label(d):
+    try:
+        dt = datetime.strptime(d, "%Y-%m-%d")
+        today = datetime.now().date()
+        if dt.date() == today: return "Aujourd'hui"
+        if dt.date() == today - timedelta(days=1): return "Hier"
+        return dt.strftime("%d %B %Y")
+    except Exception:
+        return d
+
+
+def get_admin_audit_days(limit_lines=1000):
+    """Lit auth_audit.log (append-only, format ts\\tevent\\tip\\tdetail) et le
+    regroupe par jour -- même forme que editorial.audit.get_daily() ({days:
+    [{label, count, events}]}), consommée par le tiroir "Journal d'audit".
+    Lecture des `limit_lines` DERNIÈRES lignes seulement (le fichier grossit
+    en continu ; jamais besoin de tout l'historique pour ce tiroir). Fail-
+    open : un fichier absent/illisible renvoie une liste vide, jamais une
+    exception (même philosophie défensive que log_auth_event ci-dessus)."""
+    try:
+        with open(_AUTH_LOG, "r", encoding="utf-8") as f:
+            lines = f.readlines()[-limit_lines:]
+    except Exception:
+        lines = []
+    days = {}
+    for line in reversed(lines):  # plus récent en premier
+        parts = line.rstrip("\n").split("\t")
+        if len(parts) < 4:
+            continue
+        ts, event, ip, detail = parts[0], parts[1], parts[2], "\t".join(parts[3:])
+        day_key = ts[:10]
+        if day_key not in days:
+            days[day_key] = {"date": day_key, "count": 0, "events": []}
+        days[day_key]["count"] += 1
+        days[day_key]["events"].append({
+            "ts": ts, "event": _ADMIN_EVENT_LABELS.get(event, event), "detail": detail,
+        })
+    out = []
+    for d in sorted(days.keys(), reverse=True):
+        item = days[d]
+        item["label"] = _admin_audit_day_label(d)
+        out.append(item)
+    return out
+
+
 def username_by_id(uid):
     ph = db.placeholder()
     con, _ = db.conn()

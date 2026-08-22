@@ -481,6 +481,17 @@ class Handler(BaseHTTPRequestHandler):
             if not self._require_auth():
                 return
             return self._send(200, {"days": get_daily(), "total": sum(d["count"] for d in get_daily())})
+        if path == "/api/audit/admin":
+            # Bug corrige 2026-08-22 (audit mobile reel) : le tiroir Parametres
+            # > "Journal d'audit" appelait cette route depuis le debut sans
+            # qu'elle n'ait jamais existe cote serveur (404 silencieux, lu a
+            # tort par le frontend comme "aucune action admin enregistree").
+            # auth_audit.log est deja alimente en continu (login/mot de passe/
+            # comptes/invitations, voir identity/auth.py log_auth_event) --
+            # il ne manquait que cette route pour le lire.
+            if not self._require_capability("voir_audit_admin"):
+                return
+            return self._send(200, {"days": auth.get_admin_audit_days()})
         if path == "/api/state":
             if not self._require_auth():
                 return
