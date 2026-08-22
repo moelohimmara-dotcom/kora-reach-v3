@@ -943,15 +943,22 @@ def get_dashboard_stats() -> dict:
     Invariant garanti (2026-08-19, bug corrigé — "Tous 86" mais somme des
     filtres = 89) : pending + transmitted + rejected + drafts + trash ==
     total_facts, TOUJOURS, par CONSTRUCTION (pending est calculé comme le
-    reste, pas comme une requête séparée qui peut diverger).
-    Root cause du bug : un article TRASHED dont la decision HITL est REJECTED
-    était compté à la fois dans 'trash' (tous les TRASHED, sans exception) ET
-    dans 'rejected' (via count_rejected(), qui inclut explicitement les
-    TRASHED+REJECTED) -> même article dans 2 catégories que le frontend
-    affiche comme mutuellement exclusives. Fix : 'trash' exclut désormais les
-    TRASHED dont la décision est REJECTED (ils ne comptent que dans 'rejected'),
-    et 'pending' absorbe tout le reste (catch-all, résiste à un nouveau statut
-    HITL qu'on oublierait d'ajouter ici demain)."""
+    reste, pas comme une requête séparée qui peut diverger). 'pending'
+    absorbe tout le reste (catch-all, résiste à un nouveau statut HITL
+    qu'on oublierait d'ajouter ici demain).
+
+    Répartition trash/rejected (révisée 2026-08-22, demande explicite) : un
+    article TRASHED dont la décision HITL est REJECTED compte désormais
+    dans 'trash' (PAS dans 'rejected') -- cohérent avec le bouton qui l'y a
+    envoyé ("Rejeter -> Mettre à la corbeille"), et il apparaît bien sur la
+    page Corbeille (voir viewTrash(), app.js, dont le filtre d'exclusion a
+    été retiré le même jour). 'rejected' ne compte donc que les faits au
+    statut REJECTED direct (jamais produit par decide() aujourd'hui, qui
+    convertit toujours REJECTED en TRASHED -- ce compteur reste à 0 en
+    pratique, résultat voulu). Précédente règle (19/08, inverse : trash
+    excluait les TRASHED+REJECTED) abandonnée le 22/08 : elle rendait le
+    bouton "Mettre à la corbeille" trompeur, l'article n'apparaissant
+    alors NULLE PART dans l'interface Corbeille malgré son statut."""
     _init()
     con, _ = db.conn()
     try:
@@ -975,14 +982,23 @@ def get_dashboard_stats() -> dict:
         transmitted = by_status.get("TRANSMITTED", 0) + by_status.get("APPROVED", 0)
         trashed_total = by_status.get("TRASHED", 0)
         rejected_status = by_status.get("REJECTED", 0)
-        # 2) Rejetes — délègue à count_rejected() (définition unique / SSOT) :
-        # statut REJECTED direct + TRASHED avec décision REJECTED.
-        rejected = count_rejected()
-        # 3) Corbeille EXCLUSIVE de Rejetés : on retire le chevauchement
-        # (TRASHED + décision REJECTED, déjà compté dans `rejected` ci-dessus)
-        # pour que les deux catégories ne comptent plus jamais le même article.
-        overlap_trashed_rejected = max(0, rejected - rejected_status)
-        trash = max(0, trashed_total - overlap_trashed_rejected)
+        # 2) Corbeille = TOUT le TRASHED, sans exception (2026-08-22, demande
+        # explicite) -- y compris un article rejeté via "Rejeter -> Mettre à
+        # la corbeille" (decide(..., "REJECTED") le passe en status=TRASHED,
+        # voir decide() plus haut). Avant ce correctif, CET article ne
+        # comptait QUE dans "Rejetés" et n'apparaissait même pas sur la page
+        # Corbeille (viewTrash() le filtrait) -- contradiction avec le
+        # libellé du bouton qui l'y avait envoyé.
+        trash = trashed_total
+        # 3) Rejetés EXCLUSIF de Corbeille désormais : ne compte que les
+        # faits au statut REJECTED direct (jamais utilisé par decide(), qui
+        # convertit toujours REJECTED en TRASHED -- voir plus haut) -- reste
+        # correct si un futur chemin de code introduit un statut REJECTED
+        # non trashé. En pratique, ce compteur peut donc rester à 0 : c'est
+        # le comportement voulu, pas un bug (voir count_rejected() pour la
+        # définition historique, désormais utilisée uniquement là où un
+        # besoin explicite de "rejeté, trashé ou non" persiste).
+        rejected = rejected_status
         # 4) Pending = TOUT LE RESTE (PENDING_REVIEW + TRANSMISSION_FAILED +
         # RETRACTED + tout statut futur non explicitement traité ci-dessus).
         # Calculé par SOUSTRACTION plutôt que par une requête dédiée : garantit

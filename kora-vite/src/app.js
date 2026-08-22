@@ -612,12 +612,11 @@ function viewFacts(s) {
   let body;
   // B+C : filtrage par catégorie EXCLUSIVE (même logique inline que les compteurs)
   const catOf = (ft) => {
-    if (ft.status === "TRASHED" || (ft.trashed_at && ft.trashed_at !== "")) {
-      // Un article a la corbeille peut etre rejete (decision HITL REJECTED) :
-      // il compte alors dans "Rejetes" (coherent avec s.stats.rejected).
-      if (ft.rejected || ft.decision === "REJECTED" || ft.d_status === "REJECTED") return "rejected";
-      return "trash";
-    }
+    // TRASHED compte TOUJOURS dans "trash" (2026-08-22, revu -- demande
+    // explicite : "Mettre à la corbeille" doit vraiment y mener), y compris
+    // un article rejeté via ce bouton -- cohérent avec s.stats.trash
+    // (voir get_dashboard_stats(), hitl_store.py, même date).
+    if (ft.status === "TRASHED" || (ft.trashed_at && ft.trashed_at !== "")) return "trash";
     if (ft.status === "TRANSMITTED" || ft.status === "APPROVED") return "transmitted";
     if (ft.status === "REJECTED") return "rejected";
     if (ft.status === "EDITED") return "drafts";
@@ -655,14 +654,13 @@ function trashCard(f, s) {
 }
 function viewTrash(s) {
   // /api/hitl/trash renvoie TOUS les TRASHED (avec d_status/decision joints,
-  // expres — voir list_trashed() cote backend) : au frontend de separer ceux
-  // dont la decision HITL est REJECTED, qui appartiennent a "Rejetés" (deja
-  // comptes ainsi dans s.stats.rejected/trash depuis le correctif 2026-08-19)
-  // -- meme regle que factCategory() pour les cartes de la vue Articles. Sans
-  // ce filtre, le titre "Corbeille (N)" affichait un nombre superieur au badge
-  // de la barre laterale (13 vs 10), ces articles etant deja comptes ailleurs.
-  const isRejectedDecision = (f) => f.rejected || f.decision === "REJECTED" || f.d_status === "REJECTED";
-  const items = (s.trash || []).filter(f => !isRejectedDecision(f));
+  // voir list_trashed() cote backend). Jusqu'au 2026-08-19, ceux dont la
+  // decision HITL etait REJECTED en etaient exclus (comptes uniquement dans
+  // "Rejetés") -- revu le 2026-08-22 (demande explicite) : un article
+  // rejete via "Mettre à la corbeille" doit apparaitre ICI, coherent avec
+  // le bouton qui l'y a envoye et avec s.stats.trash (desormais TOUT le
+  // TRASHED, voir get_dashboard_stats()). Plus aucun filtre d'exclusion.
+  const items = s.trash || [];
   // Bug corrigé 2026-08-19 (même famille que viewDrafts()) : "Corbeille vide"
   // s'affichait au chargement avant l'arrivée des vraies données -- ici
   // ui.loading n'aurait de toute façon pas aidé (loadTrash() ne le pilote
@@ -1664,6 +1662,10 @@ let _wasBusy = false;
 // Suivi de transition du bandeau vidéo global (2026-08-21) -- voir render().
 let _lastVideoJobId = null;
 let _lastVideoJobStatus = null;
+// Signature de visibilité des bandeaux (2026-08-22) : voir le correctif du
+// reflow forcé plus bas -- NE DOIT se déclencher QUE quand l'un de ces
+// bandeaux change réellement de visibilité, jamais à chaque render().
+let _lastLoaderVisSignature = "";
 let _loaderDismissed = false;
 let _cycleMsgTimer = null;
 let _cycleMsgIdx = 0;
@@ -2969,11 +2971,22 @@ function render() {
   // INVALIDE explicitement le flex layout de la grille elle-meme (pas
   // seulement force sa LECTURE), au lieu de compter sur un recalcul que le
   // navigateur peut continuer d'eviter par optimisation.
-  document.querySelectorAll("#view .fact-grid").forEach(grid => {
-    grid.style.display = "none";
-    void grid.offsetHeight;
-    grid.style.display = "";
-  });
+  // Bug rapporté (2026-08-22, régression) : appliqué à CHAQUE render() —
+  // qui tourne très souvent (sondage notifications/cycle/vidéo, ~30s ou
+  // moins) — ce hack retirait/remettait la grille en continu, provoquant
+  // un clignotement visible des images et un thread principal occupé
+  // (clic sur un article perçu comme lent). Ne se déclenche désormais QUE
+  // si l'un des bandeaux (gl/cb/vjBanner) a RÉELLEMENT changé de visibilité
+  // depuis le dernier render -- le seul moment où ce recalcul est utile.
+  const loaderVisSignature = `${gl ? gl.hidden : ""}|${cb ? cb.hidden : ""}|${vjBanner ? vjBanner.hidden : ""}`;
+  if (loaderVisSignature !== _lastLoaderVisSignature) {
+    _lastLoaderVisSignature = loaderVisSignature;
+    document.querySelectorAll("#view .fact-grid").forEach(grid => {
+      grid.style.display = "none";
+      void grid.offsetHeight;
+      grid.style.display = "";
+    });
+  }
   // Ne pas ré-exécuter renderSheet pendant l'édition (sinon le poll périodique
   // écrase le brouillon en cours) — sauf si le panneau a été fermé entre-temps
   // (ex. Échap), auquel cas il faut bien le masquer.
