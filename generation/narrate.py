@@ -31,10 +31,12 @@ import urllib.request
 import urllib.error
 
 FISH_AUDIO_API_KEY = os.environ.get("FISH_AUDIO_API_KEY", "").strip()
-# reference_id (voix) : fournie par l'utilisateur (2026-08-22) -- VERIFIEE en
-# conditions reelles (audio genere avec succes, 74 Ko pour une phrase de
-# test). Surchargeable par FISH_AUDIO_VOICE_ID.
-FISH_AUDIO_VOICE_ID = os.environ.get("FISH_AUDIO_VOICE_ID", "690813f2df56491b82ee02a22d1c67fd").strip()
+# reference_id (voix) : nouvelle voix adoptee par l'utilisateur (2026-08-22)
+# -- VERIFIEE en conditions reelles (audio genere avec succes, 53 Ko pour
+# une phrase de test). Remplace l'ancienne voix (690813f2df56491b82ee02a22
+# d1c67fd, gardee en commentaire au cas ou). Surchargeable par
+# FISH_AUDIO_VOICE_ID.
+FISH_AUDIO_VOICE_ID = os.environ.get("FISH_AUDIO_VOICE_ID", "da31468f7d0248838545b75fdfe6ffd1").strip()
 # Modele TTS (en-tete "model", PAS le corps JSON -- voir doc API) :
 # "s2.1-pro-free" -- VERIFIE en conditions reelles (2026-08-22) : contourne
 # le "402 Insufficient API credit" rencontre avec "s1" sur ce compte (le
