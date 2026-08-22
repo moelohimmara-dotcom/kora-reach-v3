@@ -1662,10 +1662,6 @@ let _wasBusy = false;
 // Suivi de transition du bandeau vidéo global (2026-08-21) -- voir render().
 let _lastVideoJobId = null;
 let _lastVideoJobStatus = null;
-// Signature de visibilité des bandeaux (2026-08-22) : voir le correctif du
-// reflow forcé plus bas -- NE DOIT se déclencher QUE quand l'un de ces
-// bandeaux change réellement de visibilité, jamais à chaque render().
-let _lastLoaderVisSignature = "";
 let _loaderDismissed = false;
 let _cycleMsgTimer = null;
 let _cycleMsgIdx = 0;
@@ -2951,42 +2947,24 @@ function render() {
   }
   // Bug rapporté (2026-08-22, capture d'écran) : les cartes de la grille
   // Articles se déforment (débordement horizontal, cartes coupées) au
-  // déclenchement d'une génération (article ou vidéo) -- confirmé par
-  // l'utilisateur qu'un F5 OU un simple redimensionnement de fenêtre suffit
-  // à tout remettre en place SANS recharger les données. Signature connue
-  // d'un bug de mise en page Chromium : le calcul flex/grid reste figé sur
-  // une largeur périmée quand une animation CSS continue tourne ailleurs
-  // (barre du bandeau de cycle, zoom du lecteur vidéo...) pendant qu'un
-  // élément est montré/masqué (gl/cb/vjBanner ci-dessus) -- le navigateur
-  // saute le recalcul de layout par optimisation. Un redimensionnement le
-  // force ; on force la MÊME chose nous-mêmes en lisant offsetHeight (accès
-  // qui déclenche un reflow synchrone, sans effet de bord visible) sur le
-  // conteneur de la grille juste après CE genre de changement.
-  // Un simple offsetHeight (force un reflow synchrone) ne suffit pas
-  // toujours pour CE bug precis -- confirme par le rapport : un
-  // redimensionnement de fenetre (qui invalide franchement le layout de
-  // TOUS les elements) corrige, mais pas n'importe quelle autre lecture de
-  // geometrie ailleurs sur la page pendant que l'animation continue tourne.
-  // Le "hack" display:none -> reflow -> display:'' est plus fort : il
-  // INVALIDE explicitement le flex layout de la grille elle-meme (pas
-  // seulement force sa LECTURE), au lieu de compter sur un recalcul que le
-  // navigateur peut continuer d'eviter par optimisation.
-  // Bug rapporté (2026-08-22, régression) : appliqué à CHAQUE render() —
-  // qui tourne très souvent (sondage notifications/cycle/vidéo, ~30s ou
-  // moins) — ce hack retirait/remettait la grille en continu, provoquant
-  // un clignotement visible des images et un thread principal occupé
-  // (clic sur un article perçu comme lent). Ne se déclenche désormais QUE
-  // si l'un des bandeaux (gl/cb/vjBanner) a RÉELLEMENT changé de visibilité
-  // depuis le dernier render -- le seul moment où ce recalcul est utile.
-  const loaderVisSignature = `${gl ? gl.hidden : ""}|${cb ? cb.hidden : ""}|${vjBanner ? vjBanner.hidden : ""}`;
-  if (loaderVisSignature !== _lastLoaderVisSignature) {
-    _lastLoaderVisSignature = loaderVisSignature;
-    document.querySelectorAll("#view .fact-grid").forEach(grid => {
-      grid.style.display = "none";
-      void grid.offsetHeight;
-      grid.style.display = "";
-    });
-  }
+  // déclenchement d'une génération (article ou vidéo). Root cause RÉELLE
+  // (diagnostic en profondeur avec Playwright, mesures DOM à l'appui) :
+  // #app est en display:flex/flex-direction:row dès 768px, et
+  // .cycle-banner (cycleBanner/videoJobBanner) n'avait PAS de
+  // position:fixed contrairement à TOUS les autres éléments de
+  // superposition du fichier (.sheet, .global-loader, .nav-scrim) -- un
+  // bandeau redevenu visible devenait donc un TROISIÈME ITEM FLEX EN LIGNE
+  // aux côtés de .rail et .view au lieu de s'empiler par-dessus, décalant
+  // .view de la largeur du bandeau (mesuré : 230 à 410px selon le
+  // contenu) et poussant les cartes hors de l'écran. Corrigé côté CSS
+  // (.cycle-banner en position:fixed, style.css) -- ce qui restait à faire
+  // ici : calculer --banner-h (hauteur du bandeau ACTUELLEMENT visible)
+  // pour que .rail/.view se décalent d'autant, sans jamais rien recouvrir.
+  // (L'ancien "hack" display:none/reflow tenté plus tôt le même jour
+  // traitait un symptôme sans s'attaquer à cette cause réelle -- retiré.)
+  const activeBanner = (cb && !cb.hidden) ? cb : (vjBanner && !vjBanner.hidden) ? vjBanner : null;
+  const bannerH = activeBanner ? activeBanner.offsetHeight : 0;
+  document.documentElement.style.setProperty("--banner-h", bannerH + "px");
   // Ne pas ré-exécuter renderSheet pendant l'édition (sinon le poll périodique
   // écrase le brouillon en cours) — sauf si le panneau a été fermé entre-temps
   // (ex. Échap), auquel cas il faut bien le masquer.
