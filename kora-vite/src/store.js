@@ -718,12 +718,21 @@ export const Store = (() => {
     await Promise.allSettled(tasks);
   }
 
-  async function decide(factId, decision, editedText = "") {
+  // wpStatus (2026-08-22, demande explicite : "je veux les deux options
+  // publier directement / placer en brouillon WordPress") -- optionnel,
+  // n'ajoute wp_status au corps que si fourni (undefined = comportement
+  // inchangé pour tous les appelants existants qui ne le passent pas ;
+  // le backend retombe alors sur son propre défaut "publish", voir
+  // server.py). Seul APPROVED en tient compte côté serveur.
+  async function decide(factId, decision, editedText = "", wpStatus = undefined) {
     setState({ ui: { ...state.ui, busy: true, overlay: "Enregistrement…" } });
     try {
       const r = await api("/api/hitl/decide", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fact_id: factId, decision, edited_text: editedText, decided_by: "chef_de_secteur" })
+        body: JSON.stringify({
+          fact_id: factId, decision, edited_text: editedText, decided_by: "chef_de_secteur",
+          ...(wpStatus ? { wp_status: wpStatus } : {}),
+        })
       });
       // Bug corrigé 2026-08-20 (9e passage de revue) : ne garder que r.error
       // perdait r.detail (ex: message "l'état a changé entre-temps,

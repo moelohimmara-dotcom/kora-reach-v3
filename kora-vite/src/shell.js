@@ -237,7 +237,7 @@ export const SHELL = `
   <div class="mini-sheet" id="wpChoice" hidden>
     <div class="mini-sheet-card">
       <div class="quiz-badge">📡 Publication WordPress</div>
-      <div class="mini-sheet-q">Comment veux-tu publier les <b id="wpCount">0</b> article(s) sélectionné(s) sur le site WordPress ?</div>
+      <div class="mini-sheet-q" id="wpChoiceQuestion">Comment veux-tu publier les <b id="wpCount">0</b> article(s) sélectionné(s) sur le site WordPress ?</div>
       <div class="mini-sheet-actions">
         <button class="btn btn-primary" id="wpPublish">Publier directement (public)</button>
         <button class="btn btn-tonal" id="wpDraft">Placer en brouillon WP (invisible)</button>

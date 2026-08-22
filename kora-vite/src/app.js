@@ -21,6 +21,7 @@
 import { Store } from "./store.js";
 import {
   $, $$, esc, isAdvancedRole, icon, statusBadge, guardClick, snack, ROLE_LABEL_FR,
+  transmissionMessage, friendlyActionError,
 } from "./utils.js";
 import { renderSheet, confirmAction, isEditingActive } from "./sheet.js";
 import { renderNotifCenter } from "./notifications.js";
@@ -77,6 +78,34 @@ function view403() {
 // Dernière route effectivement montée dans #view (voir garde settingsAlreadyMounted
 // dans render()) — évite de reconstruire le HTML des Paramètres à chaque poll.
 let _lastRenderedRoute = null;
+
+// Cible de la fenêtre #wpChoice (2026-08-22, demande explicite : "je veux
+// les deux options" -- publier directement / brouillon WP -- aussi pour
+// l'approbation d'UN seul article, pas seulement en sélection multiple).
+// "bulk" -> doBulkApprove (views/facts.js) ; un fact_id (string) ->
+// _resolveFactWpChoice ci-dessous. Remise à null à la fermeture (voir
+// closeWp() dans bind()) pour ne jamais rejouer un choix périmé.
+let _wpChoiceTarget = null;
+function openWpChoiceForFact(factId) {
+  _wpChoiceTarget = factId;
+  const wpChoice = document.getElementById("wpChoice");
+  const wpScrim = document.getElementById("wpScrim");
+  const q = document.getElementById("wpChoiceQuestion");
+  if (q) q.textContent = "Comment veux-tu publier cet article sur le site WordPress ?";
+  if (wpChoice) wpChoice.hidden = false;
+  if (wpScrim) wpScrim.hidden = false;
+}
+// Même traitement de la réponse que le bouton générique "Approuver &
+// transmettre" (voir sheet.js, dispatch [data-decide]) -- silence sur un
+// succès plein (transmissionMessage() ne renvoie une chaîne que s'il y a
+// quelque chose à signaler : skip, échec...), même convention partout.
+function _resolveFactWpChoice(factId, wpStatus) {
+  Store.decide(factId, "APPROVED", "", wpStatus).then(r => {
+    const msg = transmissionMessage(r?.transmission);
+    if (msg) snack(msg);
+    Store.closeSheet();
+  }).catch(e => snack(friendlyActionError(e)));
+}
 
 // ============================================================================
 // ÉCRAN "CYCLE EN COURS" — plein écran chaleureux + repli en bandeau compact
@@ -625,15 +654,27 @@ function bind() {
   if (selectBar) {
     selectBar.querySelectorAll("[data-bulk]").forEach(b => b.onclick = () => onBulkAction(b.dataset.bulk));
   }
-  // Fenêtre choix WP (publish vs draft)
+  // Fenêtre choix WP (publish vs draft) -- généralisée le 2026-08-22 (demande
+  // explicite : "je veux les deux options" aussi sur l'Approbation d'UN
+  // seul article, pas seulement en sélection multiple). _wpChoiceTarget
+  // distingue les deux appelants ("bulk" -> doBulkApprove, sinon un
+  // fact_id -> _resolveFactWpChoice) sans dupliquer la fenêtre elle-même.
   const wpChoice = document.getElementById("wpChoice");
   const wpScrim = document.getElementById("wpScrim");
   const openWp = () => { document.getElementById("wpCount").textContent = Store.selectedIds().length; wpChoice.hidden = false; if (wpScrim) wpScrim.hidden = false; };
-  const closeWp = () => { wpChoice.hidden = true; if (wpScrim) wpScrim.hidden = true; };
+  const closeWp = () => { wpChoice.hidden = true; if (wpScrim) wpScrim.hidden = true; _wpChoiceTarget = null; };
   const wpPublish = document.getElementById("wpPublish");
-  if (wpPublish) wpPublish.onclick = () => { closeWp(); doBulkApprove("publish"); };
+  if (wpPublish) wpPublish.onclick = () => {
+    const target = _wpChoiceTarget; closeWp();
+    if (target === "bulk") doBulkApprove("publish");
+    else if (target) _resolveFactWpChoice(target, "publish");
+  };
   const wpDraft = document.getElementById("wpDraft");
-  if (wpDraft) wpDraft.onclick = () => { closeWp(); doBulkApprove("draft"); };
+  if (wpDraft) wpDraft.onclick = () => {
+    const target = _wpChoiceTarget; closeWp();
+    if (target === "bulk") doBulkApprove("draft");
+    else if (target) _resolveFactWpChoice(target, "draft");
+  };
   const wpCancel = document.getElementById("wpCancel");
   if (wpCancel) wpCancel.onclick = closeWp;
   if (wpScrim) wpScrim.onclick = closeWp;
@@ -1185,4 +1226,4 @@ function hideBootSplash() {
 
 export const App = { render, snack, bind, boot, navigate, openFact, renderAuth, showApp };
 
-export { render, navigate, openFact, showApp };
+export { render, navigate, openFact, showApp, openWpChoiceForFact };

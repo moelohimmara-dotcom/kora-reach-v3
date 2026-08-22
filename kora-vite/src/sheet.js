@@ -12,6 +12,7 @@ import {
   rteWrapSelection, rtePrefixLines, rteHeading, rteLink, placeholderSvg,
   imgSrc, guardClick, snack, friendlyActionError, transmissionMessage,
 } from "./utils.js";
+import { openWpChoiceForFact } from "./app.js";
 
 // Détail d'une source (wireframe 7.2, gouvernance ouverte à l'UI 2026-08-19) :
 // advanced peut activer/suspendre depuis cet écran, tracé en audit côté serveur.
@@ -387,19 +388,13 @@ function renderSheet(s) {
     // "Rejeter" ouvre la bulle de choix (corbeille vs suppression définitive)
     // au lieu de rejeter directement — évite une suppression accidentelle.
     if (b.dataset.decide === "REJECTED") { Store.openSheet({ type: "reject-confirm", fact: f }); renderSheet(Store.state); return; }
-    // Droit d'envoi WordPress (§3 du plan valide 2026-08-19) : un Éditeur non
-    // délégué voit son article rester "Approuvé" côté KORA (message clair
-    // plutôt qu'un envoi silencieusement bloqué).
-    // Bug corrigé 2026-08-20 : le tiroir se fermait AVANT même de savoir si
-    // la décision avait réussi (Store.closeSheet() était appelé sans
-    // attendre la promesse) -- une transition refusée par le backend
-    // passait donc totalement inaperçue. On ferme désormais seulement en
-    // cas de succès, et on affiche un message clair sinon.
-    guardClick(b, () => Store.decide(f.fact_id, b.dataset.decide).then(r => {
-      const msg = transmissionMessage(r?.transmission);
-      if (msg) snack(msg);
-      Store.closeSheet();
-    }).catch(e => snack(friendlyActionError(e))));
+    // "Approuver & transmettre" ouvre désormais le même choix Publier
+    // directement / Brouillon WordPress que la sélection multiple
+    // (2026-08-22, demande explicite : "je veux les deux options") --
+    // voir openWpChoiceForFact()/_resolveFactWpChoice() dans app.js, seul
+    // endroit qui appelle réellement Store.decide("APPROVED", ...) pour ce
+    // bouton désormais.
+    if (b.dataset.decide === "APPROVED") { openWpChoiceForFact(f.fact_id); return; }
   });
   const rb = body.querySelector("[data-retract]");
   if (rb) rb.onclick = () => guardClick(rb, () =>

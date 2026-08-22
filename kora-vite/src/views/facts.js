@@ -266,7 +266,14 @@ function bulkResultMsg(r, label) {
 function openWpChoice() {
   const wp = document.getElementById("wpChoice");
   const sc = document.getElementById("wpScrim");
-  if (wp) { document.getElementById("wpCount").textContent = Store.selectedIds().length; wp.hidden = false; }
+  if (wp) {
+    // Restaure le libellé pluriel (2026-08-22) : un précédent appel depuis
+    // la fiche article (openWpChoiceForFact, app.js) a pu laisser le
+    // libellé singulier -- même fenêtre partagée entre les deux appelants.
+    const q = document.getElementById("wpChoiceQuestion");
+    if (q) q.innerHTML = `Comment veux-tu publier les <b id="wpCount">${Store.selectedIds().length}</b> article(s) sélectionné(s) sur le site WordPress ?`;
+    wp.hidden = false;
+  }
   if (sc) sc.hidden = false;
 }
 function openTrashChoice() {
