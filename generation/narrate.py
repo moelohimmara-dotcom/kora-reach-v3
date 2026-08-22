@@ -11,12 +11,12 @@ fournisseur externe bloquer la generation video.
 
 Historique (2026-08-22) : ElevenLabs essaye en premier, retire le jour
 meme -- credit epuise des le 1er test reel (quota_exceeded, compte
-gratuit). Fish Audio choisi a la place (cle fournie par l'utilisateur),
-MAIS son credit API est lui aussi vide au moment de l'integration (402
-"Insufficient API credit" des le test de la cle -- credit API distinct du
-credit plateforme, cf. https://fish.audio/app/developers). L'integration
-reste branchee : elle fonctionnera automatiquement des que du credit API
-est ajoute sur ce compte, sans changement de code.
+gratuit). Fish Audio choisi a la place (cle fournie par l'utilisateur) --
+le modele par defaut "s1" renvoyait d'abord "402 Insufficient API credit"
+(credit API distinct du credit plateforme, cf. fish.audio/app/developers),
+resolu en passant au modele "s2.1-pro-free" (palier gratuit, n'exige pas
+de credit API) + une reference_id (voix) fournie par l'utilisateur --
+VERIFIE en conditions reelles, audio genere avec succes.
 
 edge-tts est un paquet TIERS (pas stdlib) : ajoute a requirements.txt.
 Fonctionne de facon 100% equivalente a illustrate.py cote philosophie
@@ -31,16 +31,17 @@ import urllib.request
 import urllib.error
 
 FISH_AUDIO_API_KEY = os.environ.get("FISH_AUDIO_API_KEY", "").strip()
-# reference_id (voix) : laisse vide -> voix par defaut du modele cote Fish
-# Audio (aucune voix specifique au compte verifiee -- credit API epuise au
-# moment de l'integration, impossible de tester en conditions reelles,
-# voir docstring plus haut). Surchargeable par FISH_AUDIO_VOICE_ID des
-# qu'une voix du compte aura pu etre choisie/testee.
-FISH_AUDIO_VOICE_ID = os.environ.get("FISH_AUDIO_VOICE_ID", "").strip()
-# Modele TTS (en-tete "model", PAS le corps JSON -- voir doc API) : "s1" =
-# le plus econome en credit, raisonnable par defaut vu le peu de credit
-# disponible sur ce compte. Surchargeable par FISH_AUDIO_MODEL.
-FISH_AUDIO_MODEL = os.environ.get("FISH_AUDIO_MODEL", "s1")
+# reference_id (voix) : fournie par l'utilisateur (2026-08-22) -- VERIFIEE en
+# conditions reelles (audio genere avec succes, 74 Ko pour une phrase de
+# test). Surchargeable par FISH_AUDIO_VOICE_ID.
+FISH_AUDIO_VOICE_ID = os.environ.get("FISH_AUDIO_VOICE_ID", "690813f2df56491b82ee02a22d1c67fd").strip()
+# Modele TTS (en-tete "model", PAS le corps JSON -- voir doc API) :
+# "s2.1-pro-free" -- VERIFIE en conditions reelles (2026-08-22) : contourne
+# le "402 Insufficient API credit" rencontre avec "s1" sur ce compte (le
+# palier gratuit du modele n'exige pas de credit API). Surchargeable par
+# FISH_AUDIO_MODEL si un jour du credit est ajoute et qu'un modele
+# superieur (s2.1-pro, s2-pro) est prefere.
+FISH_AUDIO_MODEL = os.environ.get("FISH_AUDIO_MODEL", "s2.1-pro-free")
 FISH_AUDIO_TIMEOUT = int(os.environ.get("FISH_AUDIO_TIMEOUT_SEC", "60"))
 
 # Voix francaises neuronales disponibles (verifie 2026-08-20, liste complete
