@@ -17,6 +17,21 @@ echo "==> Déploiement statique"
 sudo cp -rf dist/. "$REMOTE_STATIC/"
 sudo chown -R kora:kora "$REMOTE_STATIC/"
 
+# Déploiement backend (2026-08-22, correctif : cette étape n'existait pas --
+# seul le frontend était synchronisé, /opt/kora-reach/server.py restait figé
+# quel que soit le nombre de "git pull" + rebuild sur $APP_DIR. Découvert en
+# déployant la page Vidéos : /api/videos répondait 404 malgré un dépôt à jour.
+# cp SANS --delete/-rsync : ne touche que les fichiers listés ici, ne purge
+# jamais les scripts/diagnostics ad hoc déjà présents dans /opt/kora-reach.)
+echo "==> Déploiement backend"
+cd "$APP_DIR"
+REMOTE_APP="/opt/kora-reach"
+sudo cp -f server.py "$REMOTE_APP/server.py"
+for d in collection core editorial generation identity orchestration publishing; do
+  sudo cp -rf "$d/." "$REMOTE_APP/$d/"
+done
+sudo chown -R kora:kora "$REMOTE_APP/server.py" $(for d in collection core editorial generation identity orchestration publishing; do echo "$REMOTE_APP/$d"; done)
+
 echo "==> Restart service + nginx reload"
 sudo systemctl restart "$SERVICE"
 sudo nginx -s reload
