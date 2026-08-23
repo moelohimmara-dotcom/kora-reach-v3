@@ -879,7 +879,6 @@ function bind() {
   if (leftDrawer) {
     leftDrawer.querySelectorAll("[data-route]").forEach(n => {
       n.onclick = () => {
-        if (Store.state.ui.cycleBusy) { snack("Génération en cours…"); return; }
         closeLeftDrawer();
         navigate(n.dataset.route);
       };
@@ -891,9 +890,6 @@ function bind() {
   // =========================================================
   const railEl = document.getElementById("rail");
   $$("[data-route]").forEach(n => n.onclick = () => {
-    // Pendant une génération (busy), la génération est prioritaire : on reste
-    // sur l'écran de génération et on ignore la navigation vers un autre écran.
-    if (Store.state.ui.cycleBusy) { snack("Génération en cours…"); return; }
     if (railEl) railEl.classList.remove("open");
     const sc = document.getElementById("railScrim");
     if (sc) sc.hidden = true;
@@ -990,7 +986,6 @@ function bind() {
   if (rightDrawer) {
     rightDrawer.querySelectorAll("[data-route]").forEach(n => {
       n.onclick = () => {
-        if (Store.state.ui.cycleBusy) { snack("Génération en cours…"); return; }
         closeRightDrawer();
         navigate(n.dataset.route);
       };
