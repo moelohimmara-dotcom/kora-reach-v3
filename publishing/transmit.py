@@ -90,6 +90,16 @@ def _build_payload(fact: dict, final_text: str) -> dict:
         # sources du cluster, "loremflickr"/"picsum" = photo stock de repli --
         # utilise pour la legende WP (jamais "IA" desormais, voir _upload_media).
         "image_provider": (fact.get("image_meta", {}) or {}).get("provider", ""),
+        # Nom de la source réelle de l'image (2026-08-23, demande explicite :
+        # "il faut que le nom de la source d'où provient l'image figure au
+        # niveau de l'article") -- vide pour un repli stock (loremflickr/
+        # picsum), qui n'a par définition aucune source à créditer.
+        "image_source_name": (fact.get("image_meta", {}) or {}).get("image_source_name", ""),
+        # Nom de la source du CHAMPION (2026-08-23) : utilisé pour créditer
+        # correctement l'image de secours (og_image ci-dessus, TOUJOURS celle
+        # du champion) si jamais l'image primaire échoue et que _upload_media
+        # bascule dessus -- voir _to_wordpress.
+        "champion_source_name": champ.get("source", ""),
         # Vidéo narrée (2026-08-22, demande explicite : "l'article vidéo doit
         # pouvoir être transféré sur wordpress dans brouillons ou en
         # publication officielle") -- voir _upload_video()/_to_wordpress().
@@ -247,7 +257,13 @@ def _merge_both_results(results: list) -> dict:
             "results": results,
             "image_warning": (wp_result or {}).get("image_warning"),
             "video_warning": (wp_result or {}).get("video_warning"),
-            "content_warning": (wp_result or {}).get("content_warning")}
+            "content_warning": (wp_result or {}).get("content_warning"),
+            # wp_post_id/wp_url (2026-08-23) : remontés au niveau racine pour
+            # que mark_transmitted() (server.py) puisse les persister, quel
+            # que soit le mode ("wordpress" seul ou "both") -- voir
+            # editorial/hitl_store.py::mark_transmitted.
+            "wp_post_id": (wp_result or {}).get("wp_post_id"),
+            "wp_url": (wp_result or {}).get("wp_url")}
 
 
 def mode() -> str:
@@ -280,7 +296,8 @@ def credentials_status() -> list:
     ]
 
 
-def _upload_media(image_url: str, fallback_url: str = "", image_provider: str = "") -> tuple:
+def _upload_media(image_url: str, fallback_url: str = "", image_provider: str = "",
+                   source_name: str = "", fallback_source_name: str = "") -> tuple:
     """Upload l'image vers WP media. Accepte une URL ou un chemin de fichier local.
     Retourne (media_id, error_reason) -- error_reason est None en cas de
     succès, sinon un texte diagnostique (2026-08-22, bug rapporté : "je n'ai
@@ -345,9 +362,25 @@ def _upload_media(image_url: str, fallback_url: str = "", image_provider: str = 
             # legende doit refleter l'URL REELLEMENT envoyee, pas la demande
             # initiale.
             is_fallback = fallback_url and url == fallback_url
-            caption = ("Photo d'illustration — KORA"
-                       if (not is_fallback) and image_provider in ("loremflickr", "picsum")
-                       else "Photo — KORA (source)")
+            # Crédit de la source réelle (2026-08-23, demande explicite : "il
+            # ne doit pas y avoir aucune source ... il faut que le nom de la
+            # source d'où provient l'image figure au niveau de l'article") --
+            # le nom credité suit la MEME URL réellement envoyée (source_name
+            # pour l'image primaire, fallback_source_name pour l'OG du
+            # champion), jamais une source devinée ou fixe. Un repli stock
+            # (loremflickr/picsum) n'a par définition aucune source réelle à
+            # créditer -> légende générique inchangée dans ce cas.
+            is_stock_fallback = (not is_fallback) and image_provider in ("loremflickr", "picsum")
+            # Vide pour un repli stock (aucune source réelle à créditer, voir
+            # docstring ci-dessus) ou si la source n'est simplement pas connue.
+            credited_source_name = "" if is_stock_fallback else (
+                fallback_source_name if is_fallback else source_name)
+            if is_stock_fallback:
+                caption = "Photo d'illustration — KORA"
+            elif credited_source_name:
+                caption = f"Photo : {credited_source_name}"
+            else:
+                caption = "Photo — KORA (source)"
             try:
                 upd = urllib.request.Request(
                     WP_URL.rstrip("/") + f"/wp-json/wp/v2/media/{media_id}",
@@ -358,7 +391,12 @@ def _upload_media(image_url: str, fallback_url: str = "", image_provider: str = 
                 urllib.request.urlopen(upd, timeout=20)
             except Exception:
                 pass
-            return media_id, None
+            # 3e valeur (2026-08-23) : le nom de source RÉELLEMENT crédité
+            # (peut être vide -- repli stock, ou source inconnue) -- permet à
+            # _to_wordpress d'ajouter une mention VISIBLE dans le CORPS de
+            # l'article (la légende média seule n'est pas forcément affichée
+            # par le thème WordPress, voir appel ci-dessous).
+            return media_id, None, credited_source_name
         except Exception as e:
             reasons.append(f"{url[:60]}: envoi WP échoué ({e})")
             continue
@@ -367,7 +405,7 @@ def _upload_media(image_url: str, fallback_url: str = "", image_provider: str = 
     # sans savoir pourquoi (ni dans les logs, ni pour l'éditeur).
     reason = " | ".join(reasons) if reasons else "aucune image fournie"
     print(f"[TRANSMIT_IMAGE_ECHEC] {reason}", flush=True)
-    return -1, reason
+    return -1, reason, ""
 
 
 _VIDEO_MAX_BYTES = 80 * 1024 * 1024  # 80 Mo -- au-delà, la plupart des hébergeurs WP
@@ -439,15 +477,31 @@ def _to_wordpress(payload: dict, wp_status: str = "publish") -> dict:
     #    Fallback OG du champion si l'image générée est corrompue (JSON/HTML)
     media_id = 0
     image_error = None
+    credited_source_name = ""
     img = payload.get("image", "")
     og = payload.get("og_image", "")  # transmis par writer si dispo
     if img:
-        mid, image_error = _upload_media(img, fallback_url=og, image_provider=payload.get("image_provider", ""))
+        mid, image_error, credited_source_name = _upload_media(
+            img, fallback_url=og, image_provider=payload.get("image_provider", ""),
+            source_name=payload.get("image_source_name", ""),
+            fallback_source_name=payload.get("champion_source_name", ""))
         if mid > 0:
             media_id = mid
             image_error = None
     else:
         image_error = "aucune image associée à cet article"
+    # Mention de source VISIBLE dans le corps (2026-08-23, demande explicite :
+    # "il faut que le nom de la source d'où provient l'image figure au niveau
+    # de l'article") -- la légende média seule (_upload_media ci-dessus)
+    # n'est pas forcément rendue par le thème WordPress ; cette ligne, elle,
+    # fait partie du contenu de l'article et sera donc TOUJOURS visible.
+    # Absente pour un repli stock (aucune source réelle à créditer).
+    if media_id > 0 and credited_source_name:
+        payload["content"] = (
+            f'<p class="kora-photo-credit" style="font-size:0.85em;color:#767676;'
+            f'margin:0 0 18px"><em>Crédit photo : {credited_source_name}</em></p>\n\n'
+            + payload["content"]
+        )
     # 2) Vidéo narrée (2026-08-22, demande explicite) : uploadée vers la
     #    médiathèque WP et intégrée en tête du contenu (lecteur HTML5 natif,
     #    poster = même image que featured_media pour un rendu cohérent avant

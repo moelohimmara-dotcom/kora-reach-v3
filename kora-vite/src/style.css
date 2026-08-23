@@ -793,6 +793,15 @@ html.icons-ready .material-icons { visibility: visible; }
   background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); font-size: var(--t-label-sm); font-weight: 600; }
 .sheet-audit-note .ic { width: 16px; height: 16px; flex: none; }
 
+/* Note de verrouillage "déjà transmis" (2026-08-23) : remplace toutes les
+   actions éditoriales d'un article TRANSMITTED -- même famille visuelle que
+   .sheet-audit-note (bloc informatif compact), mais en pleine largeur et sur
+   plusieurs lignes (texte explicatif + lien WordPress). */
+.sheet-transmitted-note { display: flex; align-items: flex-start; gap: 10px; padding: 14px 16px; border-radius: var(--radius-md);
+  background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); }
+.sheet-transmitted-note .ic { width: 20px; height: 20px; flex: none; margin-top: 2px; }
+.sheet-transmitted-note strong { font-size: var(--t-label); }
+
 .sheet-actions { display: flex; flex-direction: column; gap: 10px; margin-top: var(--space-4); position: sticky; bottom: 0; z-index: 3; background: var(--sheet-action-bg); padding-top: 12px; border-top: 1px solid var(--glass-border); }
 /* Boutons du tiroir : taille réduite, conforme MD3 (compact) */
 .sheet-actions .btn { padding: 10px 18px; font-size: var(--t-label-sm); border-radius: var(--radius-pill); }

@@ -270,9 +270,15 @@ export function isEditingActive() { return _editingActive; }
 // la même image de couverture réelle que l'article -> .mp4 (ffmpeg, zoom Ken
 // Burns). Génération à la demande (1-3 min), jamais automatique -- coût
 // CPU, inutile pour un brouillon jamais publié.
-function videoSection(f) {
+function videoSection(f, locked = false) {
   const status = f.video_status;
+  // `locked` (2026-08-23, même logique que le verrouillage des actions
+  // éditoriales pour un article TRANSMITTED, voir renderSheet ci-dessous) --
+  // régénérer une vidéo après transmission ne propage nulle part côté
+  // WordPress et n'a aucun sens une fois l'article déjà envoyé : simple
+  // aperçu lecture-seule, sans bouton "Générer"/"Régénérer".
   if (!status || status === "error") {
+    if (locked) return "";
     return `<div class="video-section">
       <button class="btn btn-tonal btn-block" id="videoGenBtn">${icon("i-spark")} Générer la vidéo narrée</button>
       ${status === "error" ? `<p class="muted" style="margin-top:6px">Échec précédent : ${esc(f.video_error || "erreur inconnue")}</p>` : ""}
@@ -289,7 +295,7 @@ function videoSection(f) {
       <video class="video-preview" src="/kora-v2/media/${esc(f.video_path)}" controls preload="metadata"></video>
       <div class="video-actions">
         <span class="muted">${dur ? `Durée : ${dur}` : ""}</span>
-        <button class="btn btn-ghost btn-sm" id="videoRegenBtn">${icon("i-refresh")} Régénérer la vidéo</button>
+        ${locked ? "" : `<button class="btn btn-ghost btn-sm" id="videoRegenBtn">${icon("i-refresh")} Régénérer la vidéo</button>`}
       </div>
     </div>`;
   }
@@ -340,7 +346,14 @@ function renderSheet(s) {
   // vraie photo de source ne doit jamais être présentée comme une
   // illustration IA. Dérivée de image_meta.provider ("source" = photo
   // réelle d'une source du cluster, "loremflickr"/"picsum" = photo stock).
-  const imgCaption = f.image_meta?.provider === "source" ? "Photo — KORA (source)" : "Photo d'illustration — KORA";
+  // Nom de la source réelle (2026-08-23, demande explicite : "il faut que le
+  // nom de la source d'où provient l'image figure au niveau de l'article") --
+  // même donnée que celle créditée sur WordPress (voir publishing/transmit.py),
+  // affichée ici aussi pour cohérence entre l'aperçu KORA et l'article publié.
+  const imgSourceName = f.image_meta?.image_source_name;
+  const imgCaption = f.image_meta?.provider === "source"
+    ? (imgSourceName ? `Photo : ${imgSourceName}` : "Photo — KORA (source)")
+    : "Photo d'illustration — KORA";
   body.innerHTML = `
     <article class="sheet-article">
       ${img ? `<figure class="sheet-figure"><img class="sheet-img" src="${esc(img)}" alt="" onerror="this.src='${ph}'"><figcaption class="sheet-cap">${esc(imgCaption)}</figcaption></figure>` : `<figure class="sheet-figure"><img class="sheet-img" src="${ph}" alt=""><figcaption class="sheet-cap">${esc(imgCaption)}</figcaption></figure>`}
@@ -367,6 +380,22 @@ function renderSheet(s) {
     </article>
     ${(s.auth && s.auth.role === "lecteur") ? `
     <p class="muted source-detail-footnote" style="margin:14px 0 0">${icon("i-lock")} Rôle Lecteur : consultation seule, aucune action possible sur cet article.</p>
+    ` : status === "TRANSMITTED" ? `
+    <div class="sheet-actions">
+      <div class="sheet-transmitted-note">
+        ${icon("i-check")}
+        <div>
+          <strong>Déjà transmis${f.wp_status === "draft" ? " (brouillon WordPress)" : f.wp_status === "publish" ? " (publié sur WordPress)" : ""}</strong>
+          <p class="muted" style="margin:4px 0 0">
+            Cet article est verrouillé : plus aucune action (approuver, modifier, régénérer, rejeter, annuler) n'est
+            possible depuis KORA une fois réellement transmis, pour éviter une republication en double. Pour le
+            corriger, agissez directement sur le post WordPress.
+          </p>
+          ${f.wp_url ? `<a class="btn btn-tonal btn-sm" style="margin-top:10px" href="${esc(f.wp_url)}" target="_blank" rel="noopener">${icon("i-eye")} Voir sur WordPress</a>` : ""}
+        </div>
+      </div>
+      ${videoSection(f, true)}
+    </div>
     ` : `
     <div class="sheet-actions">
       <button class="btn btn-primary" data-decide="APPROVED">${icon("i-send")} Approuver &amp; transmettre</button>
@@ -375,7 +404,7 @@ function renderSheet(s) {
         <button class="btn btn-tonal" data-regen="1" aria-label="Régénérer">${icon("i-refresh")}<span class="btn-label">Régénérer</span></button>
         <button class="btn btn-danger-ghost" data-decide="REJECTED" aria-label="Rejeter">${icon("i-reject")}<span class="btn-label">Rejeter</span></button>
       </div>
-      ${(status === "APPROVED" || status === "EDITED" || status === "TRANSMITTED") ? `<button class="btn btn-tonal btn-block" data-retract="1">${icon("i-undo")} Annuler la décision</button>` : ""}
+      ${(status === "APPROVED" || status === "EDITED") ? `<button class="btn btn-tonal btn-block" data-retract="1">${icon("i-undo")} Annuler la décision</button>` : ""}
       <div class="regen-panel" id="regenPanel" hidden>
         <div class="regen-panel-title">Régénérer avec un angle (sans re-scraper la source)</div>
         <div class="regen-chips" id="regenChips"></div>

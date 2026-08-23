@@ -140,32 +140,40 @@ def _call_loremflickr(title: str, salt: str = "", lock_override: int = None):
 def _candidate_images(champion: dict, contexts: list) -> list:
     """Liste ordonnée des images réelles candidates pour un cluster : le
     champion d'abord (meilleure source), puis les contextes triés par
-    fiabilité de source (source_level décroissant). URLs non vides
-    uniquement, sans doublon."""
+    fiabilité de source (source_level décroissant). Retourne des tuples
+    (url, nom_source) -- non vides uniquement, sans doublon d'URL. Le nom de
+    source (2026-08-23, demande explicite : "il ne doit pas y avoir aucune
+    source [affichée] ... il faut que le nom de la source d'où provient
+    l'image figure au niveau de l'article") accompagne désormais chaque URL
+    dès la sélection, pour pouvoir créditer la bonne source dans la légende
+    WordPress (voir publishing/transmit.py::_upload_media)."""
     cands = []
+    seen = set()
     champ_img = (champion or {}).get("image", "") or ""
     if champ_img:
-        cands.append(champ_img)
+        cands.append((champ_img, (champion or {}).get("source", "")))
+        seen.add(champ_img)
     ctx_sorted = sorted(contexts or [], key=lambda c: (c or {}).get("source_level", 0), reverse=True)
     for c in ctx_sorted:
         img = (c or {}).get("image", "") or ""
-        if img and img not in cands:
-            cands.append(img)
+        if img and img not in seen:
+            cands.append((img, (c or {}).get("source", "")))
+            seen.add(img)
     return cands
 
 
-def select_source_image(champion: dict, contexts: list, exclude: set = None) -> str:
+def select_source_image(champion: dict, contexts: list, exclude: set = None) -> tuple:
     """Choisit la meilleure image RÉELLE parmi les sources d'un cluster
     (champion prioritaire, puis contextes par fiabilité), en évitant les
     URLs déjà utilisées par un autre article du même cycle (`exclude`, pour
     la garantie d'unicité inter-articles -- voir illustrate_all()).
-    Retourne "" si aucune source du cluster n'a d'image (ou si toutes les
-    images du cluster sont déjà utilisées ailleurs)."""
+    Retourne (url, nom_source), ou ("", "") si aucune source du cluster n'a
+    d'image (ou si toutes les images du cluster sont déjà utilisées ailleurs)."""
     exclude = exclude or set()
-    for img in _candidate_images(champion, contexts):
+    for img, src_name in _candidate_images(champion, contexts):
         if img not in exclude:
-            return img
-    return ""
+            return img, src_name
+    return "", ""
 
 
 def illustrate(champion: dict, contexts: list, title: str = "", fact_id: str = "",
@@ -177,9 +185,10 @@ def illustrate(champion: dict, contexts: list, title: str = "", fact_id: str = "
     (stock photo de repli), jamais "fabriquée par IA" -- KORA n'en génère
     plus aucune (retrait de FAL/Pollinations, 2026-08-21)."""
     title = title or (champion or {}).get("title", "")
-    src_img = select_source_image(champion, contexts, exclude=exclude)
+    src_img, src_name = select_source_image(champion, contexts, exclude=exclude)
     if src_img:
         return {"image": src_img, "provider": "source", "generated": False,
+                "image_source_name": src_name,
                 "detail": "Image réelle issue d'une source du cluster (champion ou contexte)."}
     # Aucune source du cluster n'a d'image (ou toutes déjà utilisées par un
     # autre article de ce cycle) -> repli sur une vraie photo générique, avec
@@ -242,7 +251,12 @@ def illustrate_all(facts: list) -> list:
         used.add(res["image"])
         fact["image"] = res["image"]
         fact["image_meta"] = {"image": res["image"], "provider": res["provider"],
-                              "generated": res.get("generated", False)}
+                              "generated": res.get("generated", False),
+                              # Nom de la source d'origine de l'image (2026-08-23,
+                              # voir select_source_image ci-dessus) -- vide pour
+                              # un repli stock (loremflickr/picsum), qui n'a par
+                              # définition aucune source réelle à créditer.
+                              "image_source_name": res.get("image_source_name", "")}
     return facts
 
 

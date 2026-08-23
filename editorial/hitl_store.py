@@ -241,6 +241,31 @@ def _init_locked():
     finally:
         try: con.close()
         except Exception: pass
+    # Traçabilité WordPress (2026-08-23, demande explicite du client : "un
+    # article déjà publié/transféré ne doit plus pouvoir être ré-approuvé/
+    # retransmis") -- jusqu'ici mark_transmitted() ne stockait AUCUN lien
+    # entre un fait KORA et le post WordPress réel qu'il a produit (ni
+    # wp_post_id, ni wp_url, ni si c'était en brouillon ou publié) : impossible
+    # de savoir depuis le dashboard OÙ se trouve le post correspondant, et
+    # impossible de bloquer une retransmission accidentelle sur la base du
+    # post déjà existant. Idempotent (même motif que video_status ci-dessus).
+    try:
+        con, mode = db.conn()
+        cur = con.cursor()
+        for col, ctype in (("wp_post_id", "TEXT"), ("wp_url", "TEXT"), ("wp_status", "TEXT")):
+            if mode == "postgres":
+                cur.execute(f"ALTER TABLE hitl_facts ADD COLUMN IF NOT EXISTS {col} {ctype}")
+            else:
+                try:
+                    cur.execute(f"ALTER TABLE hitl_facts ADD COLUMN {col} {ctype}")
+                except Exception:
+                    pass
+        con.commit()
+    except Exception:
+        pass
+    finally:
+        try: con.close()
+        except Exception: pass
     _initialized = True
 
 
@@ -368,6 +393,12 @@ def list_facts() -> list:
             # les articles rejetes (corbeille + decision HITL REJECTED) dans "Rejetes".
             "d_status": d.get("d_status"),
             "rejected": (_raw_status == "TRASHED" and (d.get("d_status") == "REJECTED" or d.get("decision") == "REJECTED")),
+            # Traçabilité WordPress (2026-08-23, voir mark_transmitted()) : le
+            # frontend s'en sert pour verrouiller les actions d'un article déjà
+            # transmis et afficher un lien direct vers le post réel.
+            "wp_post_id": d.get("wp_post_id"),
+            "wp_url": d.get("wp_url"),
+            "wp_status": d.get("wp_status"),
         })
     return out
 
@@ -605,7 +636,14 @@ def decide(fact_id: str, decision: str, decided_by: str,
 
 
 def mark_transmitted(fact_id: str, provider: str, http_status: int,
-                     final_text: str = "") -> dict:
+                     final_text: str = "", wp_post_id: str = "", wp_url: str = "",
+                     wp_status: str = "") -> dict:
+    """wp_post_id/wp_url/wp_status (2026-08-23, demande explicite du client :
+    empêcher qu'un article déjà publié/transféré puisse être ré-approuvé ou
+    retransmis, et pouvoir tracer OÙ se trouve le post réel) -- vides si le
+    provider n'est pas WordPress (ex: Supabase/Postgres seul), jamais
+    inventés. Persistés en base pour que le frontend affiche un lien direct
+    vers le post existant plutôt qu'un état "à décider" trompeur."""
     p = _ph()
     now = datetime.now(TZ).isoformat(timespec="seconds")
     con, _ = db.conn()
@@ -622,8 +660,10 @@ def mark_transmitted(fact_id: str, provider: str, http_status: int,
                 f"provider={p}, http_status={p} WHERE fact_id={p}",
                 (now, provider, http_status, fact_id))
         # Miroir dans hitl_facts (voir decide())
-        cur.execute(f"UPDATE hitl_facts SET status='TRANSMITTED' WHERE fact_id={p} AND status <> 'TRASHED'",
-                    (fact_id,))
+        cur.execute(
+            f"UPDATE hitl_facts SET status='TRANSMITTED', wp_post_id={p}, wp_url={p}, "
+            f"wp_status={p} WHERE fact_id={p} AND status <> 'TRASHED'",
+            (str(wp_post_id) if wp_post_id else None, wp_url or None, wp_status or None, fact_id))
         con.commit()
     finally:
         con.close()
@@ -662,7 +702,25 @@ def retract(fact_id: str, by: str) -> dict:
     # Bug corrige 2026-08-20 : le bouton "Annuler la decision" s'affiche
     # aussi pour status === "EDITED" (voir app.js) mais ce garde-fou l'excluait
     # -- meme classe de bug que le trou dans _ALLOWED ci-dessus.
-    if cur["status"] not in ("TRANSMITTED", "APPROVED", "EDITED"):
+    #
+    # "TRANSMITTED" RETIRÉ des états autorisés (2026-08-23, demande explicite
+    # du client, remontée par son propre client final : "lorsqu'un article
+    # est déjà publié ou transféré vers WordPress ... ça ne doit plus être
+    # possible [de le réapprouver]"). Root cause identifiée : retract()
+    # ramenait un fait TRANSMITTED à PENDING_REVIEW en base KORA SANS RIEN
+    # TOUCHER côté WordPress -- le post réel restait en ligne (brouillon ou
+    # publié), mais le dashboard affichait de nouveau "En attente" avec le
+    # bouton "Approuver & transmettre" actif. Ré-approuver à ce moment-là
+    # créait un SECOND post WordPress dupliqué (aucune déduplication côté
+    # WordPress, contrairement à l'entrepôt Postgres/Supabase qui dédupe sur
+    # source_url) -- exactement le symptôme rapporté. Une fois un article
+    # RÉELLEMENT transmis, KORA ne propose plus AUCUN chemin de retour vers
+    # un état "à décider" : le dashboard devient une trace historique
+    # fidèle de ce qui a été envoyé. Pour corriger un envoi fait par erreur,
+    # l'action se fait directement sur WordPress (dépublier/supprimer le
+    # post), jamais depuis KORA qui n'a de toute façon aucune vue sur l'état
+    # réel du post une fois transmis.
+    if cur["status"] not in ("APPROVED", "EDITED"):
         return {"error": "retrait_non_autorise_depuis", "status": cur["status"]}
     now = datetime.now(TZ).isoformat(timespec="seconds")
     p = _ph()

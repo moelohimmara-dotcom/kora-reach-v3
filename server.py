@@ -956,7 +956,10 @@ class Handler(BaseHTTPRequestHandler):
                             tx = transmit.transmit(fact, final or fact.get("article", ""), wp_status=wp_status)
                             if tx["status"] in ("TRANSMITTED", "DRY_RUN_OK"):
                                 mark_transmitted(fid, tx["provider"], tx["http_status"],
-                                                final or fact.get("article", ""))
+                                                final or fact.get("article", ""),
+                                                wp_post_id=tx.get("wp_post_id") or "",
+                                                wp_url=tx.get("wp_url") or "",
+                                                wp_status=wp_status)
                             else:
                                 mark_transmission_failed(fid, tx["provider"], tx["http_status"])
                             log(fid, "TRANSMISSION", f"mode={tx['provider']} status={tx['status']}",
@@ -1011,7 +1014,10 @@ class Handler(BaseHTTPRequestHandler):
                                 if fact:
                                     tx = transmit.transmit(fact, fact.get("article", ""), wp_status=wp_status)
                                     if tx["status"] in ("TRANSMITTED", "DRY_RUN_OK"):
-                                        mark_transmitted(fid, tx["provider"], tx["http_status"], fact.get("article", ""))
+                                        mark_transmitted(fid, tx["provider"], tx["http_status"], fact.get("article", ""),
+                                                          wp_post_id=tx.get("wp_post_id") or "",
+                                                          wp_url=tx.get("wp_url") or "",
+                                                          wp_status=wp_status)
                                     else:
                                         mark_transmission_failed(fid, tx["provider"], tx["http_status"])
                                     r["transmission"] = tx
@@ -1424,13 +1430,17 @@ def _already_transmitted_skip(fid):
     Renvoie le dict de réponse "déjà transmis, non renvoyé" si l'article est
     actuellement affiché comme TRANSMITTED, sinon None. Vérifié via
     hitl_facts.status (get_fact) : c'est le statut réellement affiché à
-    l'utilisateur, celui que decide() lui-même refuse aussi de quitter par un
-    autre chemin que retract() (voir _ALLOWED["TRANSMITTED"] = set() dans
-    editorial/hitl_store.py) -- défense en profondeur, pas le seul rempart."""
+    l'utilisateur, celui que decide() lui-même refuse aussi de quitter --
+    et depuis 2026-08-23, retract() aussi (voir _ALLOWED["TRANSMITTED"] =
+    set() ET le garde-fou équivalent dans retract(), editorial/hitl_store.py)
+    -- défense en profondeur, pas le seul rempart. Message mis à jour
+    2026-08-23 : "Annuler la décision" n'existe plus une fois transmis (voir
+    retract(), root cause du bug rapporté : ce message invitait justement à
+    l'action qui créait un post WordPress dupliqué)."""
     prev = get_fact(fid)
     if prev and prev.get("status") == "TRANSMITTED":
         return {"status": "SKIPPED_ALREADY_TRANSMITTED",
-                "detail": "Article déjà publié sur WordPress — utilisez « Annuler la décision » avant de le réapprouver."}
+                "detail": "Article déjà transmis à WordPress — pour le corriger, agissez directement sur le post WordPress."}
     return None
 
 
