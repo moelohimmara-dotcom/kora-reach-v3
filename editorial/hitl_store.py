@@ -1141,8 +1141,26 @@ def get_dashboard_stats() -> dict:
         total_facts = sum(by_status.values())
         edited = by_status.get("EDITED", 0)
         # "Transmis" couvre TRANSMITTED et APPROVED (même catégorie côté front,
-        # voir factCategory() dans app.js).
+        # voir factCategory() dans app.js -- désormais du code mort, mais
+        # cette variable sert toujours au calcul de 'pending' par
+        # soustraction ci-dessous, invariant à ne pas perturber).
         transmitted = by_status.get("TRANSMITTED", 0) + by_status.get("APPROVED", 0)
+        # published_count (2026-08-23, ADR-0005, unification demandée
+        # explicitement par l'utilisateur après le rapport de fin d'ADR :
+        # "deux définitions différentes du même libellé 'Publiés'") -- PUR
+        # TRANSMITTED, sans APPROVED (contrairement à `transmitted`
+        # ci-dessus) : c'est EXACTEMENT le filtre utilisé par
+        # viewPublished() (kora-vite/src/views/facts.js) pour peupler la
+        # page Publiés -- un fait APPROVED n'est pas encore réellement
+        # publié nulle part (transmission généralement synchrone, mais pas
+        # garantie -- ex. SKIPPED_NO_WP_RIGHT), il n'a donc pas sa place
+        # dans un compteur qui prétend refléter ce qui est réellement en
+        # ligne sur WordPress. Remplace l'ancien `published` (ci-dessous,
+        # conservé pour compat -- basé sur la table articles/entrepôt,
+        # published-only, jamais peuplé si aucun backend n'est configuré)
+        # comme SEULE source pour tout affichage UI portant le libellé
+        # "Publiés" (tuile dashboard ET badge de navigation).
+        published_count = by_status.get("TRANSMITTED", 0)
         trashed_total = by_status.get("TRASHED", 0)
         rejected_status = by_status.get("REJECTED", 0)
         # 2) Corbeille = TOUT le TRASHED, sans exception (2026-08-22, demande
