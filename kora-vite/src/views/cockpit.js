@@ -109,7 +109,7 @@ function viewCockpit(s) {
   const rejected = (typeof st.rejected === "number") ? st.rejected : 0;     // Rejetes (corbeille+decision)
   const deleted = (typeof st.deleted === "number") ? st.deleted : 0;        // Supprimes (audit)
   const audit = s.audit;
-  const sources = s.sources || [];
+  const sources = Array.isArray(s.sources) ? s.sources : [];               // garde stricte (2026-08-23) : sources doit etre un tableau
   const lastCycle = s.lastCycle;
 
   return `

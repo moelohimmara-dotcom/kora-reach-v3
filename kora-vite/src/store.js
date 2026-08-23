@@ -381,7 +381,12 @@ export const Store = (() => {
     catch (e) { setState({ ui: { ...state.ui, error: e.message } }); }
   }
   async function loadSources() {
-    try { setState({ sources: await api("/api/whitelist") }); }
+    try {
+      const wl = await api("/api/whitelist");
+      // Garde de type (2026-08-23) : une reponse 401 {"error":...} n'est pas un
+      // tableau ; la stocker faisait planter sources.filter() dans toutes les vues.
+      if (Array.isArray(wl)) setState({ sources: wl });
+    }
     catch (e) { setState({ ui: { ...state.ui, error: e.message } }); }
   }
   // Page Vidéos (2026-08-21) : liste toutes les vidéos, quel que soit leur statut.
