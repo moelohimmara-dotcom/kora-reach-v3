@@ -387,12 +387,17 @@ function renderSheet(s) {
         <div>
           <strong>Déjà transmis${f.wp_status === "draft" ? " (brouillon WordPress)" : f.wp_status === "publish" ? " (publié sur WordPress)" : ""}</strong>
           <p class="muted" style="margin:4px 0 0">
-            Cet article est verrouillé : plus aucune action (approuver, modifier, régénérer, rejeter, annuler) n'est
-            possible depuis KORA une fois réellement transmis, pour éviter une republication en double. Pour le
-            corriger, agissez directement sur le post WordPress.
+            Cet article est verrouillé : plus d'approuver/modifier/régénérer/rejeter depuis KORA tant qu'il reste
+            transmis. « Retirer de WordPress » met le vrai post en corbeille WordPress et rend l'article modifiable
+            ici ; une republication réutilisera le même post (même lien).
           </p>
           ${f.wp_category_name ? `<p class="muted" style="margin:6px 0 0">Catégorie assignée automatiquement : <strong>${esc(f.wp_category_name)}</strong> — à corriger sur WordPress si besoin.</p>` : ""}
-          ${f.wp_url ? `<a class="btn btn-tonal btn-sm" style="margin-top:10px" href="${esc(f.wp_url)}" target="_blank" rel="noopener">${icon("i-eye")} Voir sur WordPress</a>` : ""}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            ${f.wp_url ? `<a class="btn btn-tonal btn-sm" href="${esc(f.wp_url)}" target="_blank" rel="noopener">${icon("i-eye")} Voir sur WordPress</a>` : ""}
+            ${f.wp_post_id
+              ? `<button class="btn btn-danger-ghost btn-sm" data-withdraw="${esc(f.fact_id)}">${icon("i-undo")} Retirer de WordPress</button>`
+              : `<span class="muted" title="Article transmis avant l'ajout du suivi -- retrait automatique indisponible pour celui-ci">${icon("i-info")} Retrait indisponible (article transmis avant ce suivi)</span>`}
+          </div>
         </div>
       </div>
       ${videoSection(f, true)}

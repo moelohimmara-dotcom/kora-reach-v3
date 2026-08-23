@@ -91,6 +91,7 @@ export const SHELL = `
       <button class="navitem" data-route="facts"><svg class="ic"><use href="#i-facts"/></svg><span>Actifs</span><span class="nav-badge" data-badge="facts"></span></button>
       <button class="navitem" data-route="audit"><svg class="ic"><use href="#i-check"/></svg><span>Historique</span></button>
       <button class="navitem" data-route="drafts"><svg class="ic"><use href="#i-edit"/></svg><span>Brouillons</span></button>
+      <button class="navitem" data-route="published"><svg class="ic"><use href="#i-send"/></svg><span>Publiés</span><span class="nav-badge" data-badge="published"></span></button>
       <button class="navitem" data-route="videos"><svg class="ic"><use href="#i-spark"/></svg><span>Vidéos</span></button>
       <button class="navitem" data-route="sources"><svg class="ic"><use href="#i-sources"/></svg><span>Sources</span><span class="nav-badge" data-badge="sources"></span></button>
       <div class="rail-sep"></div>
@@ -128,6 +129,7 @@ export const SHELL = `
     <div class="rail-group">Contenu</div>
     <button class="item" data-route="facts"><span class="ico">${ic("i-facts")}</span><span class="lbl">Actifs</span><span class="ct" data-badge="facts"></span></button>
     <button class="item" data-route="drafts"><span class="ico">${ic("i-edit")}</span><span class="lbl">Brouillons</span><span class="ct" data-badge="drafts"></span></button>
+    <button class="item" data-route="published"><span class="ico">${ic("i-send")}</span><span class="lbl">Publiés</span><span class="ct" data-badge="published"></span></button>
     <button class="item" data-route="videos"><span class="ico">${ic("i-spark")}</span><span class="lbl">Vidéos</span></button>
     <button class="item" data-route="trash"><span class="ico">${ic("i-trash")}</span><span class="lbl">Corbeille</span><span class="ct" data-badge="trash"></span></button>
 
@@ -146,6 +148,7 @@ export const SHELL = `
     <div class="right-drawer-body">
       <button class="navitem" data-route="audit"><svg class="ic"><use href="#i-check"/></svg><span>Historique</span></button>
       <button class="navitem" data-route="drafts"><svg class="ic"><use href="#i-edit"/></svg><span>Brouillons</span><span class="nav-badge" data-badge="drafts"></span></button>
+      <button class="navitem" data-route="published"><svg class="ic"><use href="#i-send"/></svg><span>Publiés</span><span class="nav-badge" data-badge="published"></span></button>
       <button class="navitem" data-route="videos"><svg class="ic"><use href="#i-spark"/></svg><span>Vidéos</span></button>
       <button class="navitem" data-route="trash"><svg class="ic"><use href="#i-trash"/></svg><span>Corbeille</span><span class="nav-badge" data-badge="trash"></span></button>
       <button class="navitem" data-route="settings"><svg class="ic"><use href="#i-settings"/></svg><span>Paramètres</span></button>
@@ -179,6 +182,7 @@ export const SHELL = `
   <div class="nav-scrim" id="navScrim" hidden></div>
   <div class="overflow-menu" id="overflowMenu" hidden>
     <button class="overflow-item" data-route="drafts"><svg class="ic"><use href="#i-edit"/></svg><span>Brouillons</span></button>
+    <button class="overflow-item" data-route="published"><svg class="ic"><use href="#i-send"/></svg><span>Publiés</span></button>
     <button class="overflow-item" data-route="videos"><svg class="ic"><use href="#i-spark"/></svg><span>Vidéos</span></button>
     <button class="overflow-item" data-route="audit"><svg class="ic"><use href="#i-check"/></svg><span>Historique</span></button>
     <button class="overflow-item" data-route="sources"><svg class="ic"><use href="#i-sources"/></svg><span>Sources</span></button>

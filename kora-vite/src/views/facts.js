@@ -143,6 +143,35 @@ function viewDrafts(s) {
     ${toolbar}
     <div class="fact-grid">${cells}</div>`;
 }
+
+// Sous-page "Publiés" (2026-08-23, ADR-0005, tâche T3, demande explicite :
+// "tous les articles déjà publiés... viennent se loger dans une sous-page
+// enfant de la page article... [avec] une fonctionnalité de pouvoir les
+// retirer de wordpress ... pour les ramener dans kora") -- symétrique de
+// viewDrafts() ci-dessus, même rang de navigation (voir shell.js). Les
+// articles TRANSMITTED n'apparaissent PLUS DU TOUT dans viewFacts() (voir
+// son filtre en tête de fonction) : cette page est leur seul espace.
+function viewPublished(s) {
+  const facts = s.facts || [];
+  const published = facts.filter(f => f.status === "TRANSMITTED");
+  if (s.ui.loading && !facts.length) return factsSkeleton();
+  if (!published.length) return stateBox("i-send", "Aucun article publié", "Les articles transmis à WordPress (brouillon ou publication officielle) apparaissent ici, avec la possibilité de les retirer pour les modifier à nouveau.", false);
+  const cells = published.map(f => {
+    const idx = facts.indexOf(f);
+    const card = factCard(f, s, idx);
+    const statusLabel = f.wp_status === "draft" ? "Brouillon WordPress"
+      : f.wp_status === "publish" ? "Publié sur WordPress" : "Transmis";
+    const actions = `<div class="draft-actions">
+        <span class="muted" style="flex:1">${esc(statusLabel)}${f.wp_category_name ? " · " + esc(f.wp_category_name) : ""}</span>
+        ${f.wp_url ? `<a class="btn btn-tonal btn-sm" href="${esc(f.wp_url)}" target="_blank" rel="noopener">${icon("i-eye")} Voir</a>` : ""}
+        <button class="btn btn-tonal btn-sm" data-withdraw="${esc(f.fact_id)}">${icon("i-undo")} Retirer de WordPress</button>
+      </div>`;
+    return `<div class="draft-cell">${card}${actions}</div>`;
+  }).join("");
+  return `<div class="section-title">Publiés (${published.length})</div>
+    <p class="muted" style="margin-bottom:16px">Articles transmis à WordPress. « Retirer » met le post réel en corbeille WordPress et rend l'article modifiable dans KORA ; une republication réutilise le même post (même lien).</p>
+    <div class="fact-grid">${cells}</div>`;
+}
 // B+C : catégorie EXCLUSIVE d'un fact (1 seule catégorie, priorité stricte).
 // Garantit que les filtres du Tableau de bord / Articles sont mutuellement
 // exclusifs et que leur somme égale exactement le total (plus de chevauchement
@@ -162,36 +191,20 @@ function factCategory(s, f) {
   return "pending";
 }
 function viewFacts(s) {
-  const facts = s.facts || [];
-  // SSOT : les compteurs de filtres lisent s.stats (certifie par le backend),
-  // pas un recalcul client divergeant (evite "Rejetes 2" vs cockpit "Rejetes 5").
-  const st = s.stats || {};
-  const counts = {
-    all: (typeof st.total_facts === "number") ? st.total_facts : facts.length,
-    pending: (typeof st.pending === "number") ? st.pending : 0,
-    transmitted: (typeof st.transmitted === "number") ? st.transmitted : 0,
-    rejected: (typeof st.rejected === "number") ? st.rejected : 0,
-    drafts: (typeof st.drafts === "number") ? st.drafts : 0,
-    trash: (typeof st.trash === "number") ? st.trash : 0,
-  };
+  // Exclusion des articles transmis (2026-08-23, ADR-0005, tâche T3, demande
+  // explicite : "tous les articles déjà publiés... disparaissent de
+  // l'affichage du tableau de bord principal et viennent se loger dans une
+  // sous-page enfant") -- voir viewPublished() ci-dessous, leur nouvel
+  // espace dédié (retrait/republication WordPress). Filtré ICI, à la
+  // source, pour que TOUT le reste de cette vue (compteurs, groupes,
+  // sélection multiple) n'ait plus jamais à connaître ce statut.
+  const facts = (s.facts || []).filter(f => f.status !== "TRANSMITTED");
   const f = (Store.getFactFilter() || "all").toLowerCase();
   // Skeleton (13.2) : au tout premier chargement (avant que /api/hitl ait
   // répondu), sans ça l'état vide "Aucun article" s'affichait un instant à
   // tort — trompeur, on ne SAIT pas encore s'il y a des articles ou non.
   if (s.ui.loading && !facts.length) return factsSkeleton();
   if (!facts.length) return (s.lastCycle && s.lastCycle.result && s.lastCycle.result.status === "empty_or_stale") ? staleBox(s) : stateBox("i-check", "Aucun article à afficher", "Lance un cycle pour générer des articles à valider.", false, "Lancer un cycle", () => Store.startCycle());
-  const filters = [
-    ["all", "Tous", counts.all], ["pending", "En attente", counts.pending],
-    ["transmitted", "Transmis", counts.transmitted], ["rejected", "Rejetés", counts.rejected],
-    ["drafts", "Brouillons", counts.drafts], ["trash", "Corbeille", counts.trash],
-  ];
-  const filterBar = `<div class="filter-bar">${filters.map(([k, lab, n]) =>
-    `<button class="filter-pill ${f === k ? "active" : ""}" data-fact-filter="${k}">${lab} <span class="pill-n">${n}</span></button>`).join("")}${helpTip("fact-filters")}</div>
-    <p class="filter-note">Chaque article compte dans une seule catégorie — la somme des filtres égale le total (${counts.all}).</p>
-    <div class="toolbar-row">
-      <button class="btn btn-tonal" id="enterSelect">${s.selectMode ? "Annuler la sélection" : "Sélectionner"}</button>
-    </div>`;
-  let body;
   // B+C : filtrage par catégorie EXCLUSIVE (même logique inline que les compteurs)
   const catOf = (ft) => {
     // TRASHED compte TOUJOURS dans "trash" (2026-08-22, revu -- demande
@@ -199,14 +212,40 @@ function viewFacts(s) {
     // un article rejeté via ce bouton -- cohérent avec s.stats.trash
     // (voir get_dashboard_stats(), hitl_store.py, même date).
     if (ft.status === "TRASHED" || (ft.trashed_at && ft.trashed_at !== "")) return "trash";
-    if (ft.status === "TRANSMITTED" || ft.status === "APPROVED") return "transmitted";
+    // APPROVED (2026-08-23) : ne signifie plus "en cours de transmission
+    // vers WordPress" au sens où c'était compté avant (TRANSMITTED est
+    // maintenant exclu plus haut) -- reste dans "pending", un état
+    // transitoire du circuit actif, pas une destination à part.
     if (ft.status === "REJECTED") return "rejected";
     if (ft.status === "EDITED") return "drafts";
     return "pending";
   };
+  // Comptés depuis la liste déjà filtrée (transmis exclus) plutôt que
+  // s.stats (qui inclut encore les transmis tant que le recomptage backend,
+  // tâche T4 de l'ADR-0005, n'est pas fait) -- évite un compteur "Tous" qui
+  // ne correspondrait plus aux cartes réellement affichées.
+  const counts = {
+    all: facts.length,
+    pending: facts.filter(x => catOf(x) === "pending").length,
+    rejected: facts.filter(x => catOf(x) === "rejected").length,
+    drafts: facts.filter(x => catOf(x) === "drafts").length,
+    trash: facts.filter(x => catOf(x) === "trash").length,
+  };
+  const filters = [
+    ["all", "Tous", counts.all], ["pending", "En attente", counts.pending],
+    ["rejected", "Rejetés", counts.rejected],
+    ["drafts", "Brouillons", counts.drafts], ["trash", "Corbeille", counts.trash],
+  ];
+  const filterBar = `<div class="filter-bar">${filters.map(([k, lab, n]) =>
+    `<button class="filter-pill ${f === k ? "active" : ""}" data-fact-filter="${k}">${lab} <span class="pill-n">${n}</span></button>`).join("")}${helpTip("fact-filters")}</div>
+    <p class="filter-note">Chaque article compte dans une seule catégorie — la somme des filtres égale le total (${counts.all}). Les articles déjà transmis sont dans « Publiés ».</p>
+    <div class="toolbar-row">
+      <button class="btn btn-tonal" id="enterSelect">${s.selectMode ? "Annuler la sélection" : "Sélectionner"}</button>
+    </div>`;
+  let body;
   if (f === "all") {
     body = factGroupsByDay(facts, s);
-  } else if (["pending", "transmitted", "rejected", "drafts", "trash"].includes(f)) {
+  } else if (["pending", "rejected", "drafts", "trash"].includes(f)) {
     body = factGroupsByDay(facts.filter(x => catOf(x) === f), s);
   } else {
     body = factGroupsByDay(facts, s);
@@ -338,4 +377,4 @@ function doBulkTrash(definitive) {
   }
 }
 
-export { viewFacts, viewDrafts, onBulkAction, openWpChoice, openTrashChoice, doBulkApprove, doBulkTrash };
+export { viewFacts, viewDrafts, viewPublished, onBulkAction, openWpChoice, openTrashChoice, doBulkApprove, doBulkTrash };

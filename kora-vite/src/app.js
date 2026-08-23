@@ -26,7 +26,7 @@ import {
 import { renderSheet, confirmAction, isEditingActive } from "./sheet.js";
 import { renderNotifCenter } from "./notifications.js";
 import { viewCockpit } from "./views/cockpit.js";
-import { viewFacts, viewDrafts, onBulkAction, openWpChoice, openTrashChoice, doBulkApprove, doBulkTrash } from "./views/facts.js";
+import { viewFacts, viewDrafts, viewPublished, onBulkAction, openWpChoice, openTrashChoice, doBulkApprove, doBulkTrash } from "./views/facts.js";
 import { viewTrash } from "./views/trash.js";
 import { viewVideos, bindVideos } from "./views/videos.js";
 import { viewSources, bindSources } from "./views/sources.js";
@@ -285,7 +285,7 @@ function render() {
   renderErrorBanner(s);
   const view = document.getElementById("view");
   if (!view) return;
-  const map = { cockpit: viewCockpit, facts: viewFacts, sources: viewSources, videos: viewVideos, audit: viewAudit, drafts: viewDrafts, settings: viewSettings, trash: viewTrash, styleguide: viewStyleGuide };
+  const map = { cockpit: viewCockpit, facts: viewFacts, sources: viewSources, videos: viewVideos, audit: viewAudit, drafts: viewDrafts, published: viewPublished, settings: viewSettings, trash: viewTrash, styleguide: viewStyleGuide };
   // Garde de rôle au niveau du routage (13.3) : jusqu'ici seul le LIEN vers
   // /style-guide était masqué pour un rôle non-advanced, mais la route
   // elle-même restait accessible en tapant #styleguide directement (aucune
@@ -338,6 +338,10 @@ function render() {
       sources: (s.sources || []).length,
       drafts: (typeof stats.drafts === "number") ? stats.drafts : facts.filter(f => (f.status || "") === "EDITED").length,
       trash: (typeof stats.trash === "number") ? stats.trash : (s.trash || []).length || facts.filter(f => (f.status || "") === "DELETED").length,
+      // "published" (2026-08-23, ADR-0005, tâche T3) : sous-page dédiée aux
+      // articles transmis, distincte d'"Actifs" -- voir viewPublished()
+      // dans views/facts.js.
+      published: (typeof stats.transmitted === "number") ? stats.transmitted : facts.filter(f => (f.status || "") === "TRANSMITTED").length,
     };
     document.querySelectorAll("[data-badge]").forEach(el => {
       const key = el.getAttribute("data-badge");
@@ -552,6 +556,17 @@ function render() {
     document.querySelectorAll("[data-finish]").forEach(b => b.onclick = () => {
       Store.finishDraft(b.dataset.finish).then(() => snack("Remis en attente de validation")).catch(e => snack("Erreur : " + e.message));
     });
+    // Retrait synchronisé (2026-08-23, ADR-0005, tâche T3) : bouton "Retirer
+    // de WordPress", présent à la fois sur la page Publiés (viewPublished)
+    // et dans le tiroir article (sheet.js) -- même délégation centralisée
+    // que les autres actions de cette fonction.
+    document.querySelectorAll("[data-withdraw]").forEach(b => b.onclick = () => guardClick(b, () =>
+      Store.withdrawFromWordPress(b.dataset.withdraw).then(r => {
+        if (r?.cancelled) return;
+        if (r?.warning) snack(`Article retiré (${r.warning})`);
+        else snack("Article retiré de WordPress, redevenu modifiable.");
+        Store.closeSheet();
+      }).catch(e => snack(friendlyActionError(e)))));
   } catch (e) { console.error("trashBtns", e); }
   // Boutons afficher/masquer le mot de passe (login + settings)
   try { bindPasswordToggles(); } catch (e) { console.error("pwToggles", e); }

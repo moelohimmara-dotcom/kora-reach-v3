@@ -782,6 +782,26 @@ export const Store = (() => {
       throw e;
     }
   }
+
+  // Retrait synchronisé (2026-08-23, ADR-0005, tâche T3) : distinct de
+  // retract() ci-dessus (qui gère APPROVED/EDITED -> PENDING_REVIEW, AVANT
+  // toute transmission) -- celui-ci agit sur un article DÉJÀ transmis, via
+  // /api/hitl/withdraw (voir server.py), qui met le VRAI post WordPress en
+  // corbeille avant de changer quoi que ce soit côté KORA.
+  async function withdrawFromWordPress(factId) {
+    if (!window.confirm("Retirer cet article de WordPress ? Le post sera mis en corbeille WordPress (récupérable côté WP) et l'article redeviendra modifiable dans KORA.")) return { cancelled: true };
+    setState({ ui: { ...state.ui, busy: true, overlay: "Retrait de WordPress…" } });
+    try {
+      const r = await api("/api/hitl/withdraw", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fact_id: factId }) });
+      if (r.error) throw new Error(r.error);
+      await _refreshAfterMutation();
+      setState({ ui: { ...state.ui, busy: false, overlay: null } });
+      return r;
+    } catch (e) {
+      setState({ ui: { ...state.ui, busy: false, overlay: null, error: e.message } });
+      throw e;
+    }
+  }
   function setRoute(r) { setState({ route: r }); }
   function openSheet(s) { setState({ sheet: s }); }
   function closeSheet() { setState({ sheet: null }); }
@@ -1209,7 +1229,7 @@ export const Store = (() => {
     state, setState, subscribe, api,
     loadHealth, loadLast, loadHITL, loadAudit, loadSources, loadVideos, addSource, updateSource, loadSettings, applySettings,
     loadNotifications, markNotificationRead, markAllNotificationsRead,
-    startCycle, resumeCycleWatch, cancelCycle, decide, retract, setRoute, openSheet, closeSheet, wait,
+    startCycle, resumeCycleWatch, cancelCycle, decide, retract, withdrawFromWordPress, setRoute, openSheet, closeSheet, wait,
     startVideoGeneration, getVideoStatus, startVideoJob, resumeVideoWatch,
     formatEta: _formatEta,
     wasCycleActiveBeforeLoad,
