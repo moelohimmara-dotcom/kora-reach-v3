@@ -334,7 +334,13 @@ function render() {
     // SSOT : badges de navigation tires de s.stats (calcules une seule fois par le backend)
     const stats = s.stats || {};
     const badges = {
-      facts: (typeof stats.total_facts === "number") ? stats.total_facts : ((typeof stats.articles === "number") ? stats.articles : facts.length),
+      // "facts" (2026-08-23, ADR-0005, tâche T4) : active_facts exclut les
+      // articles TRANSMITTED (comptés séparément par le badge "published"
+      // ci-dessous) -- cohérent avec viewFacts() qui les a exclus (T3) et
+      // avec la tuile "Articles" du cockpit (voir views/cockpit.js).
+      facts: (typeof stats.active_facts === "number") ? stats.active_facts
+        : (typeof stats.total_facts === "number") ? stats.total_facts
+        : ((typeof stats.articles === "number") ? stats.articles : facts.length),
       sources: (s.sources || []).length,
       drafts: (typeof stats.drafts === "number") ? stats.drafts : facts.filter(f => (f.status || "") === "EDITED").length,
       trash: (typeof stats.trash === "number") ? stats.trash : (s.trash || []).length || facts.filter(f => (f.status || "") === "DELETED").length,

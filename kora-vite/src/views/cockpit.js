@@ -87,7 +87,13 @@ function viewCockpit(s) {
   // SSOT : tous les compteurs viennent de s.stats (calcules une fois par le backend).
   // Plus aucun recalcul divergent cote front (ancien cat.pending / s.trash, etc.).
   const st = s.stats || {};
-  const total = (typeof st.total_facts === "number") ? st.total_facts : ((typeof st.articles === "number") ? st.articles : 0);  // Articles = total_facts, coherent avec la sidebar et le filtre "Tous" (voir get_dashboard_stats)
+  // Articles = active_facts (2026-08-23, ADR-0005, tâche T4, demande
+  // explicite : "les articles déjà transmis ... ne doivent plus figurer
+  // dans le comptage normal") -- exclut TRANSMITTED, qui a désormais son
+  // propre espace (page Publiés). Repli sur total_facts pour compatibilité
+  // si un backend pas encore redéployé ne renvoie pas encore active_facts.
+  const total = (typeof st.active_facts === "number") ? st.active_facts
+    : (typeof st.total_facts === "number") ? st.total_facts : ((typeof st.articles === "number") ? st.articles : 0);
   const pending = (typeof st.pending === "number") ? st.pending : 0;        // A decider (PENDING_REVIEW)
   const approved = (typeof st.published === "number") ? st.published : 0;   // Publies (articles publies)
   const draft = (typeof st.drafts === "number") ? st.drafts : 0;            // Brouillons (EDITED)

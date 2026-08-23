@@ -1189,6 +1189,17 @@ def get_dashboard_stats() -> dict:
             # corrige une fois (2026-08-19) et qui a resurgi le 2026-08-19 sous
             # une autre forme (sidebar/dashboard affichant 80 quand "Tous" = 89).
             "total_facts": total_facts,
+            # active_facts (2026-08-23, ADR-0005, tâche T4, demande explicite :
+            # "les articles déjà transmis vers wordpress ne doivent plus
+            # figurer dans le comptage normal de kora pour éviter toute
+            # confusion de calcul") -- c'est désormais CETTE valeur que le
+            # badge "Articles" (sidebar, tuile dashboard) doit utiliser, PAS
+            # total_facts. Les deux valeurs restent exposées : total_facts
+            # garde son rôle d'invariant interne (somme des 5 catégories
+            # ci-dessous, jamais rompu) ; active_facts exclut spécifiquement
+            # 'transmitted', qui a désormais son propre espace dédié (page
+            # Publiés, voir kora-vite/src/views/facts.js::viewPublished).
+            "active_facts": total_facts - transmitted,
             "articles": in_circulation,        # sous-total "en circulation" (hors corbeille ET rejetes) -- usage ponctuel seulement, PAS pour le badge "Articles"
             "pending": pending,               # a decider (+ etats residuels)
             "transmitted": transmitted,       # publies/transmis (+ approuves)
