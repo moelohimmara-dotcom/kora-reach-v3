@@ -39,6 +39,31 @@ WP_CATEGORY_MAP = {
     "Science": 16, "Justice": 17, "Société": 6, "Afrique": 19, "Monde": 20,
     "Actualités": 3, "Art": 986, "Affaires religieuses": 987, "Nécrologie": 988,
 }
+# Repli hors-cadre (2026-08-23, demande explicite : "si un article sort du
+# cadre habituel, alors il part soit dans annonce ou à la une (selon une
+# règle algo que tu maîtrises parfaitement)") -- catégories RÉELLES du site
+# (vérifiées via /wp-json/wp/v2/categories, pas inventées) : "À la une"
+# (id 41, "À LA UNE" -- 284 articles, catégorie éditoriale de premier plan,
+# usage réel confirmé) et "Alertes" (id 48, "ALERTES" -- catégorie
+# existante la plus proche du terme "annonce" employé par l'utilisateur ;
+# aucune catégorie "Annonce"/"Annonces" n'existe sur le site, non créée
+# faute de confirmation explicite -- contrairement à Art/Affaires
+# religieuses/Nécrologie, créées le même jour sur demande explicite).
+# Distinctes de WP_CATEGORY_MAP ci-dessus : ce ne sont PAS des thèmes que
+# le LLM doit choisir librement (il resterait tenté de les utiliser comme
+# fourre-tout au lieu de vraiment chercher un thème) -- uniquement des
+# CIBLES DE REPLI, choisies mécaniquement par _classify_category() quand
+# aucun thème ne correspond, voir plus bas.
+WP_FALLBACK_MAP = {"À la une": 41, "Alertes": 48}
+# Règle algo du repli (2026-08-23) : hors-cadre thématique, un fait corroboré
+# par PLUSIEURS sources (n_sources >= 2, signal déjà calculé par le cluster
+# de fusion -- voir collection/whitelist.py et le pipeline de génération)
+# est objectivement plus susceptible d'être un sujet majeur qui dépasse une
+# seule catégorie -> "À la une". Un fait à source UNIQUE, hors thème, est
+# traité comme mineur/ponctuel -> "Alertes". Signal réel déjà disponible
+# dans le payload (fact.get("n_sources")), jamais deviné.
+WP_FALLBACK_MAJOR = "À la une"
+WP_FALLBACK_MINOR = "Alertes"
 WP_CATEGORY_DEFAULT = "Non classé"
 WP_CATEGORY_DEFAULT_ID = 1
 
@@ -139,14 +164,28 @@ _CATEGORY_KEYWORD_RE = {
 }
 
 
-def _classify_category_mechanical(text: str) -> str:
+def _fallback_category(n_sources) -> str:
+    """Repli hors-cadre (2026-08-23) -- voir commentaire de WP_FALLBACK_MAP :
+    règle algo DÉTERMINISTE (jamais laissée à un LLM, pour rester
+    explicable et reproductible), basée sur un signal RÉEL déjà présent
+    dans le pipeline (n_sources, calculé par la fusion de cluster) plutôt
+    que deviné. >= 2 sources corroborantes -> sujet objectivement plus
+    susceptible d'être majeur -> "À la une" ; source unique -> "Alertes"."""
+    try:
+        n = int(n_sources or 1)
+    except (TypeError, ValueError):
+        n = 1
+    return WP_FALLBACK_MAJOR if n >= 2 else WP_FALLBACK_MINOR
+
+
+def _classify_category_mechanical(text: str, n_sources=1) -> str:
     """Filet mécanique -- voir commentaire ci-dessus. Ne peut jamais échouer
     (aucun appel réseau), sert de repli si le classement LLM échoue."""
     if not text:
-        return WP_CATEGORY_DEFAULT
+        return _fallback_category(n_sources)
     scores = {cat: len(rx.findall(text)) for cat, rx in _CATEGORY_KEYWORD_RE.items()}
     best_cat, best_score = max(scores.items(), key=lambda kv: kv[1])
-    return best_cat if best_score > 0 else WP_CATEGORY_DEFAULT
+    return best_cat if best_score > 0 else _fallback_category(n_sources)
 
 
 _CATEGORY_SYSTEM_PROMPT = (
@@ -160,13 +199,22 @@ _CATEGORY_SYSTEM_PROMPT = (
 )
 
 
-def _classify_category(title: str, text: str) -> str:
+def _classify_category(title: str, text: str, n_sources=1) -> str:
     """Classement automatique par catégorie éditoriale (2026-08-23, demande
     explicite : "ajoute la fonctionnalité de classement automatique par
     catégorie ... selon le cadre de catégorisation dans wordpress kakilambe.
     Cela évite au user de le faire lui-même"). Retourne un NOM de catégorie
-    (clé de WP_CATEGORY_MAP, ou WP_CATEGORY_DEFAULT) -- jamais un ID
-    directement, la conversion se fait à l'appelant (_to_wordpress).
+    (clé de WP_CATEGORY_MAP ou WP_FALLBACK_MAP) -- jamais un ID directement,
+    la conversion se fait à l'appelant (_to_wordpress).
+
+    Hors-cadre (2026-08-23, demande explicite : "si un article sort du cadre
+    habituel, alors il part soit dans annonce ou à la une") : le LLM ne
+    choisit qu'entre les catégories THÉMATIQUES (WP_CATEGORY_MAP) ou
+    WP_CATEGORY_DEFAULT s'il ne trouve rien -- c'est SEULEMENT dans ce
+    dernier cas que _fallback_category() tranche entre "À la une"/"Alertes"
+    par une règle mécanique (n_sources), jamais par le LLM lui-même (garde
+    le choix explicable/reproductible, pas soumis à l'appréciation floue
+    d'un modèle sur ce qui est "important").
 
     Import paresseux de generation.writer (même précaution que
     _derive_source_level ci-dessous : éviter tout couplage/coût au
@@ -187,9 +235,10 @@ def _classify_category(title: str, text: str) -> str:
         # mais le nom RETOURNÉ reste toujours celui de la liste canonique.
         norm = {k.lower(): k for k in list(WP_CATEGORY_MAP.keys()) + [WP_CATEGORY_DEFAULT]}
         if candidate.lower() in norm:
-            return norm[candidate.lower()]
+            matched = norm[candidate.lower()]
+            return _fallback_category(n_sources) if matched == WP_CATEGORY_DEFAULT else matched
     # LLM indisponible ou réponse hors-liste -> filet mécanique par mots-clés
-    return _classify_category_mechanical(f"{title}\n{excerpt}")
+    return _classify_category_mechanical(f"{title}\n{excerpt}", n_sources)
 
 
 def _wp_slugify(title: str) -> str:
@@ -683,12 +732,13 @@ def _to_wordpress(payload: dict, wp_status: str = "publish") -> dict:
     #    "Non classé" (id WP_CATEGORY_DEFAULT_ID) au pire des cas, jamais
     #    d'article sans catégorie du tout.
     _pre = (payload.get("suggested_category") or "").strip()
-    _valid_names = set(WP_CATEGORY_MAP.keys()) | {WP_CATEGORY_DEFAULT}
+    _valid_names = set(WP_CATEGORY_MAP.keys()) | set(WP_FALLBACK_MAP.keys()) | {WP_CATEGORY_DEFAULT}
     if _pre in _valid_names:
         category_name = _pre  # déjà classé en lot -- pas de 2e appel LLM
     else:
-        category_name = _classify_category(payload["title"], payload["content"])
-    category_id = WP_CATEGORY_MAP.get(category_name, WP_CATEGORY_DEFAULT_ID)
+        category_name = _classify_category(payload["title"], payload["content"],
+                                            n_sources=payload.get("n_sources", 1))
+    category_id = WP_CATEGORY_MAP.get(category_name) or WP_FALLBACK_MAP.get(category_name) or WP_CATEGORY_DEFAULT_ID
     body_dict = {
         "title": payload["title"],
         "content": payload["content"],
