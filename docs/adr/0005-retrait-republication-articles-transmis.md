@@ -1,7 +1,7 @@
 # ADR-0005 : Retrait/republication d'un article transmis, sous-page dédiée, recomptage
 
 **Date** : 2026-08-23
-**Statut** : accepté (implémentation en plusieurs tâches, voir plus bas)
+**Statut** : accepté, implémenté (T1-T5 tous en production, vérifiés en conditions réelles le 2026-08-23)
 **Décideurs** : propriétaire du projet, assisté de Claude
 
 ## Contexte
@@ -146,27 +146,47 @@ Découpage pour exécution séquentielle, chaque tâche vérifiée en conditions
 réelles (jamais de code non testé) avant de passer à la suivante, avec
 déploiement et suite de non-régression en fin de parcours.
 
-- **T1 — Backend : retrait synchronisé.** Nouvelle fonction
+- ✅ **T1 — Backend : retrait synchronisé.** Fait.
   `publishing/transmit.py::retract_from_wordpress(wp_post_id)` (met le post
-  en corbeille WP via l'API REST) + nouvelle fonction
-  `editorial/hitl_store.py::retract_transmitted(fact_id, by)` (statut →
-  `EDITED`, `wp_post_id`/`wp_url` conservés, décision tracée) + endpoint
-  `server.py` dédié, réservé au même droit que la publication WordPress.
-- **T2 — Backend : republication in-place.** `transmit()` détecte un
-  `wp_post_id` existant sur le fait et met à jour ce post (sortie de
-  corbeille incluse) au lieu d'en créer un nouveau ; repli sur une création
-  neuve si le post original n'existe plus (404), avec avertissement explicite.
-- **T3 — Sous-page « Publiés ».** Nouvelle route de navigation (même rang
-  que Brouillons/Corbeille), retrait des articles `TRANSMITTED` de la liste
-  principale « Articles », bouton « Retirer de WordPress » sur cette
-  nouvelle page (et dans le tiroir article, à la place du bloc lecture-seule
-  actuel qui n'offre aujourd'hui aucune action).
-- **T4 — Recomptage dashboard.** Redéfinition des compteurs pour une
-  partition sans chevauchement (« Articles » = circuit actif uniquement,
-  « Publiés » = transmis) dans `editorial/hitl_store.py` (fonction de stats)
-  et son affichage cockpit.
-- **T5 — Vérification et déploiement.** Tests en conditions réelles sur de
-  vrais posts WordPress (retrait, republication in-place, cas 404/repli),
-  suite de non-régression complète, déploiement, mise à jour de
-  [HITL-LOGIQUE.md](../../HITL-LOGIQUE.md) pour refléter le nouvel état
-  (la ligne `TRANSMITTED` et l'angle mort §10 « Override »).
+  en corbeille WP via l'API REST) + `editorial/hitl_store.py::mark_retracted(fact_id, by)`
+  (statut → `EDITED`, `wp_post_id`/`wp_url` conservés, décision tracée) +
+  endpoint `POST /api/hitl/withdraw` dans `server.py`, réservé au même droit
+  que la publication WordPress. Vérifié en conditions réelles : vrai post
+  WordPress confirmé `status=trash` après coup, à la fois en appel direct
+  et via le vrai endpoint HTTP authentifié.
+- ✅ **T2 — Backend : republication in-place.** Fait.
+  `_to_wordpress()` détecte un `wp_post_id` existant sur le fait et met à
+  jour ce post (sortie de corbeille incluse) au lieu d'en créer un nouveau ;
+  repli sur une création neuve si le post original n'existe plus (404), avec
+  `republish_warning` explicite. **Bug trouvé en testant** (pas anticipé
+  dans l'analyse initiale) : WordPress renomme le slug d'un post en corbeille
+  en `__trashed-N`, jamais restauré automatiquement par une simple mise à
+  jour de statut via l'API REST — corrigé par `_wp_slugify(title)`, qui
+  envoie systématiquement un slug propre dérivé du titre à la republication.
+- ✅ **T3 — Sous-page « Publiés ».** Fait.
+  Nouvelle route de navigation `published` (même rang que Brouillons/
+  Corbeille, ajoutée aux 4 emplacements de nav — rail, tiroir mobile, "Plus"
+  desktop/mobile), retrait des articles `TRANSMITTED` de la liste principale
+  « Articles », `viewPublished()` avec bouton « Retirer de WordPress » (et
+  dans le tiroir article, à la place de l'ancien bloc lecture-seule).
+  Vérifié bout en bout via Playwright sur un vrai article : absent
+  d'Articles, présent sur Publiés, clic réel sur « Retirer » → article
+  redevenu modifiable, post WordPress confirmé en corbeille.
+- ✅ **T4 — Recomptage dashboard.** Fait.
+  Nouvelle clé `active_facts` (= `total_facts - transmitted`) dans
+  `get_dashboard_stats()`, utilisée par la tuile « Articles » du cockpit et
+  le badge de navigation. Vérifié : avant le correctif, la tuile affichait
+  22 quand la page n'en listait que 19 (transmis exclus par T3) —
+  exactement la confusion signalée ; après déploiement, les deux
+  correspondent (19 = 19).
+- ✅ **T5 — Vérification et déploiement.** Fait.
+  Cycle complet testé en conditions réelles sur un vrai article : transmission
+  (brouillon) → apparition sur Publiés/disparition d'Articles → retrait
+  (post réel en corbeille WordPress) → réapparition en Brouillons → 
+  republication (publication officielle) → **même `wp_post_id`, même
+  permalien propre**, catégorie automatique conservée à travers tout le
+  cycle. Invariant `total_facts = pending+transmitted+rejected+drafts+trash`
+  revérifié intact après le recomptage (T4). Suite de non-régression
+  (`smoke_test.mjs`, `test_parcours_b/c.mjs`) : SUCCÈS après chacune des
+  tâches T1-T4. [HITL-LOGIQUE.md](../../HITL-LOGIQUE.md) mis à jour (ligne
+  `TRANSMITTED` et angle mort §10 « Override »).

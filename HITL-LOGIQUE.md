@@ -21,7 +21,7 @@ Un `fact_id` stable identifie chaque proposition : `fact_id = sha1(champion_url 
 | `EDITED` | Humain a modifié le texte | reste en attente |
 | `APPROVED` | Humain a cliqué « Approuver » | **déverrouille** la transmission |
 | `REJECTED` | Humain a cliqué « Rejeter » | jamais transmis |
-| `TRANSMITTED` | POST WordPress/Supabase réussi | **verrouillé** (aucune action depuis KORA à ce jour ; « Retirer de WordPress » planifié, voir [ADR-0005](docs/adr/0005-retrait-republication-articles-transmis.md)) |
+| `TRANSMITTED` | POST WordPress/Supabase réussi | **verrouillé** pour l'édition directe (approuver/modifier/régénérer/rejeter) ; retour possible à `EDITED` via « Retirer de WordPress » (met le VRAI post en corbeille WordPress d'abord — voir [ADR-0005](docs/adr/0005-retrait-republication-articles-transmis.md), implémenté et vérifié en prod le 2026-08-23) |
 | `TRANSMISSION_FAILED` | erreur réseau/HTTP | retourne à `APPROVED` (retry) |
 
 Transition interdite : on ne peut pas passer de `TRANSMITTED` ou `REJECTED` à
@@ -89,11 +89,15 @@ mémoire actuel qui est perdu).
   la transmission (sinon risque d'oubli). Alternative : bouton « Transmettre »
   séparé. ⚠ Ton choix.
 - **Override** : qui peut déverrouiller un fait `TRANSMITTED`/rejeter après coup ?
-  (rétraction). Répondu le 2026-08-23 — voir
+  (rétraction). Répondu et **implémenté** le 2026-08-23 — voir
   [ADR-0005](docs/adr/0005-retrait-republication-articles-transmis.md) :
-  retrait synchronisé (corbeille WordPress réelle) réservé au même droit que
-  la publication, republication in-place sur le même post. Implémentation
-  en cours (tâches T1-T5 de l'ADR), pas encore en production au 2026-08-23.
+  retrait synchronisé (corbeille WordPress réelle, `POST /api/hitl/withdraw`,
+  réservé au même droit que la publication) puis republication in-place sur
+  le même `wp_post_id` (même permalien). Les 5 tâches (T1-T5) sont en
+  production, vérifiées en conditions réelles (transmission → retrait →
+  republication sur un vrai post WordPress, cycle complet testé). Limite
+  connue et assumée : les faits transmis avant l'ajout du suivi `wp_post_id`
+  (avant le 2026-08-23) restent hors de portée de cette fonctionnalité.
 - **Conflit de fusion** : si 2 éditeurs décident le même fait → dernière décision
   gagne, tracée (pas de race condition silencieuse).
 
