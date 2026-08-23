@@ -391,6 +391,7 @@ function renderSheet(s) {
             possible depuis KORA une fois réellement transmis, pour éviter une republication en double. Pour le
             corriger, agissez directement sur le post WordPress.
           </p>
+          ${f.wp_category_name ? `<p class="muted" style="margin:6px 0 0">Catégorie assignée automatiquement : <strong>${esc(f.wp_category_name)}</strong> — à corriger sur WordPress si besoin.</p>` : ""}
           ${f.wp_url ? `<a class="btn btn-tonal btn-sm" style="margin-top:10px" href="${esc(f.wp_url)}" target="_blank" rel="noopener">${icon("i-eye")} Voir sur WordPress</a>` : ""}
         </div>
       </div>

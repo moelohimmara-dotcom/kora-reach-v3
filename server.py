@@ -959,7 +959,8 @@ class Handler(BaseHTTPRequestHandler):
                                                 final or fact.get("article", ""),
                                                 wp_post_id=tx.get("wp_post_id") or "",
                                                 wp_url=tx.get("wp_url") or "",
-                                                wp_status=wp_status)
+                                                wp_status=wp_status,
+                                                wp_category_name=tx.get("category_name") or "")
                             else:
                                 mark_transmission_failed(fid, tx["provider"], tx["http_status"])
                             log(fid, "TRANSMISSION", f"mode={tx['provider']} status={tx['status']}",
@@ -1017,7 +1018,8 @@ class Handler(BaseHTTPRequestHandler):
                                         mark_transmitted(fid, tx["provider"], tx["http_status"], fact.get("article", ""),
                                                           wp_post_id=tx.get("wp_post_id") or "",
                                                           wp_url=tx.get("wp_url") or "",
-                                                          wp_status=wp_status)
+                                                          wp_status=wp_status,
+                                                          wp_category_name=tx.get("category_name") or "")
                                     else:
                                         mark_transmission_failed(fid, tx["provider"], tx["http_status"])
                                     r["transmission"] = tx

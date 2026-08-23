@@ -17,6 +17,31 @@ WP_APP_PASS = os.environ.get("WP_APP_PASS", "")
 SB_URL = os.environ.get("SUPABASE_URL", "")
 SB_KEY = os.environ.get("SUPABASE_KEY", "")
 
+# Classement automatique par catégorie (2026-08-23, demande explicite :
+# "ajoute la fonctionnalité de classement automatique par catégorie ...
+# selon le cadre de catégorisation dans wordpress kakilambe. Cela évite au
+# user de le faire lui-même") -- IDs RÉELS vérifiés contre
+# /wp-json/wp/v2/categories de kakilambe.com (2026-08-23). Un sous-ensemble
+# volontairement restreint aux catégories THÉMATIQUES (sujet de l'article) :
+# la taxonomie complète du site contient aussi des catégories de FORMAT/
+# usage (INTERVIEWS, TRIBUNE, OPINION, OFFRES D'EMPLOIS, IMMOBILIER, JT...)
+# qui ne conviennent pas à un classement automatique d'article de synthèse
+# généré par KORA (jamais une interview, une tribune d'opinion ou une
+# annonce). "Art", "Affaires religieuses" et "Nécrologie" (id 986/987/988)
+# n'existaient PAS sur le site avant ce correctif -- créées via l'API à la
+# demande explicite de l'utilisateur (confirmé : catégories manquantes vs
+# liste d'exemple donnée). Les quasi-doublons vides de la taxonomie réelle
+# (ex: "Economie" id136 count=1 vs "ÉCONOMIE" id5 count=35, "Sport" id137
+# count=0 vs "SPORTS" id8 count=49) sont délibérément IGNORÉS au profit de
+# la catégorie réellement utilisée par l'éditeur du site.
+WP_CATEGORY_MAP = {
+    "Politique": 4, "Économie": 5, "Santé": 51, "Sport": 8, "Culture": 9,
+    "Science": 16, "Justice": 17, "Société": 6, "Afrique": 19, "Monde": 20,
+    "Actualités": 3, "Art": 986, "Affaires religieuses": 987, "Nécrologie": 988,
+}
+WP_CATEGORY_DEFAULT = "Non classé"
+WP_CATEGORY_DEFAULT_ID = 1
+
 
 def _strip_leading_title(text: str) -> str:
     """Retire la ligne de titre markdown ('# Titre...') en tête de l'article
@@ -73,6 +98,98 @@ def _detect_language_artifacts(text: str) -> str | None:
     if not hits:
         return None
     return ", ".join(f'"{h}"' for h in hits)
+
+
+# Filet mécanique de classement (2026-08-23) -- COMPLÉMENTAIRE au classement
+# LLM ci-dessous (_classify_category), pas un remplacement : même philosophie
+# que _ENGLISH_TELLS/_detect_language_artifacts -- un LLM peut échouer
+# (réseau, disjoncteur ouvert) ou répondre hors-liste, un scan par mots-clés
+# déterministe ne peut pas. Chaque entrée = liste de mots/expressions dont la
+# présence (frontière de mot) fait gagner 1 point à la catégorie ; la
+# catégorie au score le plus haut l'emporte, "Non classé" si aucun match.
+_CATEGORY_KEYWORDS = {
+    "Politique": ("politique", "gouvernement", "ministre", "président", "assemblée nationale",
+                  "cndd", "junte", "élection", "scrutin", "référendum", "parti politique", "doumbouya"),
+    "Économie": ("économie", "économique", "marché", "commerce", "inflation", "franc guinéen",
+                 "banque", "investissement", "bourse", "entreprise", "budget", "fmi", "cnuced"),
+    "Santé": ("santé", "hôpital", "médecin", "épidémie", "vaccin", "maladie", "clinique",
+              "chu", "patient", "chirurgie"),
+    "Sport": ("football", "syli", "match", "championnat", "coupe", "athlète", "basketball",
+              "sportif", "footballeur", "sélection nationale"),
+    "Culture": ("culture", "festival", "musique", "cinéma", "artiste", "concert", "danse",
+                "patrimoine", "chanteur", "album"),
+    "Science": ("science", "scientifique", "technologie", "recherche", "innovation", "numérique",
+                "intelligence artificielle", "informatique"),
+    "Justice": ("justice", "tribunal", "procès", "juge", "condamnation", "arrestation",
+                "magistrat", "csm", "prison", "avocat", "verdict"),
+    "Société": ("société", "communauté", "éducation", "école", "université", "famille",
+                "droits humains", "ong", "population"),
+    "Afrique": ("afrique", "cedeao", "union africaine", "sénégal", "mali", "côte d'ivoire",
+                "nigeria", "libéria", "sierra leone"),
+    "Monde": ("monde", "international", "onu", "états-unis", "europe", "chine", "russie", "france"),
+    "Art": ("peinture", "sculpture", "exposition d'art", "artiste plasticien", "galerie d'art", "beaux-arts"),
+    "Affaires religieuses": ("religion", "religieux", "mosquée", "église", "imam", "évêque",
+                              "ramadan", "pèlerinage", "hadj", "chrétien", "musulman", "islam"),
+    "Nécrologie": ("décès", "décédé", "obsèques", "funérailles", "disparition", "défunt",
+                   "nécrologie", "condoléances", "in memoriam"),
+}
+_CATEGORY_KEYWORD_RE = {
+    cat: re.compile(r"\b(" + "|".join(re.escape(w) for w in words) + r")\b", re.IGNORECASE)
+    for cat, words in _CATEGORY_KEYWORDS.items()
+}
+
+
+def _classify_category_mechanical(text: str) -> str:
+    """Filet mécanique -- voir commentaire ci-dessus. Ne peut jamais échouer
+    (aucun appel réseau), sert de repli si le classement LLM échoue."""
+    if not text:
+        return WP_CATEGORY_DEFAULT
+    scores = {cat: len(rx.findall(text)) for cat, rx in _CATEGORY_KEYWORD_RE.items()}
+    best_cat, best_score = max(scores.items(), key=lambda kv: kv[1])
+    return best_cat if best_score > 0 else WP_CATEGORY_DEFAULT
+
+
+_CATEGORY_SYSTEM_PROMPT = (
+    "Tu es documentaliste pour un média de presse guinéen. On te donne le titre et le début "
+    "d'un article. Ta seule tâche : choisir la catégorie éditoriale la plus appropriée, "
+    "UNIQUEMENT parmi cette liste exacte (aucune autre catégorie n'existe) :\n"
+    + ", ".join(WP_CATEGORY_MAP.keys()) + ", " + WP_CATEGORY_DEFAULT + "\n\n"
+    "Réponds par UN SEUL mot ou groupe de mots de cette liste, EXACTEMENT comme il est écrit "
+    "ci-dessus, rien d'autre (pas de ponctuation, pas d'explication). Si aucune catégorie ne "
+    "convient clairement, réponds '" + WP_CATEGORY_DEFAULT + "'."
+)
+
+
+def _classify_category(title: str, text: str) -> str:
+    """Classement automatique par catégorie éditoriale (2026-08-23, demande
+    explicite : "ajoute la fonctionnalité de classement automatique par
+    catégorie ... selon le cadre de catégorisation dans wordpress kakilambe.
+    Cela évite au user de le faire lui-même"). Retourne un NOM de catégorie
+    (clé de WP_CATEGORY_MAP, ou WP_CATEGORY_DEFAULT) -- jamais un ID
+    directement, la conversion se fait à l'appelant (_to_wordpress).
+
+    Import paresseux de generation.writer (même précaution que
+    _derive_source_level ci-dessous : éviter tout couplage/coût au
+    chargement de ce module). Repli mécanique systématique si le LLM
+    échoue ou répond hors-liste -- ne bloque JAMAIS la transmission."""
+    excerpt = (text or "")[:1200]
+    try:
+        import generation.writer as writer
+        out = writer.simple_completion(_CATEGORY_SYSTEM_PROMPT,
+                                        f"TITRE : {title}\n\nDÉBUT DE L'ARTICLE :\n{excerpt}",
+                                        max_tokens=20)
+    except Exception:
+        out = None
+    if out:
+        candidate = out.strip().strip(".\"'")
+        # Tolère une casse/espace légèrement différente de la réponse LLM
+        # (ex: "politique" au lieu de "Politique") -- comparaison normalisée,
+        # mais le nom RETOURNÉ reste toujours celui de la liste canonique.
+        norm = {k.lower(): k for k in list(WP_CATEGORY_MAP.keys()) + [WP_CATEGORY_DEFAULT]}
+        if candidate.lower() in norm:
+            return norm[candidate.lower()]
+    # LLM indisponible ou réponse hors-liste -> filet mécanique par mots-clés
+    return _classify_category_mechanical(f"{title}\n{excerpt}")
 
 
 def _build_payload(fact: dict, final_text: str) -> dict:
@@ -263,7 +380,9 @@ def _merge_both_results(results: list) -> dict:
             # que soit le mode ("wordpress" seul ou "both") -- voir
             # editorial/hitl_store.py::mark_transmitted.
             "wp_post_id": (wp_result or {}).get("wp_post_id"),
-            "wp_url": (wp_result or {}).get("wp_url")}
+            "wp_url": (wp_result or {}).get("wp_url"),
+            "category_name": (wp_result or {}).get("category_name"),
+            "category_id": (wp_result or {}).get("category_id")}
 
 
 def mode() -> str:
@@ -522,12 +641,22 @@ def _to_wordpress(payload: dict, wp_status: str = "publish") -> dict:
     #    commentaire de _ENGLISH_TELLS) -- signale seulement, à charge pour
     #    l'éditeur de relire et corriger manuellement avant republication.
     content_warning = _detect_language_artifacts(payload["title"] + "\n" + payload["content"])
+    # 4) Classement automatique par catégorie (2026-08-23, demande explicite :
+    #    "ajoute la fonctionnalité de classement automatique par catégorie
+    #    ... Cela évite au user de le faire lui-même") -- voir
+    #    _classify_category ci-dessus. Ne bloque JAMAIS la transmission (le
+    #    filet mécanique ne peut pas échouer, voir son docstring) --
+    #    "Non classé" (id WP_CATEGORY_DEFAULT_ID) au pire des cas, jamais
+    #    d'article sans catégorie du tout.
+    category_name = _classify_category(payload["title"], payload["content"])
+    category_id = WP_CATEGORY_MAP.get(category_name, WP_CATEGORY_DEFAULT_ID)
     body = json.dumps({
         "title": payload["title"],
         "content": payload["content"],
         "status": wp_status,  # "publish" (public) ou "draft" (brouillon WP, invisible)
         "meta": {"source_url": payload.get("source_url", "")},
         "featured_media": media_id,
+        "categories": [category_id],
     }).encode()
     req = urllib.request.Request(
         WP_URL.rstrip("/") + "/wp-json/wp/v2/posts",
@@ -552,7 +681,8 @@ def _to_wordpress(payload: dict, wp_status: str = "publish") -> dict:
                     "image_warning": image_error, "video_warning": video_warning,
                     "content_warning": (
                         f"mot(s) non francophone(s) détecté(s) : {content_warning} — relire avant publication"
-                        if content_warning else None)}
+                        if content_warning else None),
+                    "category_name": category_name, "category_id": category_id}
     except urllib.error.HTTPError as e:
         return {"status": "FAILED", "provider": "wordpress",
                 "http_status": e.code, "detail": e.reason}

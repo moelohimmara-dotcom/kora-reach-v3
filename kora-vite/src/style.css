@@ -2398,35 +2398,9 @@ html.icons-ready .material-icons { visibility: visible; }
 .skel-line-title { width: 70%; height: 14px; }
 .skel-line-sub { width: 40%; }
 
-/* ============================================================
-   GUIDE UTILISATEUR / ONBOARDING (wireframe 11.1-11.3)
-   ============================================================ */
-.tour-overlay {
-  position: fixed; z-index: 200; border-radius: 10px; pointer-events: none;
-  box-shadow: 0 0 0 9999px rgba(0,0,0,.65);
-  border: 2px solid var(--coral);
-  transition: left .25s ease, top .25s ease, width .25s ease, height .25s ease;
-}
-.tour-bubble {
-  position: fixed; z-index: 201; width: 300px; padding: 14px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(0,0,0,.4);
-}
-.tour-bubble-title { display: flex; align-items: center; gap: 8px; font-weight: 700; margin-bottom: 6px; }
-.tour-bubble-title .ic { width: 16px; height: 16px; color: var(--coral); }
-.tour-bubble-text { font-size: 13px; color: var(--text-secondary); margin: 0 0 12px; }
-.tour-bubble-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.tour-bubble-progress { font-size: 11px; color: var(--text-secondary); }
-.tour-bubble-actions { display: flex; gap: 8px; }
-
-.idle-banner {
-  display: flex; align-items: center; gap: 10px; padding: 10px 16px;
-  background: var(--surface-raised); border-top: 1px solid var(--border); font-size: 13px;
-}
-.idle-banner .ic { width: 18px; height: 18px; color: var(--coral); flex: 0 0 auto; }
-.idle-banner span:not(.ic) { flex: 1; }
-.idle-banner-close { background: none; border: none; color: var(--text-secondary); cursor: pointer; display: flex; padding: 4px; }
-.idle-banner-close:hover, .idle-banner-close:focus-visible { color: var(--text-primary); outline: none; }
+/* Guide d'accueil / onboarding (tour spotlight + bandeau "vous semblez
+   perdu") RETIRÉ (2026-08-23, demande explicite) -- règles .tour-* et
+   .idle-banner* supprimées avec la fonctionnalité (voir tour.js/shell.js). */
 
 /* Bulle d'aide contextuelle (11.2) */
 .help-tip { position: relative; display: inline-flex; }

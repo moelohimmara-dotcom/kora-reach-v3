@@ -7,7 +7,6 @@ import { Store } from "../store.js";
 import { esc, icon, chip, isAdvancedRole, ROLE_LABEL_FR, snack, guardClick, friendlyActionError } from "../utils.js";
 import { confirmAction } from "../sheet.js";
 import { navigate, render } from "../app.js";
-import { startTour } from "../tour.js";
 import { bindPasswordToggles } from "./auth.js";
 
 function viewSettings(s) {
@@ -111,13 +110,6 @@ function viewSettings(s) {
         <div class="setting-card">
           <div class="setting-card-head"><span class="meta-ic">${icon("i-user")}</span><div class="meta"><div class="name">Session</div><div class="sub">Connecté en tant que ${esc(Store.state.auth.username || "—")}</div></div></div>
           <div class="actions"><button class="btn btn-ghost" id="setLogout">Se déconnecter</button></div>
-        </div>
-        <div class="setting-card">
-          <div class="setting-card-head"><span class="meta-ic">${icon("i-help")}</span><div class="meta"><div class="name">Aide</div><div class="sub">Tour guidé et bulles d'aide contextuelle.</div></div></div>
-          <div class="field-row" style="align-items:center">
-            <label class="toggle-row"><input type="checkbox" id="setGuidesEnabled" ${Store.getGuidesEnabled() ? "checked" : ""}> Activer les guides contextuels</label>
-          </div>
-          <div class="actions"><button class="btn btn-tonal" id="setRelaunchTour">${icon("i-info")} Relancer le tour guidé</button></div>
         </div>
       </div>
     </aside>
@@ -259,12 +251,6 @@ function bindSettings() {
   };
   if (coral) coral.oninput = preview;
   if (bordeaux) bordeaux.oninput = preview;
-
-  // ---- Aide / guides contextuels (11.3) ----
-  const guidesToggle = document.getElementById("setGuidesEnabled");
-  if (guidesToggle) guidesToggle.onchange = () => Store.setGuidesEnabled(guidesToggle.checked);
-  const relaunchTour = document.getElementById("setRelaunchTour");
-  if (relaunchTour) relaunchTour.onclick = () => { navigate("cockpit"); setTimeout(() => startTour(), 300); };
 
   // ---- Photo de profil (9.2) ----
   const avatarFile = document.getElementById("avatarFile");

@@ -25,7 +25,6 @@ import {
 } from "./utils.js";
 import { renderSheet, confirmAction, isEditingActive } from "./sheet.js";
 import { renderNotifCenter } from "./notifications.js";
-import { startTour, _resetIdleTimer } from "./tour.js";
 import { viewCockpit } from "./views/cockpit.js";
 import { viewFacts, viewDrafts, onBulkAction, openWpChoice, openTrashChoice, doBulkApprove, doBulkTrash } from "./views/facts.js";
 import { viewTrash } from "./views/trash.js";
@@ -284,13 +283,6 @@ function render() {
     }
   }
   renderErrorBanner(s);
-  // Tour guidé (11.1) : une seule fois, au premier cockpit d'une session
-  // authentifiée, si les guides ne sont pas désactivés. Délai court pour
-  // laisser le layout se stabiliser (sinon les rects ciblés sont faux).
-  if (s.auth?.loggedIn && s.route === "cockpit" && !window.__tourAutoTried && !Store.hasSeenTour() && Store.getGuidesEnabled()) {
-    window.__tourAutoTried = true;
-    setTimeout(() => startTour(), 900);
-  }
   const view = document.getElementById("view");
   if (!view) return;
   const map = { cockpit: viewCockpit, facts: viewFacts, sources: viewSources, videos: viewVideos, audit: viewAudit, drafts: viewDrafts, settings: viewSettings, trash: viewTrash, styleguide: viewStyleGuide };
@@ -696,18 +688,6 @@ function bind() {
   if (trashCancel) trashCancel.onclick = closeTrash;
   const trashDef = document.getElementById("trashDefinitive");
   if (trashDef) trashDef.onchange = () => { document.getElementById("trashDelete").hidden = !trashDef.checked; };
-
-  // ---- Bandeau "vous semblez perdu" (11.3) ----
-  const idleBanner = document.getElementById("idleBanner");
-  const idleRelaunch = document.getElementById("idleBannerRelaunch");
-  const idleClose = document.getElementById("idleBannerClose");
-  if (idleRelaunch) idleRelaunch.onclick = () => { if (idleBanner) idleBanner.hidden = true; startTour(); };
-  if (idleClose) idleClose.onclick = () => { if (idleBanner) idleBanner.hidden = true; };
-  if (!window.__idleListenersBound) {
-    window.__idleListenersBound = true;
-    ["click", "keydown"].forEach(ev => document.addEventListener(ev, _resetIdleTimer, { passive: true }));
-    _resetIdleTimer();
-  }
 
   const btn403 = document.querySelector("[data-403-home]");
   if (btn403) btn403.onclick = () => navigate("cockpit");

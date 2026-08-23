@@ -54,14 +54,6 @@ export const SHELL = `
     <button class="error-banner-close" id="errorBannerClose" aria-label="Fermer">${ic("i-close")}</button>
   </div>
 
-  <!-- Bandeau "vous semblez perdu" (wireframe 11.3) — après inactivité, une fois par session -->
-  <div class="idle-banner" id="idleBanner" hidden>
-    ${ic("i-help")}
-    <span>Besoin d'aide pour te repérer ?</span>
-    <button class="btn btn-tonal btn-sm" id="idleBannerRelaunch">Relancer le guide</button>
-    <button class="idle-banner-close" id="idleBannerClose" aria-label="Fermer">${ic("i-close")}</button>
-  </div>
-
   <!-- Bandeau cycle en cours (wireframe 3.3) — étape + progression indéterminée + interruption -->
   <div class="cycle-banner" id="cycleBanner" hidden>
     <div class="cycle-banner-track"><div class="cycle-banner-bar"></div></div>

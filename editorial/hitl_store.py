@@ -252,7 +252,8 @@ def _init_locked():
     try:
         con, mode = db.conn()
         cur = con.cursor()
-        for col, ctype in (("wp_post_id", "TEXT"), ("wp_url", "TEXT"), ("wp_status", "TEXT")):
+        for col, ctype in (("wp_post_id", "TEXT"), ("wp_url", "TEXT"), ("wp_status", "TEXT"),
+                           ("wp_category_name", "TEXT")):
             if mode == "postgres":
                 cur.execute(f"ALTER TABLE hitl_facts ADD COLUMN IF NOT EXISTS {col} {ctype}")
             else:
@@ -399,6 +400,7 @@ def list_facts() -> list:
             "wp_post_id": d.get("wp_post_id"),
             "wp_url": d.get("wp_url"),
             "wp_status": d.get("wp_status"),
+            "wp_category_name": d.get("wp_category_name"),
         })
     return out
 
@@ -637,13 +639,17 @@ def decide(fact_id: str, decision: str, decided_by: str,
 
 def mark_transmitted(fact_id: str, provider: str, http_status: int,
                      final_text: str = "", wp_post_id: str = "", wp_url: str = "",
-                     wp_status: str = "") -> dict:
+                     wp_status: str = "", wp_category_name: str = "") -> dict:
     """wp_post_id/wp_url/wp_status (2026-08-23, demande explicite du client :
     empêcher qu'un article déjà publié/transféré puisse être ré-approuvé ou
     retransmis, et pouvoir tracer OÙ se trouve le post réel) -- vides si le
     provider n'est pas WordPress (ex: Supabase/Postgres seul), jamais
     inventés. Persistés en base pour que le frontend affiche un lien direct
-    vers le post existant plutôt qu'un état "à décider" trompeur."""
+    vers le post existant plutôt qu'un état "à décider" trompeur.
+    wp_category_name (2026-08-23, classement automatique par catégorie --
+    voir publishing/transmit.py::_classify_category) : catégorie WordPress
+    réellement appliquée, affichée à l'éditeur (le classement peut se
+    tromper, mieux vaut que ce soit visible plutôt qu'invisible)."""
     p = _ph()
     now = datetime.now(TZ).isoformat(timespec="seconds")
     con, _ = db.conn()
@@ -662,8 +668,9 @@ def mark_transmitted(fact_id: str, provider: str, http_status: int,
         # Miroir dans hitl_facts (voir decide())
         cur.execute(
             f"UPDATE hitl_facts SET status='TRANSMITTED', wp_post_id={p}, wp_url={p}, "
-            f"wp_status={p} WHERE fact_id={p} AND status <> 'TRASHED'",
-            (str(wp_post_id) if wp_post_id else None, wp_url or None, wp_status or None, fact_id))
+            f"wp_status={p}, wp_category_name={p} WHERE fact_id={p} AND status <> 'TRASHED'",
+            (str(wp_post_id) if wp_post_id else None, wp_url or None, wp_status or None,
+             wp_category_name or None, fact_id))
         con.commit()
     finally:
         con.close()
