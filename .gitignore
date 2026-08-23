@@ -84,8 +84,16 @@ test_auth_flow.py
 test_logout_timing.py
 
 # --- Exceptions : tests de non-régression VERSIONNÉS (gardés sur GitHub) ---
-!kora-vite/smoke_test.mjs
-!kora-vite/test_parcours_b.mjs
 kora-dashboard/.env
 kora-dashboard/*.png
 kora-dashboard/verify.mjs
+
+# --- Renfort securite post-incident 2026-08-23 ---
+# Scripts de diagnostic locaux (contenaient des identifiants en dur)
+_debug_*.mjs
+_local_*.mjs
+_debug_*
+kora-vite/test-login*.mjs
+kora-vite/test_parcours_*.mjs
+kora-vite/smoke_test.mjs
+maquettes-dark/cap_*.mjs
