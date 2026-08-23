@@ -6,6 +6,11 @@
 import { Store } from "../store.js";
 import { esc, icon, factMeta, imgSrc, placeholderSvg, stateBox, snack, friendlyActionError, statusBadge, transmissionMessage } from "../utils.js";
 import { helpTip } from "../tour.js";
+// Lecteur vidéo inline (2026-08-23, demande explicite : "les faire
+// apparaître sur la page Publiés avec leur affordance vidéo -- lecture
+// inline, durée") -- réutilise les mêmes blocs que la page Vidéos plutôt
+// que de dupliquer le HTML/la logique de lecture (voir viewPublished()).
+import { videoListenButton, videoPlayerWrap, fmtDuration } from "./videos.js";
 
 function factCard(f, s, idx) {
   const c = f.champion || {};
@@ -167,7 +172,9 @@ function viewPublished(s) {
     // dupliquer la puce déjà visible -- omise dans ce cas.
     const statusLabel = f.wp_status === "draft" ? "Brouillon WordPress"
       : f.wp_status === "publish" ? "Publié sur WordPress" : "";
-    const metaLine = [statusLabel, f.wp_category_name].filter(Boolean).join(" · ");
+    const durationLabel = (f.video_status === "done" && f.video_duration_sec)
+      ? `Vidéo ${fmtDuration(f.video_duration_sec)}` : "";
+    const metaLine = [statusLabel, durationLabel, f.wp_category_name].filter(Boolean).join(" · ");
     // Bouton "Retirer" (2026-08-23, revu : taille alignée sur les autres
     // boutons courts de KORA -- "Voir", "Rejeter", "Modifier" -- un seul mot,
     // le détail complet reste en title="" pour l'accessibilité/clarté.
@@ -175,12 +182,22 @@ function viewPublished(s) {
     // explicite, "couleur vive pour être bien mis en évidence" -- une
     // action de cette importance (retire un article du site public) mérite
     // la même mise en avant que "Publier", pas un bouton tonal discret.
+    // Affordance vidéo (2026-08-23, demande explicite : "les faire
+    // apparaître sur la page Publiés avec leur affordance vidéo -- lecture
+    // inline, durée") -- un article transmis peut avoir une vidéo narrée
+    // (même fait, video_status/video_path) ; la déplacer hors de la page
+    // Vidéos (voir viewVideos()) ne doit rien lui faire perdre. Réutilise
+    // le MÊME bloc lecteur que la page Vidéos (videoListenButton/
+    // videoPlayerWrap, importés de videos.js) -- câblé par le même
+    // bindVideoPlayers(), voir app.js.
+    const hasVideo = f.video_status === "done" && f.video_path;
     const actions = `<div class="draft-actions">
         ${metaLine ? `<span class="muted" style="flex:1">${esc(metaLine)}</span>` : `<span style="flex:1"></span>`}
+        ${hasVideo ? videoListenButton(f) : ""}
         ${f.wp_url ? `<a class="btn btn-tonal btn-sm" href="${esc(f.wp_url)}" target="_blank" rel="noopener">${icon("i-eye")} Voir</a>` : ""}
         <button class="btn btn-primary btn-sm" data-withdraw="${esc(f.fact_id)}" title="Retirer de WordPress">${icon("i-undo")} Retirer</button>
       </div>`;
-    return `<div class="draft-cell">${card}${actions}</div>`;
+    return `<div class="draft-cell">${card}${actions}${hasVideo ? videoPlayerWrap(f) : ""}</div>`;
   }).join("");
   return `<div class="section-title">Publiés (${published.length})</div>
     <p class="muted" style="margin-bottom:16px">Articles transmis à WordPress. « Retirer » met le post réel en corbeille WordPress et rend l'article modifiable dans KORA ; une republication réutilise le même post (même lien).</p>

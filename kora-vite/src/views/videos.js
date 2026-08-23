@@ -53,6 +53,35 @@ function fmtDuration(sec) {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}` : `${m}:${String(r).padStart(2, "0")}`;
 }
+// Lecteur inline réutilisable (2026-08-23, extrait de row() pour être
+// partagé avec viewPublished() -- views/facts.js : un article transmis
+// avec vidéo doit garder sa lecture inline même déplacé sur la page
+// Publiés, voir demande explicite "les faire apparaître sur la page
+// Publiés avec leur affordance vidéo"). data-video-toggle/-play/-stop/...
+// sont câblés par bindVideoPlayers() ci-dessous, appelée par les DEUX pages.
+function videoListenButton(v) {
+  return `<button type="button" class="btn btn-tonal btn-sm" data-video-toggle="${esc(v.fact_id)}">${icon("i-play")} Écouter</button>`;
+}
+function videoPlayerWrap(v) {
+  return `
+      <div class="video-player-wrap" id="videoPlayer-${esc(v.fact_id)}" hidden>
+        <div class="video-preview-wrap">
+          <video class="video-preview" preload="none" ${v.image ? `poster="${esc(v.image)}"` : ""} data-video-el="${esc(v.fact_id)}"></video>
+        </div>
+        <div class="video-progress" data-video-progress="${esc(v.fact_id)}">
+          <div class="video-progress-fill" data-video-progress-fill="${esc(v.fact_id)}"></div>
+        </div>
+        <div class="video-player-controls">
+          <button type="button" class="video-ctrl-btn" data-video-play="${esc(v.fact_id)}" title="Lecture / Pause" aria-label="Lecture / Pause">${icon("i-play")}</button>
+          <button type="button" class="video-ctrl-btn" data-video-stop="${esc(v.fact_id)}" title="Stop" aria-label="Stop">${icon("i-stop")}</button>
+          <button type="button" class="video-ctrl-btn" data-video-back10="${esc(v.fact_id)}" title="Reculer de 10s" aria-label="Reculer de 10 secondes">${icon("i-back10")}</button>
+          <button type="button" class="video-ctrl-btn" data-video-forward10="${esc(v.fact_id)}" title="Avancer de 10s" aria-label="Avancer de 10 secondes">${icon("i-forward10")}</button>
+          <span class="video-ctrl-time" data-video-time="${esc(v.fact_id)}">0:00 / 0:00</span>
+          <button type="button" class="video-ctrl-btn" data-video-mute="${esc(v.fact_id)}" title="Muet" aria-label="Couper le son">${icon("i-volume")}</button>
+          <button type="button" class="video-ctrl-btn" data-video-fullscreen="${esc(v.fact_id)}" title="Plein écran" aria-label="Plein écran">${icon("i-fullscreen")}</button>
+        </div>
+      </div>`;
+}
 // Filtre par statut (2026-08-22, amélioration UX) : purement client, état
 // local à ce module (pas de aller-retour serveur -- la liste complète est
 // déjà chargée par Store.loadVideos(), filtrer côté client est immédiat et
@@ -62,8 +91,15 @@ function fmtDuration(sec) {
 // un filtre de confort, pas une donnée métier.
 let _videoFilter = "all";
 function viewVideos(s) {
-  const videos = s.videos || [];
-  if (!videos.length) return stateBox("i-spark", "Aucune vidéo", "Génère une vidéo narrée depuis la fiche d'un article (section « Vidéo narrée ») -- elle apparaîtra ici.", !!s.ui.loading);
+  // Exclusion des articles déjà transmis (2026-08-23, même principe que
+  // viewFacts()/ADR-0005, tâche T3 étendue aux vidéos, demande explicite :
+  // "exclure les vidéos déjà transmises de la page Vidéos, comme pour
+  // Articles -> Publiés") -- une vidéo dont l'article est déjà publié
+  // n'est plus une action en attente ici, elle vit désormais sur la page
+  // Publiés (voir viewPublished(), views/facts.js, qui affiche aussi son
+  // lecteur inline pour ne rien perdre en la déplaçant).
+  const videos = (s.videos || []).filter(v => v.status !== "TRANSMITTED");
+  if (!videos.length) return stateBox("i-spark", "Aucune vidéo", "Génère une vidéo narrée depuis la fiche d'un article (section « Vidéo narrée ») -- elle apparaîtra ici. Les vidéos déjà transmises à WordPress sont sur la page Publiés.", !!s.ui.loading);
   // Rôle Lecteur : consultation seule (même garde que la fiche article, voir
   // renderSheet()) -- aucune action rapide, la ligne reste cliquable en lecture seule.
   const readOnly = s.auth && s.auth.role === "lecteur";
@@ -89,7 +125,7 @@ function viewVideos(s) {
       // Lecture inline (2026-08-22, demande explicite) : bascule le lecteur
       // juste en dessous de la ligne, sans quitter la page Vidéos. data-video-
       // toggle est câblé dans bindVideos() (pas le listener global .fact-card).
-      actions += `<button type="button" class="btn btn-tonal btn-sm" data-video-toggle="${esc(v.fact_id)}">${icon("i-play")} Écouter</button>`;
+      actions += videoListenButton(v);
     }
     if (!readOnly) {
       if (trashed) {
@@ -99,9 +135,18 @@ function viewVideos(s) {
         actions += `
           <button type="button" class="btn btn-tonal btn-sm" data-restore="${esc(v.fact_id)}">${icon("i-undo")} Restaurer</button>
           <button type="button" class="btn btn-danger btn-sm" data-del="${esc(v.fact_id)}">${icon("i-trash")} Supprimer</button>`;
-      } else {
+      } else if (v.status !== "TRANSMITTED") {
+        // Publier/Rejeter (2026-08-23, verrouillage étendu -- même principe
+        // que le tiroir article/la sélection multiple pour un fait
+        // TRANSMITTED : "Rejeter" restait actif alors que "Publier" était
+        // déjà caché, incohérence trouvée en analysant la demande de
+        // l'utilisateur. En pratique cette page exclut déjà les vidéos
+        // transmises plus haut -- ce garde-fou est une défense en
+        // profondeur pour row(), réutilisée telle quelle par
+        // viewPublished() (views/facts.js) où un fait TRANSMITTED EST
+        // affiché, avec ses propres actions (Retirer) à la place.
         actions += `
-          ${v.status !== "TRANSMITTED" ? `<button type="button" class="btn btn-tonal btn-sm" data-video-publish="${esc(v.fact_id)}">${icon("i-send")} Publier</button>` : ""}
+          <button type="button" class="btn btn-tonal btn-sm" data-video-publish="${esc(v.fact_id)}">${icon("i-send")} Publier</button>
           <button type="button" class="btn btn-danger-ghost btn-sm" data-video-reject="${esc(v.fact_id)}" data-video-reject-title="${esc(v.title || "")}">${icon("i-reject")} Rejeter</button>`;
       }
     }
@@ -129,24 +174,7 @@ function viewVideos(s) {
         ${v.video_status !== "generating" ? videoStatusChip(v) : ""}
         <div class="video-row-actions">${actions}</div>
       </div>
-      ${playable ? `
-      <div class="video-player-wrap" id="videoPlayer-${esc(v.fact_id)}" hidden>
-        <div class="video-preview-wrap">
-          <video class="video-preview" preload="none" ${v.image ? `poster="${esc(v.image)}"` : ""} data-video-el="${esc(v.fact_id)}"></video>
-        </div>
-        <div class="video-progress" data-video-progress="${esc(v.fact_id)}">
-          <div class="video-progress-fill" data-video-progress-fill="${esc(v.fact_id)}"></div>
-        </div>
-        <div class="video-player-controls">
-          <button type="button" class="video-ctrl-btn" data-video-play="${esc(v.fact_id)}" title="Lecture / Pause" aria-label="Lecture / Pause">${icon("i-play")}</button>
-          <button type="button" class="video-ctrl-btn" data-video-stop="${esc(v.fact_id)}" title="Stop" aria-label="Stop">${icon("i-stop")}</button>
-          <button type="button" class="video-ctrl-btn" data-video-back10="${esc(v.fact_id)}" title="Reculer de 10s" aria-label="Reculer de 10 secondes">${icon("i-back10")}</button>
-          <button type="button" class="video-ctrl-btn" data-video-forward10="${esc(v.fact_id)}" title="Avancer de 10s" aria-label="Avancer de 10 secondes">${icon("i-forward10")}</button>
-          <span class="video-ctrl-time" data-video-time="${esc(v.fact_id)}">0:00 / 0:00</span>
-          <button type="button" class="video-ctrl-btn" data-video-mute="${esc(v.fact_id)}" title="Muet" aria-label="Couper le son">${icon("i-volume")}</button>
-          <button type="button" class="video-ctrl-btn" data-video-fullscreen="${esc(v.fact_id)}" title="Plein écran" aria-label="Plein écran">${icon("i-fullscreen")}</button>
-        </div>
-      </div>` : ""}
+      ${playable ? videoPlayerWrap(v) : ""}
     </div>`;
   };
   return `<div class="section-title">Vidéos (${videos.length})</div>
@@ -309,4 +337,4 @@ function bindVideos() {
   bindVideoPlayers(Store.state.videos);
 }
 
-export { viewVideos, bindVideos };
+export { viewVideos, bindVideos, videoListenButton, videoPlayerWrap, bindVideoPlayers, fmtDuration };

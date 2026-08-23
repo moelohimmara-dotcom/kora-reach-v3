@@ -28,7 +28,7 @@ import { renderNotifCenter } from "./notifications.js";
 import { viewCockpit } from "./views/cockpit.js";
 import { viewFacts, viewDrafts, viewPublished, onBulkAction, openWpChoice, openTrashChoice, doBulkApprove, doBulkTrash } from "./views/facts.js";
 import { viewTrash } from "./views/trash.js";
-import { viewVideos, bindVideos } from "./views/videos.js";
+import { viewVideos, bindVideos, bindVideoPlayers } from "./views/videos.js";
 import { viewSources, bindSources } from "./views/sources.js";
 import { viewSettings, bindSettings } from "./views/settings.js";
 import { viewAudit, bindAudit } from "./views/audit.js";
@@ -529,6 +529,13 @@ function render() {
   try { if (s.route === "audit") bindAudit(); } catch (e) { console.error("bindAudit", e); }
   try { if (s.route === "sources") bindSources(); } catch (e) { console.error("bindSources", e); }
   try { if (s.route === "videos") bindVideos(); } catch (e) { console.error("bindVideos", e); }
+  // Lecteur inline sur la page Publiés (2026-08-23, demande explicite :
+  // "les faire apparaître sur la page Publiés avec leur affordance vidéo")
+  // -- bindVideoPlayers() cherche video_path par fact_id dans le tableau
+  // passé : s.facts (pas Store.state.videos, potentiellement vide si la
+  // page Vidéos n'a jamais été visitée cette session) porte déjà ce champ
+  // depuis le correctif de list_facts() (editorial/hitl_store.py).
+  try { if (s.route === "published") bindVideoPlayers(s.facts || []); } catch (e) { console.error("bindVideoPlayers(published)", e); }
   try { if (s.route === "settings" && !settingsAlreadyMounted) bindSettings(); } catch (e) { console.error("bindSettings", e); }
   // Barre d'action de sélection multiple
   try {

@@ -402,6 +402,16 @@ def list_facts() -> list:
             "wp_status": d.get("wp_status"),
             "wp_category_name": d.get("wp_category_name"),
             "suggested_category": d.get("suggested_category"),
+            # video_status/video_path/video_duration_sec (2026-08-23, bug
+            # trouvé en implémentant l'affordance vidéo de la page Publiés :
+            # list_facts() -- source de s.facts, donc de viewFacts() ET
+            # viewPublished() côté frontend -- n'exposait jamais ces
+            # colonnes, contrairement à _fact_by_id()/get_fact(). Un article
+            # transmis avec vidéo narrée serait apparu SANS son lecteur sur
+            # la page Publiés, aucune info video_status pour le détecter.
+            "video_status": d.get("video_status"),
+            "video_path": d.get("video_path"),
+            "video_duration_sec": d.get("video_duration_sec"),
         })
     return out
 
@@ -1000,8 +1010,18 @@ def delete_facts(ids: list) -> dict:
         transmitted = {dict(r)["fact_id"] for r in cur.fetchall()}
         ids = [i for i in ids if i not in transmitted]
         n = 0
+        video_paths = []
         if ids:
             ph = ",".join([p] * len(ids))
+            # Fichiers vidéo (2026-08-23, demande explicite : "corrige ce
+            # qu'il y'a à faire" -- point 4, fichiers .mp4 jamais nettoyés
+            # à la suppression d'un article, accumulation silencieuse sur
+            # disque). Récupéré AVANT le DELETE (la ligne va disparaître) ;
+            # les fichiers eux-mêmes ne sont supprimés qu'APRÈS le commit
+            # réussi (voir plus bas) -- jamais avant, pour ne pas perdre un
+            # fichier si la suppression en base échoue.
+            cur.execute(f"SELECT video_path FROM hitl_facts WHERE fact_id IN ({ph}) AND video_path IS NOT NULL", tuple(ids))
+            video_paths = [dict(r)["video_path"] for r in cur.fetchall()]
             cur.execute(f"DELETE FROM hitl_facts WHERE fact_id IN ({ph})", tuple(ids))
             # Bug trouvé 2026-08-22 (suppression en masse d'articles défectueux) :
             # `n` était lu APRÈS la 2e requête -- cur.rowcount reflétait donc le
@@ -1014,6 +1034,25 @@ def delete_facts(ids: list) -> dict:
         con.commit()
     finally:
         con.close()
+    # Suppression des fichiers vidéo APRÈS le commit réussi ci-dessus --
+    # best-effort (une erreur disque ne doit jamais faire échouer la
+    # suppression, déjà actée en base à ce stade) ; import paresseux pour
+    # éviter tout cycle d'import (orchestration/video.py importe déjà
+    # depuis editorial/hitl_store.py -- un import en tête de fichier ici
+    # créerait une dépendance circulaire).
+    if video_paths:
+        try:
+            import os
+            from orchestration.video import VIDEO_OUT_DIR
+            for vp in video_paths:
+                try:
+                    fp = vp if os.path.isabs(vp) else os.path.join(VIDEO_OUT_DIR, vp)
+                    if os.path.exists(fp):
+                        os.remove(fp)
+                except Exception:
+                    pass  # un fichier illisible/déjà absent ne doit jamais bloquer la suite
+        except Exception:
+            pass
     for fid in ids:
         try:
             audit.delete_events([fid])
