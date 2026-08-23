@@ -63,6 +63,34 @@ def is_postgres():
     return BACKEND == "postgres"
 
 
+def retry_on_locked(fn, retries=3, backoff=0.05):
+    """Rejoue fn() sur 'database is locked' / 'busy' (P0)."""
+    import time as _time
+    import sqlite3 as _sqlite3
+    last = None
+    for attempt in range(retries):
+        try:
+            return fn()
+        except _sqlite3.OperationalError as e:
+            last = e
+            msg = str(e).lower()
+            if "locked" in msg or "busy" in msg:
+                if attempt == retries - 1:
+                    raise
+                _time.sleep(backoff * (2 ** attempt))
+                continue
+            raise
+        except Exception as e:
+            # psycopg2 OperationalError contient aussi 'locked' en PG
+            if "locked" in str(e).lower() and attempt < retries - 1:
+                _time.sleep(backoff * (2 ** attempt))
+                last = e
+                continue
+            raise
+    if last:
+        raise last
+
+
 def placeholder(n=1):
     """? pour sqlite, %s pour postgres."""
     return "%s" if BACKEND == "postgres" else "?"

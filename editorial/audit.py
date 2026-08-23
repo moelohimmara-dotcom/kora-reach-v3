@@ -96,16 +96,20 @@ def log(cycle_id: str, event: str, detail: str = "", provider: str = "",
         elif "CYCLE" in ev or "RUN" in ev: action = "CYCLE"
         elif "PURGE" in ev: action = "PURGE"
         else: action = "GENERE"
-    conn = _audit_conn()
-    conn.execute(
-        """INSERT INTO audit_events (ts, cycle_id, event, detail, provider, fact_id, action, editor)
-           VALUES (?,?,?,?,?,?,?,?)""",
-        (datetime.now(_TZ).isoformat(), _scrub(cycle_id), _scrub(event),
-         _scrub(detail), _scrub(provider), _scrub(fact_id) if fact_id else None,
-         action, _scrub(editor) if editor else None),
-    )
-    conn.commit()
-    conn.close()
+    def _do():
+        c = _audit_conn()
+        c.execute(
+            """INSERT INTO audit_events (ts, cycle_id, event, detail, provider, fact_id, action, editor)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (datetime.now(_TZ).isoformat(), _scrub(cycle_id), _scrub(event),
+             _scrub(detail), _scrub(provider), _scrub(fact_id) if fact_id else None,
+             action, _scrub(editor) if editor else None),
+        )
+        c.commit()
+        c.close()
+    # P0 retry : 2 writers concurrents (cycle + HTTP) ne lèvent plus 500
+    import core.db as _db
+    _db.retry_on_locked(_do)
 
 
 def _day_key(ts: str) -> str:
