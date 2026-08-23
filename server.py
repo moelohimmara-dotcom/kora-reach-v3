@@ -1565,6 +1565,11 @@ def _fact_by_id(fid):
         # en lot pour les articles déjà en file, réutilisé tel quel par
         # _to_wordpress (transmit.py) au lieu de reclasser à la transmission.
         "suggested_category": row.get("suggested_category"),
+        # wp_post_id (2026-08-23, ADR-0005, tâche T2) : republication en
+        # place -- si présent (article retiré via /api/hitl/withdraw puis
+        # ré-approuvé), _to_wordpress met à jour CE post plutôt que d'en
+        # créer un nouveau. Voir _build_payload (publishing/transmit.py).
+        "wp_post_id": row.get("wp_post_id"),
     }
 
 

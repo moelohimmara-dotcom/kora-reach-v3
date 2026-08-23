@@ -192,6 +192,25 @@ def _classify_category(title: str, text: str) -> str:
     return _classify_category_mechanical(f"{title}\n{excerpt}")
 
 
+def _wp_slugify(title: str) -> str:
+    """Génère un slug WordPress-like à partir du titre (2026-08-23, ADR-0005,
+    tâche T2, bug trouvé en test réel) : quand un post retiré (mis en
+    corbeille WordPress) est republié, WordPress a déjà renommé son slug en
+    interne en '__trashed-N' pour libérer l'ancien -- une simple mise à jour
+    de statut (trash -> publish/draft) via l'API REST ne restaure PAS ce
+    slug automatiquement, laissant un permalien cassé du type
+    '/__trashed-12/' (vérifié : reproduit en conditions réelles). On envoie
+    donc TOUJOURS un slug explicite, dérivé du titre, à la republication --
+    WordPress gère lui-même la dédup si ce slug entre en collision avec un
+    autre post existant (suffixe '-2', '-3'...)."""
+    import unicodedata
+    t = unicodedata.normalize("NFKD", title or "").encode("ascii", "ignore").decode("ascii")
+    t = t.lower()
+    t = re.sub(r"[^a-z0-9]+", "-", t).strip("-")
+    t = re.sub(r"-{2,}", "-", t)
+    return t[:200] or "article"
+
+
 def _build_payload(fact: dict, final_text: str) -> dict:
     """Payload générique (pour dry_run / wordpress)."""
     champ = fact.get("champion", {})
@@ -224,6 +243,13 @@ def _build_payload(fact: dict, final_text: str) -> dict:
         # réutilise tel quel au lieu de reclasser (évite un appel LLM
         # redondant). Vide -> _to_wordpress classe à la volée comme avant.
         "suggested_category": fact.get("suggested_category") or "",
+        # Republication EN PLACE (2026-08-23, ADR-0005, tâche T2) : si ce
+        # fait a déjà un wp_post_id connu (retiré via /api/hitl/withdraw
+        # puis republié), _to_wordpress met à jour CE post au lieu d'en
+        # créer un nouveau -- même permalien, sort automatiquement de la
+        # corbeille WordPress si besoin. Vide -> comportement normal
+        # (création d'un nouveau post), inchangé pour une 1ère transmission.
+        "wp_post_id": fact.get("wp_post_id") or "",
         # Vidéo narrée (2026-08-22, demande explicite : "l'article vidéo doit
         # pouvoir être transféré sur wordpress dans brouillons ou en
         # publication officielle") -- voir _upload_video()/_to_wordpress().
@@ -389,7 +415,8 @@ def _merge_both_results(results: list) -> dict:
             "wp_post_id": (wp_result or {}).get("wp_post_id"),
             "wp_url": (wp_result or {}).get("wp_url"),
             "category_name": (wp_result or {}).get("category_name"),
-            "category_id": (wp_result or {}).get("category_id")}
+            "category_id": (wp_result or {}).get("category_id"),
+            "republish_warning": (wp_result or {}).get("republish_warning")}
 
 
 def mode() -> str:
@@ -662,17 +689,33 @@ def _to_wordpress(payload: dict, wp_status: str = "publish") -> dict:
     else:
         category_name = _classify_category(payload["title"], payload["content"])
     category_id = WP_CATEGORY_MAP.get(category_name, WP_CATEGORY_DEFAULT_ID)
-    body = json.dumps({
+    body_dict = {
         "title": payload["title"],
         "content": payload["content"],
         "status": wp_status,  # "publish" (public) ou "draft" (brouillon WP, invisible)
         "meta": {"source_url": payload.get("source_url", "")},
         "featured_media": media_id,
         "categories": [category_id],
-    }).encode()
+    }
+    if payload.get("wp_post_id"):
+        # Slug explicite (2026-08-23, bug trouvé en test réel) -- voir
+        # docstring de _wp_slugify ci-dessus : sans ça, un post republié
+        # après un retrait garde son slug corrompu '__trashed-N'.
+        body_dict["slug"] = _wp_slugify(payload["title"])
+    body = json.dumps(body_dict).encode()
+    # Republication EN PLACE (2026-08-23, ADR-0005, tâche T2) : si un
+    # wp_post_id est connu (article retiré via retract_from_wordpress puis
+    # ré-approuvé), on MET À JOUR ce post existant au lieu d'en créer un
+    # nouveau -- POST /wp/v2/posts/{id} (l'API WordPress accepte POST pour
+    # une mise à jour, pas seulement pour une création) fait aussi
+    # automatiquement sortir le post de la corbeille en changeant son
+    # status à wp_status. Même permalien conservé, zéro risque de doublon
+    # PAR CONSTRUCTION (structurel, pas une règle de gestion à respecter).
+    wp_post_id = payload.get("wp_post_id") or ""
+    url = WP_URL.rstrip("/") + (
+        f"/wp-json/wp/v2/posts/{wp_post_id}" if wp_post_id else "/wp-json/wp/v2/posts")
     req = urllib.request.Request(
-        WP_URL.rstrip("/") + "/wp-json/wp/v2/posts",
-        data=body, method="POST",
+        url, data=body, method="POST",
         headers={"Content-Type": "application/json",
                  "Authorization": "Basic " + _b64(WP_USER + ":" + app_pass)})
     try:
@@ -696,6 +739,33 @@ def _to_wordpress(payload: dict, wp_status: str = "publish") -> dict:
                         if content_warning else None),
                     "category_name": category_name, "category_id": category_id}
     except urllib.error.HTTPError as e:
+        if wp_post_id and e.code == 404:
+            # Le post original n'existe plus côté WordPress (supprimé
+            # manuellement pendant qu'il était en corbeille, ou corbeille
+            # WordPress purgée après ~30 jours) -- repli EXPLICITE sur une
+            # création neuve plutôt qu'un échec silencieux, avec
+            # avertissement pour que l'éditeur sache que le permalien a
+            # changé (voir ADR-0005 §Risques).
+            req2 = urllib.request.Request(
+                WP_URL.rstrip("/") + "/wp-json/wp/v2/posts",
+                data=body, method="POST",
+                headers={"Content-Type": "application/json",
+                         "Authorization": "Basic " + _b64(WP_USER + ":" + app_pass)})
+            try:
+                with urllib.request.urlopen(req2, timeout=30) as r2:
+                    d2 = json.loads(r2.read().decode())
+                    return {"status": "TRANSMITTED", "provider": "wordpress",
+                            "http_status": r2.status, "detail": "OK (media_id=%s)" % media_id,
+                            "wp_post_id": d2.get("id"), "wp_url": d2.get("link"),
+                            "image_warning": image_error, "video_warning": video_warning,
+                            "content_warning": (
+                                f"mot(s) non francophone(s) détecté(s) : {content_warning} — relire avant publication"
+                                if content_warning else None),
+                            "category_name": category_name, "category_id": category_id,
+                            "republish_warning": "post original introuvable (supprimé côté WordPress) -- nouveau post créé, nouveau permalien"}
+            except urllib.error.HTTPError as e2:
+                return {"status": "FAILED", "provider": "wordpress",
+                        "http_status": e2.code, "detail": e2.reason}
         return {"status": "FAILED", "provider": "wordpress",
                 "http_status": e.code, "detail": e.reason}
 
