@@ -8,3 +8,4 @@ Historique des décisions architecturales structurantes de KORA Reach V3, au for
 | [0002](0002-auth-root-separee.md) | Authentification root totalement séparée de l'authentification éditeur | accepté | 2026-08-16 |
 | [0003](0003-questions-securite-root.md) | Questions de sécurité comme 2e facteur alternatif au TOTP pour le compte root | accepté | 2026-08-17 |
 | [0004](0004-centralisation-rbac.md) | Centralisation des vérifications RBAC dans une table de vérité | accepté | 2026-08-17 |
+| [0005](0005-retrait-republication-articles-transmis.md) | Retrait/republication d'un article transmis, sous-page dédiée, recomptage | accepté | 2026-08-23 |

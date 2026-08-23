@@ -21,7 +21,7 @@ Un `fact_id` stable identifie chaque proposition : `fact_id = sha1(champion_url 
 | `EDITED` | Humain a modifié le texte | reste en attente |
 | `APPROVED` | Humain a cliqué « Approuver » | **déverrouille** la transmission |
 | `REJECTED` | Humain a cliqué « Rejeter » | jamais transmis |
-| `TRANSMITTED` | POST WordPress/Supabase réussi | **verrouillé définitivement** |
+| `TRANSMITTED` | POST WordPress/Supabase réussi | **verrouillé** (aucune action depuis KORA à ce jour ; « Retirer de WordPress » planifié, voir [ADR-0005](docs/adr/0005-retrait-republication-articles-transmis.md)) |
 | `TRANSMISSION_FAILED` | erreur réseau/HTTP | retourne à `APPROVED` (retry) |
 
 Transition interdite : on ne peut pas passer de `TRANSMITTED` ou `REJECTED` à
@@ -89,7 +89,11 @@ mémoire actuel qui est perdu).
   la transmission (sinon risque d'oubli). Alternative : bouton « Transmettre »
   séparé. ⚠ Ton choix.
 - **Override** : qui peut déverrouiller un fait `TRANSMITTED`/rejeter après coup ?
-  (rétraction). ⚠ À cadrer (journalisme : droit de rectification).
+  (rétraction). Répondu le 2026-08-23 — voir
+  [ADR-0005](docs/adr/0005-retrait-republication-articles-transmis.md) :
+  retrait synchronisé (corbeille WordPress réelle) réservé au même droit que
+  la publication, republication in-place sur le même post. Implémentation
+  en cours (tâches T1-T5 de l'ADR), pas encore en production au 2026-08-23.
 - **Conflit de fusion** : si 2 éditeurs décident le même fait → dernière décision
   gagne, tracée (pas de race condition silencieuse).
 
