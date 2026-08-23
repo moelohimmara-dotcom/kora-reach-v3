@@ -1173,6 +1173,10 @@ html.icons-ready .material-icons { visibility: visible; }
 .btn-danger { background: var(--md-sys-color-error); color: var(--md-sys-color-on-error); border: none; }
 .draft-cell { display: flex; flex-direction: column; gap: 8px; }
 .draft-actions { display: flex; gap: 8px; padding: 0 2px 4px; }
+/* Bouton Brouillons affiné : même gabarit que les btn-sm publiés, vif au clic (corail) */
+.draft-actions .btn { min-height: 40px; padding: 10px 16px; font-size: var(--t-label-sm); font-weight: 700; }
+.draft-actions .btn:active,
+.draft-actions .btn:focus-visible { background: linear-gradient(135deg, var(--coral), var(--bordeaux)); color: #20100B; border-color: transparent; transform: scale(0.97); outline: none; }
 
 .state-box { text-align: center; padding: var(--space-6) var(--space-4); max-width: 440px; margin: 9vh auto; }
 .state-ic { display: inline-grid; place-items: center; width: 68px; height: 68px; border-radius: 50%; background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); margin-bottom: var(--space-3); box-shadow: var(--glass-shadow); }
