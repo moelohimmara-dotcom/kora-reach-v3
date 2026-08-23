@@ -344,10 +344,13 @@ function render() {
       sources: (s.sources || []).length,
       drafts: (typeof stats.drafts === "number") ? stats.drafts : facts.filter(f => (f.status || "") === "EDITED").length,
       trash: (typeof stats.trash === "number") ? stats.trash : (s.trash || []).length || facts.filter(f => (f.status || "") === "DELETED").length,
-      // "published" (2026-08-23, ADR-0005, tâche T3) : sous-page dédiée aux
-      // articles transmis, distincte d'"Actifs" -- voir viewPublished()
-      // dans views/facts.js.
-      published: (typeof stats.transmitted === "number") ? stats.transmitted : facts.filter(f => (f.status || "") === "TRANSMITTED").length,
+      // "published" (2026-08-23, ADR-0005, tâche T3, unifié le même jour) :
+      // published_count = hitl_facts.status === 'TRANSMITTED' exactement,
+      // MÊME filtre que viewPublished() (views/facts.js) -- pas
+      // stats.transmitted (qui inclut APPROVED, un état transitoire pas
+      // encore réellement publié nulle part).
+      published: (typeof stats.published_count === "number") ? stats.published_count
+        : facts.filter(f => (f.status || "") === "TRANSMITTED").length,
     };
     document.querySelectorAll("[data-badge]").forEach(el => {
       const key = el.getAttribute("data-badge");

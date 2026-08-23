@@ -95,7 +95,15 @@ function viewCockpit(s) {
   const total = (typeof st.active_facts === "number") ? st.active_facts
     : (typeof st.total_facts === "number") ? st.total_facts : ((typeof st.articles === "number") ? st.articles : 0);
   const pending = (typeof st.pending === "number") ? st.pending : 0;        // A decider (PENDING_REVIEW)
-  const approved = (typeof st.published === "number") ? st.published : 0;   // Publies (articles publies)
+  // Publiés = published_count (2026-08-23, unification demandée : la tuile
+  // dashboard et le badge de navigation "Publiés" affichaient chacun un
+  // nombre différent -- l'un depuis l'entrepôt Postgres [status='published'
+  // uniquement, table articles], l'autre depuis hitl_facts [TRANSMITTED,
+  // brouillon+publié]. published_count (backend, hitl_facts.status=
+  // TRANSMITTED exactement) est désormais la SEULE source pour ce libellé,
+  // cohérente avec la page Publiés (viewPublished()) qui utilise le même filtre.
+  const approved = (typeof st.published_count === "number") ? st.published_count
+    : (typeof st.published === "number") ? st.published : 0;
   const draft = (typeof st.drafts === "number") ? st.drafts : 0;            // Brouillons (EDITED)
   const trash = (typeof st.trash === "number") ? st.trash : 0;             // Corbeille (TRASHED)
   const rejected = (typeof st.rejected === "number") ? st.rejected : 0;     // Rejetes (corbeille+decision)
