@@ -701,6 +701,45 @@ def mark_transmitted(fact_id: str, provider: str, http_status: int,
     return {"ok": True, "fact_id": fact_id, "status": "TRANSMITTED"}
 
 
+def mark_retracted(fact_id: str, by: str) -> dict:
+    """Retrait synchronisé (2026-08-23, ADR-0005, tâche T1) : fait repasser
+    un fait TRANSMITTED à EDITED (modifiable) APRÈS que le post WordPress
+    réel a été mis en corbeille avec succès -- cette fonction ne fait AUCUN
+    appel réseau elle-même (voir publishing/transmit.py::retract_from_wordpress,
+    appelé par l'appelant AVANT celle-ci) : editorial/ reste pur, sans accès
+    réseau, même séparation que le reste du module.
+
+    `wp_post_id`/`wp_url` sont VOLONTAIREMENT CONSERVÉS (pas remis à NULL) --
+    republish_wordpress() (tâche T2) en a besoin pour republier EN PLACE sur
+    le même post plutôt que d'en créer un nouveau. `wp_status` est mis à
+    'trash' pour refléter l'état réel du post retiré.
+
+    Refuse tout fait qui n'est pas actuellement TRANSMITTED (même garde-fou
+    que retract() ci-dessus, transitions non-TRANSMITTED n'ont pas de sens
+    ici -- ce n'est pas la même fonction que retract(), qui gère
+    APPROVED/EDITED -> PENDING_REVIEW avant toute transmission)."""
+    cur = get(fact_id)
+    if not cur or cur.get("status") != "TRANSMITTED":
+        return {"error": "retrait_non_autorise_depuis", "status": (cur or {}).get("status")}
+    now = datetime.now(TZ).isoformat(timespec="seconds")
+    p = _ph()
+    con, _ = db.conn()
+    try:
+        cur2 = con.cursor()
+        cur2.execute(
+            f"UPDATE hitl_decisions SET status='EDITED', override_by={p}, override_at={p} WHERE fact_id={p}",
+            (by, now, fact_id))
+        cur2.execute(
+            f"UPDATE hitl_facts SET status='EDITED', wp_status='trash' WHERE fact_id={p} AND status='TRANSMITTED'",
+            (fact_id,))
+        con.commit()
+    finally:
+        con.close()
+    audit.log(None, "RETRACT_WORDPRESS", f"fact={fact_id} by={by}", fact_id=fact_id,
+              action="RETIRE_WORDPRESS", editor=by)
+    return {"ok": True, "fact_id": fact_id, "status": "EDITED"}
+
+
 def mark_transmission_failed(fact_id: str, provider: str, http_status: int) -> dict:
     p = _ph()
     con, _ = db.conn()

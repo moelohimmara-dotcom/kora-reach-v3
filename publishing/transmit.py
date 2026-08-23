@@ -700,6 +700,65 @@ def _to_wordpress(payload: dict, wp_status: str = "publish") -> dict:
                 "http_status": e.code, "detail": e.reason}
 
 
+def retract_from_wordpress(wp_post_id: str) -> dict:
+    """Retrait synchronisé (2026-08-23, ADR-0005, tâche T1) : met le post
+    WordPress réel en CORBEILLE WordPress -- PAS de suppression forcée
+    (`force=true`), volontairement. WordPress a déjà son propre système de
+    corbeille (~30 jours, récupérable manuellement côté WP) : un simple
+    DELETE sans `force` déplace le post vers `status=trash` au lieu de le
+    détruire, ce qui laisse un filet de sécurité gratuit ET permet une
+    republication ultérieure EN PLACE sur ce même post (voir
+    `republish_wordpress()` ci-dessous, tâche T2) plutôt que de devoir en
+    recréer un nouveau (nouveau permalien, mauvais pour le SEO d'un article
+    déjà indexé).
+
+    Root cause du bug corrigé plus tôt le même jour (voir ADR-0005 §Contexte) :
+    l'ancien "Annuler la décision" ramenait le fait KORA à PENDING_REVIEW
+    SANS RIEN vérifier ni toucher côté WordPress -- ce correctif agit
+    D'ABORD sur le post réel, et ne renvoie succès que si WordPress confirme
+    le retrait ; l'appelant (server.py) ne doit changer l'état KORA
+    qu'APRÈS avoir reçu {"ok": True} d'ici, jamais avant, jamais en
+    supposant que ça a marché.
+
+    Retourne {"ok": bool, "error": str|None}. Ne lève jamais."""
+    if not (WP_URL and WP_USER and WP_APP_PASS):
+        return {"ok": False, "error": "wordpress_non_configure"}
+    if not wp_post_id:
+        return {"ok": False, "error": "wp_post_id_absent (article transmis avant l'ajout du suivi -- retrait manuel requis)"}
+    app_pass = (WP_APP_PASS or "").replace(" ", "")
+    req = urllib.request.Request(
+        WP_URL.rstrip("/") + f"/wp-json/wp/v2/posts/{wp_post_id}",
+        method="DELETE",  # SANS ?force=true -> corbeille WordPress, pas suppression définitive
+        headers={"Authorization": "Basic " + _b64(WP_USER + ":" + app_pass)})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            d = json.loads(r.read().decode())
+            # WordPress renvoie {"deleted": true, "previous": {...}} en cas de
+            # suppression forcée, mais {"id":..., "status":"trash", ...} (le
+            # post LUI-MÊME, mis à jour) pour une simple mise en corbeille --
+            # on vérifie le statut renvoyé plutôt que de supposer.
+            if d.get("status") == "trash" or d.get("id"):
+                return {"ok": True, "error": None}
+            return {"ok": False, "error": f"reponse_wp_inattendue: {d}"}
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            # Post déjà absent côté WordPress (supprimé manuellement par
+            # exemple) -- l'éditeur doit le savoir, mais rien n'empêche de
+            # laisser KORA reprendre la main dessus (voir server.py : on
+            # traite ce cas comme un succès de retrait côté KORA, avec un
+            # avertissement, plutôt que de bloquer l'éditeur indéfiniment
+            # sur un post qui n'existe de toute façon plus).
+            return {"ok": True, "error": "post_deja_absent_sur_wordpress (retiré manuellement ?)"}
+        detail = ""
+        try:
+            detail = e.read().decode("utf-8", "ignore")[:200]
+        except Exception:
+            pass
+        return {"ok": False, "error": f"envoi WP échoué (HTTP {e.code}: {detail})"}
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+
 def _to_supabase(fact: dict, final_text: str) -> dict:
     payload = _build_supabase_payload(fact, final_text)
     src_url = payload.get("source_url", "")

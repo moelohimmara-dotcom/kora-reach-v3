@@ -26,7 +26,7 @@ import identity.root_auth as root_auth
 import identity.permissions as permissions
 from editorial.hitl_store import (
     fact_id_of, decide, get as hitl_get, list_all,
-    mark_transmitted, mark_transmission_failed, retract,
+    mark_transmitted, mark_transmission_failed, retract, mark_retracted,
     upsert_fact, list_facts, get_fact,
     trash_facts, restore_fact, delete_facts, list_trashed, purge_trashed,
     count_published, count_rejected, count_deleted, get_dashboard_stats,
@@ -981,6 +981,31 @@ class Handler(BaseHTTPRequestHandler):
             res = retract(fid, EDITOR_NAME)
             if res.get("ok"):
                 log(fid, "HITL_RETRACT", f"by={EDITOR_NAME}", "hitl")
+            return self._send(200, res)
+        if p.path == "/api/hitl/withdraw":
+            # Retrait synchronisé (2026-08-23, ADR-0005, tâche T1) : distinct
+            # de /api/hitl/retract ci-dessus (qui gère APPROVED/EDITED ->
+            # PENDING_REVIEW, AVANT toute transmission). Celui-ci agit sur un
+            # fait DÉJÀ transmis -- même droit que la publication WordPress
+            # (retirer un article publié est au moins aussi sensible que le
+            # publier), et n'écrit RIEN côté KORA tant que WordPress n'a pas
+            # confirmé le retrait (voir transmit.retract_from_wordpress).
+            if not self._can_publish_wp():
+                return self._send(403, {"error": "droit_wordpress_requis"})
+            fid = payload.get("fact_id")
+            fact = get_fact(fid)
+            if not fact:
+                return self._send(404, {"error": "introuvable"})
+            if fact.get("status") != "TRANSMITTED":
+                return self._send(200, {"error": "pas_transmis", "status": fact.get("status")})
+            wp_res = transmit.retract_from_wordpress(fact.get("wp_post_id"))
+            if not wp_res.get("ok"):
+                log(fid, "WITHDRAW_FAILED", f"error={wp_res.get('error')}", "wordpress")
+                return self._send(200, {"error": "retrait_wordpress_echoue", "detail": wp_res.get("error")})
+            res = mark_retracted(fid, EDITOR_NAME)
+            log(fid, "WITHDRAW", f"by={EDITOR_NAME} detail={wp_res.get('error') or 'ok'}", "wordpress")
+            if wp_res.get("error"):  # post déjà absent côté WP -- succès quand même, avec avertissement
+                res["warning"] = wp_res["error"]
             return self._send(200, res)
         # ---- Actions en masse (sélection multiple) ----
         if p.path == "/api/hitl/bulk":
