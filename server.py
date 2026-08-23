@@ -83,6 +83,9 @@ _VIDEO_LOCK_MUTEX = threading.RLock()
 # _VIDEO_LOCK_MUTEX (ordre constant -> aucun risque d'interblocage).
 _GENERATION_START_LOCK = threading.Lock()
 
+# Référence au serveur pour shutdown gracieux (P0, remplace os._exit)
+_SRV = None
+
 
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json"):
@@ -434,10 +437,17 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/root/actions/restart-service":
                 root_auth.log_root_event("service_restart", f"by root:{actor}", ip)
                 self._send(200, {"ok": True, "detail": "Redémarrage en cours (quelques secondes, relancé par systemd)."})
-                # Sortie différée : laisse la réponse HTTP partir avant que le
-                # process ne meure. Restart=always côté systemd (RestartSec=3)
-                # relance immédiatement — pas besoin de sudo/systemctl ici.
-                threading.Timer(0.5, lambda: os._exit(0)).start()
+                # P0 : shutdown gracieux — laisse les handlers finir leur commit
+                # puis sort de serve_forever ; systemd Restart=always relance.
+                def _do_shutdown():
+                    import time as _t
+                    _t.sleep(0.5)
+                    try:
+                        if _SRV:
+                            _SRV.shutdown()
+                    except Exception:
+                        pass
+                threading.Thread(target=_do_shutdown, daemon=True).start()
                 return
             if path == "/api/root/actions/clear-cache":
                 with auth._rl_lock:
@@ -1584,9 +1594,19 @@ def main():
             print(f"Corbeille : {n} élément(s) > 11j supprimé(s) définitivement.")
     except Exception as e:
         print("purge_trashed:", e)
+    global _SRV
     srv = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+    _SRV = srv
     print(f"KORA dashboard sur http://localhost:{port} | editor={EDITOR_NAME} | transmit={transmit.mode()}")
-    srv.serve_forever()
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            srv.server_close()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
