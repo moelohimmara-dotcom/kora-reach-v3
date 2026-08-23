@@ -395,7 +395,7 @@ function renderSheet(s) {
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
             ${f.wp_url ? `<a class="btn btn-tonal btn-sm" href="${esc(f.wp_url)}" target="_blank" rel="noopener">${icon("i-eye")} Voir sur WordPress</a>` : ""}
             ${f.wp_post_id
-              ? `<button class="btn btn-danger-ghost btn-sm" data-withdraw="${esc(f.fact_id)}">${icon("i-undo")} Retirer de WordPress</button>`
+              ? `<button class="btn btn-primary btn-sm" data-withdraw="${esc(f.fact_id)}" title="Retirer de WordPress">${icon("i-undo")} Retirer</button>`
               : `<span class="muted" title="Article transmis avant l'ajout du suivi -- retrait automatique indisponible pour celui-ci">${icon("i-info")} Retrait indisponible (article transmis avant ce suivi)</span>`}
           </div>
         </div>

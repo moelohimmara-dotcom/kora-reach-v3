@@ -159,12 +159,26 @@ function viewPublished(s) {
   const cells = published.map(f => {
     const idx = facts.indexOf(f);
     const card = factCard(f, s, idx);
+    // Statut visible (2026-08-23, revu suite au retour de l'utilisateur :
+    // "Transmis est déjà répété 2 fois") : la carte (factCard/statusBadge)
+    // affiche déjà "Transmis" -- cette ligne n'apporte une info NOUVELLE
+    // que quand on connaît le détail brouillon/publié ; sinon (faits
+    // transmis avant l'ajout du suivi wp_status) elle ne fait que
+    // dupliquer la puce déjà visible -- omise dans ce cas.
     const statusLabel = f.wp_status === "draft" ? "Brouillon WordPress"
-      : f.wp_status === "publish" ? "Publié sur WordPress" : "Transmis";
+      : f.wp_status === "publish" ? "Publié sur WordPress" : "";
+    const metaLine = [statusLabel, f.wp_category_name].filter(Boolean).join(" · ");
+    // Bouton "Retirer" (2026-08-23, revu : taille alignée sur les autres
+    // boutons courts de KORA -- "Voir", "Rejeter", "Modifier" -- un seul mot,
+    // le détail complet reste en title="" pour l'accessibilité/clarté.
+    // Couleur relevée en btn-primary (dégradé corail KORA) : demande
+    // explicite, "couleur vive pour être bien mis en évidence" -- une
+    // action de cette importance (retire un article du site public) mérite
+    // la même mise en avant que "Publier", pas un bouton tonal discret.
     const actions = `<div class="draft-actions">
-        <span class="muted" style="flex:1">${esc(statusLabel)}${f.wp_category_name ? " · " + esc(f.wp_category_name) : ""}</span>
+        ${metaLine ? `<span class="muted" style="flex:1">${esc(metaLine)}</span>` : `<span style="flex:1"></span>`}
         ${f.wp_url ? `<a class="btn btn-tonal btn-sm" href="${esc(f.wp_url)}" target="_blank" rel="noopener">${icon("i-eye")} Voir</a>` : ""}
-        <button class="btn btn-tonal btn-sm" data-withdraw="${esc(f.fact_id)}">${icon("i-undo")} Retirer de WordPress</button>
+        <button class="btn btn-primary btn-sm" data-withdraw="${esc(f.fact_id)}" title="Retirer de WordPress">${icon("i-undo")} Retirer</button>
       </div>`;
     return `<div class="draft-cell">${card}${actions}</div>`;
   }).join("");
