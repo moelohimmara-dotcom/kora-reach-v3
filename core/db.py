@@ -43,7 +43,18 @@ def conn():
     # cree dans core/, deconnecte de celui deja utilise a la racine.
     _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     db = os.path.join(_repo_root, "reach_state.db")
-    c = sqlite3.connect(db)
+    # P0 (2026-08-23) : timeout + WAL + busy_timeout évitent "database is locked"
+    # sous ThreadingHTTPServer (N threads + 2 pools). WAL est online et
+    # idempotent ; busy_timeout fait patienter 30s au lieu de lever aussitôt.
+    c = sqlite3.connect(db, timeout=30.0, check_same_thread=False, isolation_level=None)
+    try:
+        c.execute("PRAGMA journal_mode=WAL;")
+        c.execute("PRAGMA synchronous=NORMAL;")
+        c.execute("PRAGMA busy_timeout=30000;")
+        c.execute("PRAGMA cache_size=-64000;")
+        c.execute("PRAGMA foreign_keys=ON;")
+    except Exception:
+        pass
     c.row_factory = sqlite3.Row
     return c, "sqlite"
 
