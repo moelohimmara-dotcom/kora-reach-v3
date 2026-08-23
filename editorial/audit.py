@@ -22,6 +22,18 @@ import core.config as config
 DB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reach_state.db")
 _TZ = ZoneInfo(config.LIMITS["timezone"])
 
+def _audit_conn():
+    """Connexion SQLite audit avec WAL/busy_timeout — même réglage que core/db.py P0."""
+    c = sqlite3.connect(DB, timeout=30.0, check_same_thread=False, isolation_level=None)
+    try:
+        c.execute("PRAGMA journal_mode=WAL;")
+        c.execute("PRAGMA synchronous=NORMAL;")
+        c.execute("PRAGMA busy_timeout=30000;")
+        c.execute("PRAGMA cache_size=-64000;")
+    except Exception:
+        pass
+    return c
+
 # Mots à masquer si jamais présents par erreur
 _SECRET_HINTS = ("sk-", "api_key", "token", "secret", "password", "bearer ")
 
@@ -46,7 +58,7 @@ def _scrub(text: str) -> str:
 
 
 def _init():
-    conn = sqlite3.connect(DB)
+    conn = _audit_conn()
     conn.execute(
         """CREATE TABLE IF NOT EXISTS audit_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,7 +96,7 @@ def log(cycle_id: str, event: str, detail: str = "", provider: str = "",
         elif "CYCLE" in ev or "RUN" in ev: action = "CYCLE"
         elif "PURGE" in ev: action = "PURGE"
         else: action = "GENERE"
-    conn = sqlite3.connect(DB)
+    conn = _audit_conn()
     conn.execute(
         """INSERT INTO audit_events (ts, cycle_id, event, detail, provider, fact_id, action, editor)
            VALUES (?,?,?,?,?,?,?,?)""",
@@ -111,7 +123,7 @@ def get_daily() -> list:
     """Retourne la liste des jours (décroissant) avec compteurs par action.
     Shape: { date, label, count, counters:{ACTION:int}, events:[...] } (events limités à 200/jour pour le dépliable)."""
     _init()
-    conn = sqlite3.connect(DB)
+    conn = _audit_conn()
     conn.row_factory = sqlite3.Row
     rows = conn.execute("SELECT * FROM audit_events ORDER BY id DESC").fetchall()
     conn.close()
@@ -149,7 +161,7 @@ def _day_label(d: str) -> str:
 
 def get_day_events(day: str) -> list:
     _init()
-    conn = sqlite3.connect(DB)
+    conn = _audit_conn()
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
         "SELECT * FROM audit_events WHERE DATE(ts)=? ORDER BY id DESC", (day,)
@@ -163,7 +175,7 @@ def delete_events(ids: list) -> int:
     if not ids:
         return 0
     _init()
-    conn = sqlite3.connect(DB)
+    conn = _audit_conn()
     q = f"DELETE FROM audit_events WHERE id IN ({','.join('?'*len(ids))})"
     conn.execute(q, ids)
     n = conn.total_changes
@@ -175,7 +187,7 @@ def delete_events(ids: list) -> int:
 def purge_all(editor: str = None) -> int:
     """Vide TOUTE la table SAUF écrit une ligne PURGE (garde-fou). Retourne nb supprimé."""
     _init()
-    conn = sqlite3.connect(DB)
+    conn = _audit_conn()
     n = conn.execute("SELECT COUNT(*) FROM audit_events").fetchone()[0]
     conn.execute("DELETE FROM audit_events")
     conn.execute(
@@ -192,7 +204,7 @@ def purge_all(editor: str = None) -> int:
 def purge_day(day: str, editor: str = None) -> int:
     """Réinitialise UN jour (supprime ses events SAUF écrit une ligne PURGE scoped)."""
     _init()
-    conn = sqlite3.connect(DB)
+    conn = _audit_conn()
     n = conn.execute("SELECT COUNT(*) FROM audit_events WHERE DATE(ts)=?", (day,)).fetchone()[0]
     conn.execute("DELETE FROM audit_events WHERE DATE(ts)=?", (day,))
     conn.execute(
@@ -221,7 +233,7 @@ def count_deleted() -> int:
     suppressions DOIT passer par cette fonction plutôt que par une requête
     SQL directe sur 'audit_events' via db.py/Postgres."""
     _init()
-    conn = sqlite3.connect(DB)
+    conn = _audit_conn()
     try:
         row = conn.execute(
             "SELECT count(*) FROM audit_events WHERE action IN ('SUPPRIME', 'PURGE')"
@@ -234,7 +246,7 @@ def count_deleted() -> int:
 def get_events(cycle_id: str = "") -> list:
     """Rétrocompatibilité (non utilisé par la nouvelle UI mais conservé)."""
     _init()
-    conn = sqlite3.connect(DB)
+    conn = _audit_conn()
     conn.row_factory = sqlite3.Row
     if cycle_id:
         rows = conn.execute("SELECT * FROM audit_events WHERE cycle_id=? ORDER BY id",
@@ -243,3 +255,4 @@ def get_events(cycle_id: str = "") -> list:
         rows = conn.execute("SELECT * FROM audit_events ORDER BY id DESC LIMIT 200").fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
