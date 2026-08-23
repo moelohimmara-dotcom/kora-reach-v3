@@ -1591,7 +1591,7 @@ html.icons-ready .material-icons { visibility: visible; }
 .cycle-actions md-filled-button,
 .cycle-actions md-outlined-button { flex: 1; min-width: 140px; }
 
-/* Mobile adjustments — stat-full centré hérité du global (style.css:1487) : pas de surcharge mobile nécessaire, le bandeau reste équidistant en 2 colonnes. */
+/* Mobile adjustments — stat-full centré hérité du global (style.css:1487) + override du margin:auto générique qui déséquilibrait le row centré en 390px. */
 @media (max-width: 767px) {
   .cockpit { padding: var(--space-4); }
   .cockpit-grid.stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1602,6 +1602,8 @@ html.icons-ready .material-icons { visibility: visible; }
   .stat-value { font-size: 1.375rem; } /* 22px (~0.69x desktop, affinage suite feedback 'trop gros') */
   .stat-label { font-size: 12px; }     /* 12px (ratio desktop, plancher lisible) */
   .stat-icon { width: 18px; height: 18px; display: block; margin: 0 auto 16px; align-self: center; }
+  /* Override mobile : le bandeau pleine largeur est en row centré, pas en colonne — le margin:auto du générique crée 63px de chaque côté et casse l'équidistance */
+  .stat-card.stat-full .stat-icon { margin: 0; width: 28px; height: 28px; }
   .cycle-actions { flex-direction: column; }
   .cycle-actions md-filled-button,
   .cycle-actions md-outlined-button { width: 100%; }
