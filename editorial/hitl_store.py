@@ -1197,6 +1197,19 @@ def get_dashboard_stats() -> dict:
         # bug corrige : cette requete directe visait la table 'audit_events'
         # Postgres, jamais alimentee par le vrai journal, voir audit.py)
         deleted = audit.count_deleted()
+        # 8) Vidéos actives (2026-08-23, demande explicite : "ajouter un
+        # compteur ... comme sur les autres pages de cette section") --
+        # même logique que active_facts/published_count ci-dessus : compte
+        # les articles ayant une vidéo narrée générée (video_status non
+        # nul) et PAS ENCORE transmis -- une vidéo dont l'article est déjà
+        # publié n'est plus une action en attente sur la page Vidéos.
+        # Calculé côté backend (pas depuis s.videos, chargé paresseusement
+        # côté frontend seulement à la visite de cette page -- le badge
+        # doit rester correct même sans jamais avoir ouvert Vidéos).
+        cur.execute(
+            "SELECT count(*) FROM hitl_facts WHERE video_status IS NOT NULL AND status <> 'TRANSMITTED'")
+        row = cur.fetchone()
+        active_videos = int((list(row.values())[0] if isinstance(row, dict) else row[0]) or 0)
         return {
             # total_facts = "Articles" partout dans l'UI (sidebar, dashboard, filtre
             # "Tous" de la page Articles) : c'est la SEULE definition dont la somme
@@ -1232,6 +1245,7 @@ def get_dashboard_stats() -> dict:
             "rejected": rejected,             # rejetes (statut REJECTED + corbeille rejetee)
             "published": published,           # DÉPRÉCIÉ pour l'UI (voir published_count) -- gardé pour compat, table articles/entrepôt
             "deleted": deleted,               # definitivement supprimes
+            "active_videos": active_videos,   # videos avec article pas encore transmis (badge nav "Vidéos")
         }
     finally:
         con.close()

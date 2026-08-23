@@ -351,6 +351,14 @@ function render() {
       // encore réellement publié nulle part).
       published: (typeof stats.published_count === "number") ? stats.published_count
         : facts.filter(f => (f.status || "") === "TRANSMITTED").length,
+      // "videos" (2026-08-23, demande explicite : "ajouter un compteur ...
+      // comme sur les autres pages de cette section") -- active_videos
+      // (backend, voir get_dashboard_stats) plutôt que s.videos, qui n'est
+      // chargé que lorsqu'on visite la page Vidéos -- le badge doit rester
+      // exact même sans jamais l'avoir ouverte. Repli sur s.videos si un
+      // backend pas encore redéployé ne l'expose pas encore.
+      videos: (typeof stats.active_videos === "number") ? stats.active_videos
+        : (s.videos || []).filter(v => (v.status || "") !== "TRANSMITTED").length,
     };
     document.querySelectorAll("[data-badge]").forEach(el => {
       const key = el.getAttribute("data-badge");
