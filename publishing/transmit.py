@@ -217,6 +217,13 @@ def _build_payload(fact: dict, final_text: str) -> dict:
         # du champion) si jamais l'image primaire échoue et que _upload_media
         # bascule dessus -- voir _to_wordpress.
         "champion_source_name": champ.get("source", ""),
+        # Classement pré-calculé (2026-08-23, demande explicite : "fais
+        # appliquer cela aux articles actuels déjà sur kora") -- si un
+        # classement a déjà été fait en lot avant la transmission
+        # (editorial.hitl_store.set_suggested_category), _to_wordpress le
+        # réutilise tel quel au lieu de reclasser (évite un appel LLM
+        # redondant). Vide -> _to_wordpress classe à la volée comme avant.
+        "suggested_category": fact.get("suggested_category") or "",
         # Vidéo narrée (2026-08-22, demande explicite : "l'article vidéo doit
         # pouvoir être transféré sur wordpress dans brouillons ou en
         # publication officielle") -- voir _upload_video()/_to_wordpress().
@@ -648,7 +655,12 @@ def _to_wordpress(payload: dict, wp_status: str = "publish") -> dict:
     #    filet mécanique ne peut pas échouer, voir son docstring) --
     #    "Non classé" (id WP_CATEGORY_DEFAULT_ID) au pire des cas, jamais
     #    d'article sans catégorie du tout.
-    category_name = _classify_category(payload["title"], payload["content"])
+    _pre = (payload.get("suggested_category") or "").strip()
+    _valid_names = set(WP_CATEGORY_MAP.keys()) | {WP_CATEGORY_DEFAULT}
+    if _pre in _valid_names:
+        category_name = _pre  # déjà classé en lot -- pas de 2e appel LLM
+    else:
+        category_name = _classify_category(payload["title"], payload["content"])
     category_id = WP_CATEGORY_MAP.get(category_name, WP_CATEGORY_DEFAULT_ID)
     body = json.dumps({
         "title": payload["title"],

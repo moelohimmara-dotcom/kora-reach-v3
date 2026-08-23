@@ -121,6 +121,12 @@ function factMeta(f, status, compact) {
     chip((f.n_sources || 1) + " source" + ((f.n_sources || 1) > 1 ? "s" : ""), "tertiary", "i-fusion"),
     chip("Date OK", "tertiary", "i-date"),
   ];
+  // Catégorie suggérée (2026-08-23, classement automatique) : visible AVANT
+  // décision, pour que l'éditeur voie ce qui sera appliqué à la transmission
+  // sans avoir à approuver d'abord. wp_category_name (déjà transmis) prime
+  // si présent -- c'est la catégorie RÉELLEMENT appliquée, pas une suggestion.
+  const catLabel = f.wp_category_name || f.suggested_category;
+  if (!compact && catLabel) items.push(chip(catLabel, "secondary", "i-source"));
   // en mode carte, le statut est déjà affiché dans la ligne .fact-status (pas de doublon)
   if (!compact) items.push(`<span class="badge badge-pending">${esc(stLabel)}</span>`);
   return items.join("");

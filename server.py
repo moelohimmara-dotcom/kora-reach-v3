@@ -1535,6 +1535,11 @@ def _fact_by_id(fid):
         # savoir qu'une vidéo existait pour cet article (row.get(...) via
         # get_fact() les a bien, mais ce dict de sortie les laissait de côté).
         "video_status": row.get("video_status"), "video_path": row.get("video_path"),
+        # suggested_category (2026-08-23, demande explicite : "fais appliquer
+        # cela aux articles actuels déjà sur kora") -- classement pré-calculé
+        # en lot pour les articles déjà en file, réutilisé tel quel par
+        # _to_wordpress (transmit.py) au lieu de reclasser à la transmission.
+        "suggested_category": row.get("suggested_category"),
     }
 
 

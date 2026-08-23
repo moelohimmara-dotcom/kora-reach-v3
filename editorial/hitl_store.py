@@ -253,7 +253,7 @@ def _init_locked():
         con, mode = db.conn()
         cur = con.cursor()
         for col, ctype in (("wp_post_id", "TEXT"), ("wp_url", "TEXT"), ("wp_status", "TEXT"),
-                           ("wp_category_name", "TEXT")):
+                           ("wp_category_name", "TEXT"), ("suggested_category", "TEXT")):
             if mode == "postgres":
                 cur.execute(f"ALTER TABLE hitl_facts ADD COLUMN IF NOT EXISTS {col} {ctype}")
             else:
@@ -401,6 +401,7 @@ def list_facts() -> list:
             "wp_url": d.get("wp_url"),
             "wp_status": d.get("wp_status"),
             "wp_category_name": d.get("wp_category_name"),
+            "suggested_category": d.get("suggested_category"),
         })
     return out
 
@@ -635,6 +636,27 @@ def decide(fact_id: str, decision: str, decided_by: str,
     # generique "transition_interdite" -- defense en profondeur, pas le seul
     # rempart.
     return {"ok": True, "fact_id": fact_id, "status": decision, "decided_by": decided_by, "from_status": cur_state}
+
+
+def set_suggested_category(fact_id: str, category_name: str) -> None:
+    """Classement PRÉ-transmission (2026-08-23, demande explicite : "fais
+    appliquer cela aux articles actuels déjà sur kora") -- distinct de
+    wp_category_name (qui signifie "catégorie réellement appliquée sur un
+    post WordPress déjà en ligne") : celui-ci n'est qu'une SUGGESTION,
+    visible dans le tiroir article AVANT décision, réutilisée telle quelle
+    par _to_wordpress (publishing/transmit.py) au moment de la transmission
+    réelle plutôt que de reclasser (évite un appel LLM redondant). Aucun
+    impact sur hitl_facts.status ni sur le garde-fou anti-double-
+    transmission -- best-effort, n'interrompt jamais l'appelant."""
+    p = _ph()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(f"UPDATE hitl_facts SET suggested_category={p} WHERE fact_id={p}",
+                    (category_name, fact_id))
+        con.commit()
+    finally:
+        con.close()
 
 
 def mark_transmitted(fact_id: str, provider: str, http_status: int,
