@@ -818,7 +818,7 @@ class Handler(BaseHTTPRequestHandler):
             # section critique _GENERATION_START_LOCK (voir plus haut) --
             # ne plus les reposer ici, hors de cette section, sans quoi la
             # fenêtre de course qu'on vient de corriger réapparaît.
-            threading.Thread(target=_run, daemon=True).start()
+            threading.Thread(target=_run, daemon=False).start()
             # Estimation immediate (2026-08-19, demande explicite) : previent
             # tout de suite l'utilisateur d'un ordre de grandeur, avant meme
             # de connaitre le nombre d'articles (connu seulement apres la
@@ -1597,6 +1597,18 @@ def main():
     global _SRV
     srv = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     _SRV = srv
+    # Gestion gracieuse SIGTERM/SIGINT (P0) : laisse les threads non-daemon finir leur commit
+    try:
+        import signal as _sig
+        def _handle_sig(signum, frame):
+            try:
+                _SRV.shutdown()
+            except Exception:
+                pass
+        _sig.signal(_sig.SIGTERM, _handle_sig)
+        _sig.signal(_sig.SIGINT, _handle_sig)
+    except Exception:
+        pass
     print(f"KORA dashboard sur http://localhost:{port} | editor={EDITOR_NAME} | transmit={transmit.mode()}")
     try:
         srv.serve_forever()

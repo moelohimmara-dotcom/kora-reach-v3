@@ -118,8 +118,8 @@ def start_video_generation(fact_id: str, on_complete=None) -> dict:
         return {"ok": False, "error": "image_de_couverture_absente"}
     set_video_status(fact_id, "generating", stage="narration")
     t = threading.Thread(target=_run_generation,
-                          args=(fact_id, title, article_text, image_url, on_complete),
-                          daemon=True)
+                           args=(fact_id, title, article_text, image_url, on_complete),
+                           daemon=False)
     t.start()
     return {"ok": True, "status": "generating"}
 
