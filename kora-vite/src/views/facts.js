@@ -20,13 +20,23 @@ function factCard(f, s, idx) {
   const fallback = `https://picsum.photos/seed/${seed}/800/450`;
   // fallback : si fact_id absent, on utilise l'index de la carte
   const fid = f.fact_id || ("idx" + idx);
-  const sel = s.selectMode && s.selection[fid];
+  // Verrouillage sélection (2026-08-23, même principe que le tiroir article
+  // pour un fait TRANSMITTED, voir sheet.js) : un article déjà transmis à
+  // WordPress ne doit JAMAIS pouvoir entrer dans un lot d'actions groupées
+  // (corbeille, suppression, brouillon, rejet...) -- son état réel vit en
+  // partie sur WordPress désormais, hors du contrôle de KORA ; l'y inclure
+  // silencieusement créait un mensonge d'affichage possible (ex: mis à la
+  // corbeille dans KORA alors que le post reste bien en ligne).
+  const locked = status === "TRANSMITTED";
+  const sel = s.selectMode && !locked && s.selection[fid];
   const check = s.selectMode
-    ? `<div class="fact-check ${sel ? "on" : ""}" data-check="${esc(fid)}">${sel ? icon("i-check") : ""}</div>`
+    ? (locked
+        ? `<div class="fact-check fact-check-locked" title="Article déjà transmis : non sélectionnable">${icon("i-lock")}</div>`
+        : `<div class="fact-check ${sel ? "on" : ""}" data-check="${esc(fid)}">${sel ? icon("i-check") : ""}</div>`)
     : "";
-  const click = s.selectMode ? `onclick="Store.toggleSelect('${esc(fid)}')"` : `onclick="App.openFact('${esc(fid)}')"`;
+  const click = (s.selectMode && !locked) ? `onclick="Store.toggleSelect('${esc(fid)}')"` : `onclick="App.openFact('${esc(fid)}')"`;
   return `
-    <article class="fact-card ${s.selectMode ? "selectable" : ""} ${sel ? "selected" : ""}" data-fact="${esc(fid)}" data-index="${idx}" ${click}>
+    <article class="fact-card ${s.selectMode ? "selectable" : ""} ${sel ? "selected" : ""} ${s.selectMode && locked ? "select-locked" : ""}" data-fact="${esc(fid)}" data-index="${idx}" ${click}>
       ${check}
       <img class="fact-img" src="${src}" alt="" loading="lazy" onerror="this.onerror=null; this.src='${esc(fallback)}'">
       <div class="fact-body">

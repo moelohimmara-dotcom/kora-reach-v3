@@ -869,34 +869,52 @@ def list_trashed() -> list:
 
 
 def trash_facts(ids: list) -> dict:
+    """Met en corbeille (11 jours, restaurable). Retourne {"ok", "trashed",
+    "skipped_transmitted"}.
+
+    Garde-fou (2026-08-23, demande explicite : la sélection multiple sur la
+    page Articles permettait de mettre à la corbeille un article déjà
+    TRANSMITTED -- l'UPDATE ci-dessous n'avait AUCUNE condition sur le
+    statut. Un article "Transmis" mis à la corbeille disparaît des filtres
+    de KORA alors que le post reste bien en ligne sur WordPress -- mensonge
+    d'affichage, même classe de bug que la faille de retract() corrigée
+    plus tôt aujourd'hui. Filtré ICI (dans la fonction elle-même, pas
+    seulement côté serveur/frontend) : défense en profondeur, même si un
+    futur appelant oublie de vérifier en amont."""
     ids = [str(i) for i in (ids or [])]
     if not ids:
-        return {"ok": True, "trashed": 0}
+        return {"ok": True, "trashed": 0, "skipped_transmitted": 0}
     now = datetime.now(TZ).isoformat(timespec="seconds")
     p = _ph()
     ph = ",".join([p] * len(ids))
     con, _ = db.conn()
     try:
         cur = con.cursor()
-        # 1) hitl_facts : statut TRASHED + timestamp
-        cur.execute(
-            f"UPDATE hitl_facts SET status='TRASHED', trashed_at={p} WHERE fact_id IN ({ph})",
-            (now, *ids))
-        n = cur.rowcount
-        # 2) hitl_decisions : miroir du statut pour que list_facts() le voie (LEFT JOIN sur d_status)
-        for fid in ids:
+        cur.execute(f"SELECT fact_id FROM hitl_facts WHERE fact_id IN ({ph}) AND status='TRANSMITTED'", tuple(ids))
+        transmitted = {dict(r)["fact_id"] for r in cur.fetchall()}
+        eligible = [i for i in ids if i not in transmitted]
+        n = 0
+        if eligible:
+            eph = ",".join([p] * len(eligible))
+            # 1) hitl_facts : statut TRASHED + timestamp
             cur.execute(
-                f"""INSERT INTO hitl_decisions (fact_id, status, decision, edited_text, final_text, decided_by, decided_at)
-                   VALUES ({p},{p},{p},{p},{p},{p},{p})
-                   ON CONFLICT(fact_id) DO UPDATE SET
-                     status=EXCLUDED.status, decision=EXCLUDED.decision, decided_by=EXCLUDED.decided_by, decided_at=EXCLUDED.decided_at""",
-                (fid, "TRASHED", "TRASHED", "", "", "system", now))
+                f"UPDATE hitl_facts SET status='TRASHED', trashed_at={p} WHERE fact_id IN ({eph})",
+                (now, *eligible))
+            n = cur.rowcount
+            # 2) hitl_decisions : miroir du statut pour que list_facts() le voie (LEFT JOIN sur d_status)
+            for fid in eligible:
+                cur.execute(
+                    f"""INSERT INTO hitl_decisions (fact_id, status, decision, edited_text, final_text, decided_by, decided_at)
+                       VALUES ({p},{p},{p},{p},{p},{p},{p})
+                       ON CONFLICT(fact_id) DO UPDATE SET
+                         status=EXCLUDED.status, decision=EXCLUDED.decision, decided_by=EXCLUDED.decided_by, decided_at=EXCLUDED.decided_at""",
+                    (fid, "TRASHED", "TRASHED", "", "", "system", now))
         con.commit()
     finally:
         con.close()
-    for fid in ids:
+    for fid in eligible:
         audit.log(None, "TRASH", f"fact={fid}", fact_id=fid, action="CORBEILLE", editor="system")
-    return {"ok": True, "trashed": n}
+    return {"ok": True, "trashed": n, "skipped_transmitted": len(transmitted)}
 
 
 def restore_fact(fact_id: str) -> dict:
@@ -923,24 +941,37 @@ def restore_fact(fact_id: str) -> dict:
 
 
 def delete_facts(ids: list) -> dict:
-    """Suppression DÉFINITIVE (RGPD). Efface fait + décision + audit liée."""
+    """Suppression DÉFINITIVE (RGPD). Efface fait + décision + audit liée.
+
+    Garde-fou (2026-08-23, même faille que trash_facts() ci-dessus, trouvée
+    en même temps) : un article TRANSMITTED est désormais exclu de la
+    suppression en masse -- l'effacer perdrait définitivement le lien
+    wp_post_id/wp_url/wp_category_name (seule trace de OÙ se trouve le post
+    réel sur WordPress, ajoutée plus tôt aujourd'hui), sans que rien ne
+    supprime le post lui-même. Retourne aussi "skipped_transmitted"."""
     ids = [str(i) for i in (ids or [])]
     if not ids:
-        return {"ok": True, "deleted": 0}
+        return {"ok": True, "deleted": 0, "skipped_transmitted": 0}
     p = _ph()
-    ph = ",".join([p] * len(ids))
     con, _ = db.conn()
     try:
         cur = con.cursor()
-        cur.execute(f"DELETE FROM hitl_facts WHERE fact_id IN ({ph})", tuple(ids))
-        # Bug trouvé 2026-08-22 (suppression en masse d'articles défectueux) :
-        # `n` était lu APRÈS la 2e requête -- cur.rowcount reflétait donc le
-        # nombre de lignes hitl_decisions supprimées (souvent moins que le
-        # nombre de faits, une décision n'existant pas toujours), jamais le
-        # nombre RÉEL de faits supprimés. Capturé immédiatement après le
-        # DELETE qui compte réellement.
-        n = cur.rowcount
-        cur.execute(f"DELETE FROM hitl_decisions WHERE fact_id IN ({ph})", tuple(ids))
+        ph = ",".join([p] * len(ids))
+        cur.execute(f"SELECT fact_id FROM hitl_facts WHERE fact_id IN ({ph}) AND status='TRANSMITTED'", tuple(ids))
+        transmitted = {dict(r)["fact_id"] for r in cur.fetchall()}
+        ids = [i for i in ids if i not in transmitted]
+        n = 0
+        if ids:
+            ph = ",".join([p] * len(ids))
+            cur.execute(f"DELETE FROM hitl_facts WHERE fact_id IN ({ph})", tuple(ids))
+            # Bug trouvé 2026-08-22 (suppression en masse d'articles défectueux) :
+            # `n` était lu APRÈS la 2e requête -- cur.rowcount reflétait donc le
+            # nombre de lignes hitl_decisions supprimées (souvent moins que le
+            # nombre de faits, une décision n'existant pas toujours), jamais le
+            # nombre RÉEL de faits supprimés. Capturé immédiatement après le
+            # DELETE qui compte réellement.
+            n = cur.rowcount
+            cur.execute(f"DELETE FROM hitl_decisions WHERE fact_id IN ({ph})", tuple(ids))
         con.commit()
     finally:
         con.close()
@@ -950,7 +981,7 @@ def delete_facts(ids: list) -> dict:
         except Exception:
             pass
         audit.log(None, "DELETE_FACT", f"fact={fid}", fact_id=fid, action="SUPPRIME", editor="system")
-    return {"ok": True, "deleted": n}
+    return {"ok": True, "deleted": n, "skipped_transmitted": len(transmitted)}
 
 
 def purge_trashed(days: int = TRASH_RETENTION_DAYS) -> int:

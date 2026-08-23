@@ -1025,6 +1025,13 @@ html.icons-ready .material-icons { visibility: visible; }
 .fact-card.selectable .fact-img { transition: opacity .2s; }
 .fact-card.selected { outline: 3px solid var(--coral); outline-offset: -3px; }
 .fact-card.selected .fact-img { opacity: .65; }
+/* Carte "Transmis" en mode sélection (2026-08-23) : non sélectionnable --
+   cadenas au lieu d'une case à cocher, carte visiblement estompée pour
+   signaler qu'elle est exclue des actions groupées, pas juste ignorée. */
+.fact-check-locked { color: var(--md-sys-color-on-surface-variant); border-color: var(--border); }
+.fact-check-locked .ic { width: 14px; height: 14px; }
+.fact-card.select-locked { cursor: default; opacity: .55; }
+.fact-card.select-locked .fact-img { filter: grayscale(.4); }
 .select-bar {
   position: fixed; left: 50%; transform: translateX(-50%);
   bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
