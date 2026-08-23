@@ -33,12 +33,12 @@ function factCard(f, s, idx) {
   // silencieusement créait un mensonge d'affichage possible (ex: mis à la
   // corbeille dans KORA alors que le post reste bien en ligne).
   const locked = status === "TRANSMITTED";
-  const sel = s.selectMode && !locked && s.selection[fid];
-  const check = s.selectMode
-    ? (locked
-        ? `<div class="fact-check fact-check-locked" title="Article déjà transmis : non sélectionnable">${icon("i-lock")}</div>`
-        : `<div class="fact-check ${sel ? "on" : ""}" data-check="${esc(fid)}">${sel ? icon("i-check") : ""}</div>`)
-    : "";
+  const sel = !locked && !!s.selection[fid];
+  // Rendu fact-check : toujours présent pour les non-verrouillés (hover desktop + appui long mobile),
+  // masqué par CSS hors selectMode/hover. En mode sélection, l'état on/off est visible.
+  const check = locked
+    ? (s.selectMode ? `<div class="fact-check fact-check-locked" title="Article déjà transmis : non sélectionnable">${icon("i-lock")}</div>` : "")
+    : `<div class="fact-check ${sel ? "on" : ""}" data-check="${esc(fid)}" aria-label="Sélectionner">${sel ? icon("i-check") : ""}</div>`;
   const click = (s.selectMode && !locked) ? `onclick="Store.toggleSelect('${esc(fid)}')"` : `onclick="App.openFact('${esc(fid)}')"`;
   return `
     <article class="fact-card ${s.selectMode ? "selectable" : ""} ${sel ? "selected" : ""} ${s.selectMode && locked ? "select-locked" : ""}" data-fact="${esc(fid)}" data-index="${idx}" ${click}>

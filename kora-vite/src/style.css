@@ -1019,8 +1019,16 @@ html.icons-ready .material-icons { visibility: visible; }
 .section-head-actions { display: flex; gap: 8px; align-items: center; }
 .fact-check { position: absolute; top: 8px; left: 8px; width: 26px; height: 26px; border-radius: 50%;
   background: color-mix(in srgb, var(--md-sys-color-surface) 85%, transparent); border: 2px solid var(--coral);
-  display: grid; place-items: center; color: #fff; z-index: 3; box-shadow: var(--elev-1); }
+  display: grid; place-items: center; color: #fff; z-index: 3; box-shadow: var(--elev-1);
+  opacity: 0; pointer-events: none; transition: opacity .18s var(--ease), transform .18s var(--ease); }
 .fact-check.on { background: var(--coral); }
+.fact-card.selectable .fact-check,
+.fact-card.selected .fact-check,
+.fact-card.long-press-active .fact-check { opacity: 1; pointer-events: auto; }
+@media (hover: hover) {
+  .fact-card:hover .fact-check { opacity: 1; pointer-events: auto; }
+}
+.fact-card.long-press-active { transform: scale(0.97); }
 .fact-card.selectable { cursor: pointer; }
 .fact-card.selectable .fact-img { transition: opacity .2s; }
 .fact-card.selected { outline: 3px solid var(--coral); outline-offset: -3px; }

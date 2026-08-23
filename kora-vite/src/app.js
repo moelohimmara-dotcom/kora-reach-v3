@@ -648,6 +648,20 @@ function openFact(id) {
 
 function bind() {
   document.addEventListener("click", (e) => {
+    // Coche visible au survol (desktop) : clic sur la case = sélection même hors mode
+    const checkEl = e.target.closest(".fact-check");
+    if (checkEl && !checkEl.classList.contains("fact-check-locked")) {
+      const fid = checkEl.dataset.check;
+      if (fid) {
+        e.preventDefault(); e.stopPropagation();
+        if (window.__koraIgnoreNextClick) return;
+        if (!Store.state.selectMode) Store.setSelectMode(true);
+        Store.toggleSelect(fid);
+        if (navigator.vibrate) navigator.vibrate(20);
+      }
+      return;
+    }
+    if (window.__koraIgnoreNextClick) { e.preventDefault(); e.stopPropagation(); window.__koraIgnoreNextClick = false; return; }
     // Ne pas ouvrir le tiroir detail si le clic vient d'un bouton d'action
     // (Restaurer / Supprimer / Selection) ou d'une carte de la corbeille :
     // dans la corbeille, les seules actions valides sont Restaurer/Supprimer,
@@ -668,6 +682,54 @@ function bind() {
     if (!f && card.dataset.index) f = facts[parseInt(card.dataset.index, 10)];
     if (f) { Store.openSheet({ type: "fact", fact: f }); renderSheet(Store.state); }
   });
+  // ---- Appui long mobile (500ms) : entre en sélection + toggle, avec vibration ----
+  if (!window.__koraLongPressBound) {
+    window.__koraLongPressBound = true;
+    window.__koraIgnoreNextClick = false;
+    let lpTimer = null, lpX = 0, lpY = 0, lpFid = null;
+    const clearLp = (card) => {
+      if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+      if (card) card.classList.remove("long-press-active");
+      lpFid = null;
+    };
+    document.addEventListener("touchstart", (e) => {
+      const card = e.target.closest(".fact-card");
+      if (!card || card.classList.contains("select-locked") || card.classList.contains("trash-card")) return;
+      const fid = card.dataset.fact;
+      if (!fid) return;
+      const t = e.touches[0];
+      lpX = t.clientX; lpY = t.clientY; lpFid = fid;
+      card.classList.add("long-press-active");
+      lpTimer = setTimeout(() => {
+        lpTimer = null;
+        const s = Store.state;
+        const facts = s.facts || [];
+        const f = facts.find(x => x.fact_id === lpFid);
+        const st = (s.decisions[lpFid] || f?.status || "PENDING_REVIEW");
+        if (st === "TRANSMITTED") { clearLp(card); return; }
+        if (!s.selectMode) Store.setSelectMode(true);
+        Store.toggleSelect(lpFid);
+        if (navigator.vibrate) navigator.vibrate(40);
+        window.__koraIgnoreNextClick = true;
+        setTimeout(() => { window.__koraIgnoreNextClick = false; }, 600);
+        card.classList.remove("long-press-active");
+        lpFid = null;
+      }, 500);
+    }, { passive: true });
+    document.addEventListener("touchmove", (e) => {
+      if (!lpTimer) return;
+      const t = e.touches[0];
+      if (Math.abs(t.clientX - lpX) > 10 || Math.abs(t.clientY - lpY) > 10) {
+        const c = e.target.closest(".fact-card");
+        clearLp(c);
+      }
+    }, { passive: true });
+    document.addEventListener("touchend", (e) => {
+      const c = e.target.closest(".fact-card");
+      clearLp(c);
+    });
+    document.addEventListener("touchcancel", () => clearLp(null));
+  }
   // Filtres de la vue Articles : chaque pill filtre la liste SAUF "Corbeille"
   // qui pointe vers LA page corbeille unique (meme route/representation que la
   // sidebar) -> un seul endroit pour la corbeille, proprietes identiques.
