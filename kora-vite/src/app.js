@@ -1300,6 +1300,15 @@ function boot() {
         Store.resumeVideoWatch();
         // Centre de notifications persistant (2026-08-22).
         Store.loadNotifications();
+        // Corbeille (badge nav) : déplacé ici (2026-08-24, audit UX Articles
+        // F4) depuis un appel inconditionnel plus bas dans boot(), qui se
+        // déclenchait AVANT même que checkAuth() n'ait confirmé une session
+        // valide -- 401 garanti sur /api/hitl/trash à chaque premier
+        // chargement non authentifié (repéré en surveillant le réseau
+        // pendant l'audit). Chargé ici uniquement une fois la session
+        // confirmée, même bénéfice (badge peuplé sans naviguer sur la page
+        // Corbeille), sans le 401 systématique.
+        Store.loadTrash().catch(() => {});
         // Comptes/invitations : role deja connu ici (checkAuth resolu) -> pas
         // d'appel pour rien (403 systematique) pour lecteur/editeur.
         if (Store.state.auth && isAdvancedRole(Store.state.auth.role)) {
@@ -1330,10 +1339,10 @@ function boot() {
   }
   Store.loadHealth();
   Store.loadSettings();
-  Store.loadTrash().catch(() => {});
-  // loadUsers/loadInvitations : voir le .then(checkAuth) ci-dessus, appelés
-  // une fois le rôle connu (pas ici -> Store.state.auth n'est pas encore
-  // résolu à ce point synchrone, le garde-fou serait toujours faux).
+  // loadTrash/loadUsers/loadInvitations : voir le .then(checkAuth) ci-dessus,
+  // appelés une fois la session confirmée (pas ici -> avant checkAuth(),
+  // Store.state.auth n'est pas encore résolu et un appel non authentifié
+  // provoquerait un 401 systématique inutile, cf. F4 audit UX Articles).
   Store.startAutoRefresh(30000);
 }
 

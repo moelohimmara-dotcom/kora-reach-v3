@@ -281,8 +281,21 @@ function viewFacts(s) {
     ["rejected", "Rejetés", counts.rejected],
     ["drafts", "Brouillons", counts.drafts], ["trash", "Corbeille", counts.trash],
   ];
-  const filterBar = `<div class="filter-bar">${filters.map(([k, lab, n]) =>
-    `<button class="filter-pill ${f === k ? "active" : ""}" data-fact-filter="${k}">${lab} <span class="pill-n">${n}</span></button>`).join("")}
+  // F2 (audit UX Articles, 2026-08-24) : simples <button> sans relation
+  // "groupe de filtres à sélection unique" exposée à un lecteur d'écran
+  // au-delà de la classe visuelle "active". "Corbeille" est exclue du
+  // tablist : contrairement aux 4 autres, elle NAVIGUE vers une autre page
+  // (route "trash") plutôt que de filtrer la liste courante -- un vrai
+  // "tab" ARIA doit rester dans la même vue, la marquer role="tab" aurait
+  // été un mésusage sémantique malgré l'apparence visuelle identique.
+  const filterBar = `<div class="filter-bar">
+    <div role="tablist" aria-label="Filtrer les articles" style="display:contents">
+      ${filters.map(([k, lab, n]) => {
+        const isNav = k === "trash";
+        const roleAttrs = isNav ? "" : `role="tab" aria-selected="${f === k}"`;
+        return `<button class="filter-pill ${f === k ? "active" : ""}" data-fact-filter="${k}" ${roleAttrs}>${lab} <span class="pill-n">${n}</span></button>`;
+      }).join("")}
+    </div>
     <button class="icon-btn" id="copyFilterLink" type="button" title="Copier le lien de ce filtre" aria-label="Copier le lien de ce filtre">${icon("i-link")}</button>
     ${helpTip("fact-filters")}</div>
     <p class="filter-note">Chaque article compte dans une seule catégorie — la somme des filtres égale le total (${counts.all}). Les articles déjà transmis sont dans « Publiés ».</p>
