@@ -249,6 +249,13 @@ export const Store = (() => {
       setState({ auth: { ...state.auth, avatarData: dataUrl || null } });
       return true;
     }
+    // Messages distincts par cause (2026-08-24, correctif B2 de l'audit UX
+    // Compte) : "format non supporté" et "fichier trop lourd" étaient
+    // fusionnés dans un seul message générique, trompeur quand seul le
+    // format (pas le poids) était en cause -- voir _avatar_error() dans
+    // identity/auth.py pour la distinction serveur.
+    if (r.error === "avatar_format_invalide") throw new Error("Format non supporté — choisis une image (JPG, PNG, WebP...)");
+    if (r.error === "avatar_trop_lourd") throw new Error("Image trop lourde (max 256 Ko)");
     throw new Error(r.error === "avatar_invalide" ? "Image invalide (doit être une photo, < 256 Ko)" : (r.error || "Erreur"));
   }
   async function forgot(email) {

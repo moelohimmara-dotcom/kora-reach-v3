@@ -291,26 +291,40 @@ def admin_reset_password(uid, new_password):
     return {"ok": True}
 
 
-def _valid_avatar(data_url):
+def _avatar_error(data_url):
     """Même validation que le logo (settings.py) : data:image/...;base64, <256 Ko.
     Dupliquée ici (plutôt qu'importée) pour garder auth.py indépendant de
-    settings.py — chaque module reste autonome, cohérent avec le reste du repo."""
-    if not data_url or not data_url.startswith("data:image/") or ";base64," not in data_url:
-        return False
+    settings.py — chaque module reste autonome, cohérent avec le reste du repo.
+
+    Retourne None si valide, sinon un code d'erreur DISTINGUANT la cause
+    (2026-08-24, correctif B2 de l'audit UX Compte : "un fichier au mauvais
+    format déclenche le même message qu'un fichier trop lourd" -- un .txt
+    renommé, par exemple, contourne le filtre accept="image/*" du champ
+    (un simple indice, pas une garantie) ; FileReader.readAsDataURL() encode
+    alors avec le type MIME réel du fichier -> échoue sur le PRÉFIXE
+    data:image/, jamais sur la taille, mais l'appelant recevait jusqu'ici
+    le même 'avatar_invalide' fourre-tout dans les deux cas)."""
+    if not data_url:
+        return None  # vide = retrait de l'avatar, valide
+    if not data_url.startswith("data:image/") or ";base64," not in data_url:
+        return "avatar_format_invalide"
     try:
         b64 = data_url.split(",", 1)[1]
         raw = base64.b64decode(b64, validate=True)
-        return len(raw) <= 256 * 1024
     except Exception:
-        return False
+        return "avatar_format_invalide"
+    if len(raw) > 256 * 1024:
+        return "avatar_trop_lourd"
+    return None
 
 
 def set_avatar(uid, data_url):
     """Enregistre la photo de profil (data-URL, jamais un chemin de fichier —
     même principe que le logo white-label : aucune inclusion/traversée de
     fichier possible). data_url vide -> retire l'avatar."""
-    if data_url and not _valid_avatar(data_url):
-        return {"ok": False, "error": "avatar_invalide"}
+    err = _avatar_error(data_url)
+    if err:
+        return {"ok": False, "error": err}
     ph = db.placeholder()
     con, _ = db.conn()
     try:

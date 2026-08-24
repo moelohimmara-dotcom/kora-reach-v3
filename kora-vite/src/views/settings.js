@@ -90,7 +90,12 @@ function viewSettings(s) {
             <div class="avatar-actions">
               <input type="file" id="avatarFile" accept="image/*" hidden>
               <button class="btn btn-tonal btn-sm" id="avatarChange">${icon("i-image")} Changer la photo</button>
-              ${s.auth?.avatarData ? `<button class="btn btn-ghost btn-sm" id="avatarRemove">Retirer</button>` : ""}
+              <!-- Toujours rendu, visibilité pilotée par l'attribut hidden (2026-08-24,
+                   correctif B1 de l'audit Compte) : permet à bindSettings() de la
+                   montrer/masquer directement en DOM après un upload/retrait, sans
+                   dépendre d'un re-rendu complet pour refléter le nouvel état -- voir
+                   avatarRemove.hidden ci-dessous. -->
+              <button class="btn btn-ghost btn-sm" id="avatarRemove" ${s.auth?.avatarData ? "" : "hidden"}>Retirer</button>
             </div>
           </div>
         </div>
@@ -258,6 +263,29 @@ function bindSettings() {
   const avatarRemove = document.getElementById("avatarRemove");
   const avatarPreview = document.getElementById("avatarPreview");
   const AVATAR_MAX_BYTES = 256 * 1024;
+  // Correctif B1 (2026-08-24, audit UX Compte) : "l'aperçu garde l'ancienne
+  // image tant que la page n'est pas rechargée entièrement", alors que le
+  // toast annonce déjà le succès. Root cause identifiée : saveAvatar() met
+  // bien à jour s.auth.avatarData -> setState -> re-render complet (qui
+  // referme tous les tiroirs), et le .then() ci-dessous ré-ouvrait le
+  // tiroir "Compte" en simulant un clic -- mais ce ré-ouverture et le
+  // re-rendu déclenché par setState ne sont pas garantis synchrones l'un
+  // par rapport à l'autre : le clic peut retomber sur un DOM reconstruit
+  // AVANT que setState n'ait propagé la nouvelle donnée, laissant l'ancien
+  // aperçu affiché jusqu'au prochain rendu complet (F5). Le topbar
+  // (#topbarIdentityAvatar, voir app.js) n'a jamais ce problème car il est
+  // mis à jour en DOM DIRECTEMENT à chaque rendu, jamais via un re-clic --
+  // même patron appliqué ici : la fonction ci-dessous met à jour
+  // #avatarPreview/#avatarRemove immédiatement et de façon synchrone,
+  // indépendamment du re-rendu général (qui continue de tourner pour le
+  // reste du tiroir, mais n'est plus la SEULE source de vérité visuelle
+  // pour l'avatar).
+  function _syncAvatarUI(dataUrl) {
+    const preview = document.getElementById("avatarPreview");
+    if (preview) preview.innerHTML = dataUrl ? `<img src="${esc(dataUrl)}" alt="">` : icon("i-user");
+    const removeBtn = document.getElementById("avatarRemove");
+    if (removeBtn) removeBtn.hidden = !dataUrl;
+  }
   if (avatarChange && avatarFile) avatarChange.onclick = () => avatarFile.click();
   if (avatarFile) avatarFile.onchange = () => {
     const f = avatarFile.files && avatarFile.files[0];
@@ -267,10 +295,13 @@ function bindSettings() {
     reader.onload = () => {
       const dataUrl = reader.result;
       Store.saveAvatar(dataUrl).then(() => {
+        _syncAvatarUI(dataUrl);
         // saveAvatar() met à jour s.auth.avatarData -> setState -> re-render
         // complet de la vue, qui referme tous les tiroirs Paramètres (limitation
         // générale de l'archi des tiroirs, pas spécifique à l'avatar). On rouvre
-        // "Compte" pour ne pas éjecter l'utilisateur de la page qu'il modifie.
+        // "Compte" pour ne pas éjecter l'utilisateur de la page qu'il modifie --
+        // l'aperçu ci-dessus est déjà correct entre-temps, ce ré-ouverture ne
+        // conditionne plus sa justesse.
         snack("Photo de profil mise à jour");
         document.querySelector('.settings-nav-item[data-setnav="account"]')?.click();
       }).catch(e => snack("Erreur : " + e.message));
@@ -279,6 +310,7 @@ function bindSettings() {
   };
   if (avatarRemove) avatarRemove.onclick = () => {
     Store.saveAvatar("").then(() => {
+      _syncAvatarUI("");
       snack("Photo de profil retirée");
       document.querySelector('.settings-nav-item[data-setnav="account"]')?.click();
     }).catch(e => snack("Erreur : " + e.message));
