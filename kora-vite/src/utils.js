@@ -254,6 +254,18 @@ function snack(msg) {
     // aria-live que sur une région déjà présente/visible dans l'arbre
     // d'accessibilité, pas sur l'insertion simultanée contenu+affichage.
     sn.hidden = false; sn.textContent = msg;
+    // F7 : remonte le toast au-dessus du panneau #sheet quand il est ouvert
+    // (recouvrement constaté, ex. formulaire "Ajouter une source") --
+    // décalage calculé depuis la hauteur RÉELLE du panneau affiché, pas une
+    // valeur fixe (un panneau court et un panneau plein écran n'ont pas la
+    // même hauteur).
+    const sheetEl = document.getElementById("sheet");
+    if (sheetEl && !sheetEl.hidden) {
+      const top = sheetEl.getBoundingClientRect().top;
+      sn.style.bottom = Math.max(106, window.innerHeight - top + 16) + "px";
+    } else {
+      sn.style.bottom = "";
+    }
     // Duree adaptee a la longueur du message (2026-08-20) : les 2.6s fixes
     // suffisent pour "Erreur : ..." mais pas pour un message explicatif
     // complet (ex. fin de cycle "rien de neuf", plusieurs phrases) --

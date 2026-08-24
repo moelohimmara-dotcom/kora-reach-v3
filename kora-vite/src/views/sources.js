@@ -37,15 +37,27 @@ function viewSources(s) {
   // e.guinea_filter (pas "guinee_filter") et e.vector (pas "vector_primary") :
   // les deux noms de champs réellement renvoyés par /api/whitelist (server.py).
   // Ligne cliquable -> détail (wireframe 7.2, gouvernance ouverte à l'UI 2026-08-19).
-  const srcRow = (e) => `
-    <button type="button" class="list-row src-row ${e.status !== "active" ? "src-row-suspended" : ""}" data-source-detail="${esc(e.id)}">
+  // F10 (audit UX Sources, 2026-08-24) : sans aria-label explicite, le nom
+  // accessible du bouton se calculait par accumulation de TOUT le texte
+  // visible (nom + catégorie + vecteur + URL COMPLÈTE) -- un lecteur
+  // d'écran énonçait l'URL lettre par lettre à chaque ligne, alourdissant
+  // la navigation sur 13-17 sources. aria-label concis (nom + statut) pour
+  // le NOM, le sous-titre (catégorie/vecteur/URL) reste accessible en tant
+  // que DESCRIPTION (aria-describedby) -- toujours disponible, mais plus
+  // annoncé en priorité sur chaque ligne.
+  const srcRow = (e) => {
+    const subId = "srcsub-" + esc(e.id);
+    const label = esc(e.name) + (e.status !== "active" ? `, ${SOURCE_STATUS_FR[e.status] || e.status}` : "");
+    return `
+    <button type="button" class="list-row src-row ${e.status !== "active" ? "src-row-suspended" : ""}" data-source-detail="${esc(e.id)}" aria-label="${label}" aria-describedby="${subId}">
       <span class="meta-ic">${icon(e.guinea_filter ? "i-shield" : "i-sources")}</span>
       <div class="meta">
         <div class="name">${esc(e.name)} ${e.guinea_filter ? chip("Filtre Guinée", "warning", "i-shield") : ""} ${_statusChip(e.status)}</div>
-        <div class="sub">${esc(e.category)} · ${esc(e.vector)} · ${esc(e.entry_url)}</div>
+        <div class="sub" id="${subId}">${esc(e.category)} · ${esc(e.vector)} · ${esc(e.entry_url)}</div>
       </div>
       ${icon("i-chevron-right", "src-row-chevron")}
     </button>`;
+  };
   return `<div class="section-title">Gouvernance des sources (${src.length})</div>
     <p class="muted" style="margin-bottom:16px">Ajout et suspension gérés depuis cet écran (advanced) — chaque modification est tracée dans le journal d'audit.</p>
     ${isAdvanced ? `<button type="button" class="btn btn-primary" id="addSourceBtn" style="margin-bottom:16px">${icon("i-plus")}<span>Ajouter une source</span></button>` : ""}

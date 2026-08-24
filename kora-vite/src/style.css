@@ -991,7 +991,18 @@ html.icons-ready .material-icons { visibility: visible; }
   /* 2026-08-20 : messages plus longs (fin de cycle "rien de neuf") sans
      largeur bornee -> pilule etiree hors ecran / illisible. */
   max-width: min(560px, calc(100vw - 32px)); white-space: normal; text-align: center; line-height: 1.4;
+  transition: bottom var(--dur-fast) var(--ease);
 }
+/* F7 (audit UX Sources, 2026-08-24) : #sheet est un panneau bas centré
+   (bottom:0, jusqu'à 92vh) -- la même zone que le toast (bottom:106px),
+   qu'il recouvrait partiellement quand un panneau était ouvert au moment
+   même où l'utilisateur pouvait vouloir corriger et re-soumettre (ex.
+   erreur de formulaire "Ajouter une source"). Remonté au-dessus du
+   panneau dans ce cas : décalage calculé en JS depuis la hauteur RÉELLE
+   du panneau (utils.js, snack()) plutôt qu'une valeur CSS fixe -- un
+   panneau court (ex. ce formulaire) et un panneau plein écran (92vh) n'ont
+   pas du tout la même hauteur, un décalage fixe aurait été faux dans un
+   des deux cas.
 @keyframes snackin { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
 /* Écran "cycle en cours" plein écran (wireframe 3.3 étendu, 2026-08-19) —
@@ -2365,7 +2376,11 @@ html.icons-ready .material-icons { visibility: visible; }
   width: 36px; height: 36px; border: none; border-radius: 10px; background: transparent;
   color: var(--text-primary); cursor: pointer;
 }
-.notif-bell:hover, .notif-bell:focus-visible { background: var(--surface-raised); outline: none; }
+.notif-bell:hover { background: var(--surface-raised); }
+/* F9 (audit UX Sources, 2026-08-24) : outline:none sans remplacement -- le
+   changement de fond seul (partagé avec :hover) ne donne aucun signal
+   distinct à un utilisateur clavier n'étant pas en survol. */
+.notif-bell:focus-visible { background: var(--surface-raised); outline: 2px solid var(--coral); outline-offset: 2px; }
 .notif-count {
   position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px; padding: 0 3px;
   border-radius: 999px; background: var(--danger); color: #fff; font-size: 10px; font-weight: 700;
