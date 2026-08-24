@@ -12,6 +12,7 @@ import json
 import threading
 
 import generation.video as gvideo
+import generation.illustrate as illustrate
 from editorial.hitl_store import get_fact, set_video_status, set_video_narration_mode
 import editorial.notifications as notifications
 
@@ -50,7 +51,7 @@ def _extract_article_text(row: dict) -> str:
 
 
 def _run_generation(fact_id: str, title: str, article_text: str, image_url: str,
-                     on_complete=None, narration_mode: str = "solo"):
+                     on_complete=None, narration_mode: str = "solo", image_urls: list = None):
     """`on_complete` (2026-08-21, verrou d'exclusivite) : callable optionnel
     appele UNE FOIS a la toute fin (succes ou echec) -- utilise par server.py
     pour liberer le verrou video global des que ce thread se termine, sans
@@ -64,7 +65,7 @@ def _run_generation(fact_id: str, title: str, article_text: str, image_url: str,
         res = gvideo.generate_video_for_article(
             title=title, article_text=article_text, image_url=image_url,
             out_dir=VIDEO_OUT_DIR, out_name=out_name, fact_id=fact_id,
-            on_stage=_on_stage, narration_mode=narration_mode)
+            on_stage=_on_stage, narration_mode=narration_mode, image_urls=image_urls)
     except Exception as e:
         set_video_status(fact_id, "error", error=f"{type(e).__name__}: {e}")
         # Notification persistante (2026-08-22) : generation 1-3 min, souvent
@@ -127,10 +128,25 @@ def start_video_generation(fact_id: str, on_complete=None, narration_mode: str =
     image_url = row.get("image", "") or champ.get("image", "")
     if not image_url:
         return {"ok": False, "error": "image_de_couverture_absente"}
+    # Candidats multi-images (2026-08-24, demande explicite : "plusieurs
+    # successions d'images, mais avec des effets de zoom") : TOUTES les
+    # images reelles du cluster (champion + contextes, jamais d'IA -- voir
+    # illustrate._candidate_images), dans l'ordre de fiabilite de source.
+    # `image_url` reste le premier element par construction (illustrate.py
+    # place deja le champion en tete) -- generation/video.py retombe seul
+    # sur le mono-image si moins de 2 sont effectivement telechargeables.
+    try:
+        contexts = row["contexts"] if isinstance(row.get("contexts"), list) else json.loads(row.get("contexts") or "[]")
+    except Exception:
+        contexts = []
+    try:
+        image_urls = [u for u, _src in illustrate._candidate_images(champ, contexts)]
+    except Exception:
+        image_urls = [image_url] if image_url else []
     set_video_status(fact_id, "generating", stage="narration")
     set_video_narration_mode(fact_id, narration_mode)
     t = threading.Thread(target=_run_generation,
-                           args=(fact_id, title, article_text, image_url, on_complete, narration_mode),
+                           args=(fact_id, title, article_text, image_url, on_complete, narration_mode, image_urls),
                            daemon=False)
     t.start()
     return {"ok": True, "status": "generating"}
