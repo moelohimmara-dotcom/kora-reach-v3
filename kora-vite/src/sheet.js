@@ -12,7 +12,7 @@ import {
   rteWrapSelection, rtePrefixLines, rteHeading, rteLink, placeholderSvg,
   imgSrc, guardClick, snack, friendlyActionError, transmissionMessage,
 } from "./utils.js";
-import { openWpChoiceForFact } from "./app.js";
+import { openWpChoiceForFact, navigate } from "./app.js";
 import { SOURCE_STATUS_FR } from "./views/sources.js";
 
 // Détail d'une source (wireframe 7.2, gouvernance ouverte à l'UI 2026-08-19) :
@@ -60,9 +60,17 @@ function renderSourceDetail(s) {
           <div class="source-detail-value">${esc(e.version || "—")}</div>
         </div>
       </div>
+      <div class="source-detail-field">
+        <div class="source-detail-label">Dernière collecte</div>
+        <div class="source-detail-value">${_lastFetchLine(e)}</div>
+      </div>
       ${isAdvanced ? `
         <p class="muted source-detail-footnote">${icon("i-shield")} Chaque activation/suspension est tracée dans le journal d'audit.</p>
-        <button class="btn ${active ? "btn-outline" : "btn-primary"} btn-block" id="sourceToggleBtn">${active ? "Suspendre cette source" : "Réactiver cette source"}</button>
+        <div class="mini-sheet-actions">
+          <button class="btn ${active ? "btn-outline" : "btn-primary"}" id="sourceToggleBtn">${active ? "Suspendre" : "Réactiver"}</button>
+          <button class="btn btn-tonal" id="sourceEditBtn">Modifier</button>
+        </div>
+        <button class="btn btn-ghost btn-block" id="sourceHistoryBtn" style="margin-top:8px">${icon("i-audit")} Voir l'historique dans le journal d'audit</button>
       ` : `<p class="muted source-detail-footnote">${icon("i-lock")} Réservé au rôle avancé.</p>`}
       <button class="btn btn-tonal btn-block" data-source-detail-close="1">Fermer</button>
     </div>`;
@@ -85,51 +93,96 @@ function renderSourceDetail(s) {
       } catch (err) { snack("Erreur : " + (err.message || "échec de la mise à jour.")); }
     },
   });
+  // Historique (suggestion audit UX Sources, 2026-08-24) : plutôt que de
+  // dupliquer une mini-vue d'historique dans ce panneau, réutilise le
+  // Journal d'audit déjà existant (recherche déjà là) -- pré-rempli sur le
+  // nom de cette source. Cohérent, aucune logique de filtrage à maintenir
+  // à deux endroits.
+  const historyBtn = document.getElementById("sourceHistoryBtn");
+  if (historyBtn) historyBtn.onclick = () => {
+    Store.setState({ auditFilter: { type: "all", q: e.name || e.id } });
+    Store.closeSheet();
+    navigate("audit");
+  };
+  // Édition (suggestion audit UX Sources, 2026-08-24) : l'API acceptait déjà
+  // n'importe quel champ en édition (update_entry(), utilisé jusqu'ici
+  // uniquement pour le statut actif/suspendu) -- il ne manquait qu'un
+  // formulaire côté UI pour corriger un nom, une URL, des domaines, etc.
+  // sans passer par la base directement.
+  const editBtn = document.getElementById("sourceEditBtn");
+  if (editBtn) editBtn.onclick = () => { Store.openSheet({ type: "edit-source", source: e }); renderSheet(Store.state); };
   closeBtn.focus();
+}
+
+// Résumé lisible du dernier statut de collecte (2026-08-24, suggestion
+// audit UX Sources) : distinct de `status` (gouvernance), voir
+// collection/whitelist.py::record_fetch_result().
+function _lastFetchLine(e) {
+  if (!e.last_fetch_at) return '<span class="muted">Jamais interrogée</span>';
+  const ts = new Date(e.last_fetch_at).toLocaleString("fr-FR");
+  if (e.last_fetch_status === "error") {
+    return `🔴 Échec le ${esc(ts)}${e.last_fetch_error ? ` — ${esc(e.last_fetch_error)}` : ""}`;
+  }
+  const n = typeof e.last_fetch_items === "number" ? e.last_fetch_items : null;
+  return `🟢 Réussie le ${esc(ts)}${n !== null ? ` (${n} article${n > 1 ? "s" : ""} trouvé${n > 1 ? "s" : ""})` : ""}`;
 }
 
 // Ajout d'une source (2026-08-19) : formulaire minimal (nom, URL d'entrée,
 // domaines autorisés, catégorie, vecteur, filtre Guinée). L'id est dérivé du
 // nom (slug), modifiable si besoin d'un identifiant plus stable.
-function renderAddSourceSheet(s) {
+//
+// Édition (suggestion audit UX Sources, 2026-08-24) : PARTAGE ce même
+// formulaire (mode paramétré) plutôt que d'en dupliquer un second --
+// update_entry() côté backend acceptait déjà n'importe quel champ, seule
+// l'UI manquait. `editEntry` non-null bascule en mode édition : champs
+// pré-remplis, id figé (pas de re-slug), soumission via Store.updateSource.
+function _renderSourceForm(s, editEntry) {
+  const isEdit = !!editEntry;
   const body = document.getElementById("sheetBody");
   const sheet = document.getElementById("sheet");
   const scrim = document.getElementById("sheetScrim");
+  const e = editEntry || {};
   body.innerHTML = `
     <div class="reject-confirm add-source">
       <div class="reject-confirm-head">
-        ${icon("i-plus", "ic-l")}
-        <h2 class="sheet-title">Ajouter une source</h2>
+        ${icon(isEdit ? "i-edit" : "i-plus", "ic-l")}
+        <h2 class="sheet-title">${isEdit ? "Modifier " + esc(e.name) : "Ajouter une source"}</h2>
       </div>
       <label class="form-field">
         <span>Nom éditorial</span>
-        <input type="text" id="asName" placeholder="Ex : Le Nouveau Média" aria-describedby="asNameErr" />
+        <input type="text" id="asName" placeholder="Ex : Le Nouveau Média" aria-describedby="asNameErr" value="${esc(e.name || "")}" />
         <span class="field-error" id="asNameErr" role="alert"></span>
       </label>
       <label class="form-field">
         <span>URL d'entrée</span>
-        <input type="url" id="asUrl" placeholder="https://exemple.com/" aria-describedby="asUrlErr" />
+        <input type="url" id="asUrl" placeholder="https://exemple.com/" aria-describedby="asUrlErr" value="${esc(e.entry_url || "")}" />
         <span class="field-error" id="asUrlErr" role="alert"></span>
       </label>
       <label class="form-field">
         <span>Domaines autorisés (séparés par une virgule)</span>
-        <input type="text" id="asDomains" placeholder="exemple.com, www.exemple.com" aria-describedby="asDomainsErr" />
+        <input type="text" id="asDomains" placeholder="exemple.com, www.exemple.com" aria-describedby="asDomainsErr" value="${esc((e.domains || []).join(", "))}" />
         <span class="field-error" id="asDomainsErr" role="alert"></span>
       </label>
       <div class="form-row">
         <label class="form-field">
           <span>Catégorie</span>
-          <select id="asCategory"><option value="GN_NAT">Nationale guinéenne</option><option value="INTL">Internationale</option></select>
+          <select id="asCategory">
+            <option value="GN_NAT" ${e.category === "GN_NAT" || !isEdit ? "selected" : ""}>Nationale guinéenne</option>
+            <option value="INTL" ${e.category === "INTL" ? "selected" : ""}>Internationale</option>
+          </select>
         </label>
         <label class="form-field">
           <span>Vecteur de collecte</span>
-          <select id="asVector"><option value="html">HTML (page + sitemap)</option><option value="rss">RSS</option></select>
+          <select id="asVector">
+            <option value="html" ${e.vector === "html" || !isEdit ? "selected" : ""}>HTML (page + sitemap)</option>
+            <option value="rss" ${e.vector === "rss" ? "selected" : ""}>RSS</option>
+          </select>
         </label>
       </div>
-      <label class="mini-sheet-check"><input type="checkbox" id="asGuineeFilter" /> Filtre Guinée strict requis (médias internationaux)</label>
-      <p class="muted source-detail-footnote">${icon("i-shield")} L'ajout est tracé dans le journal d'audit.</p>
+      <label class="mini-sheet-check"><input type="checkbox" id="asGuineeFilter" ${e.guinea_filter ? "checked" : ""} /> Filtre Guinée strict requis (médias internationaux)</label>
+      <p class="muted source-detail-footnote">${icon("i-shield")} ${isEdit ? "Chaque modification est tracée dans le journal d'audit." : "L'ajout est tracé dans le journal d'audit."}</p>
       <div class="mini-sheet-actions">
-        <button class="btn btn-primary" id="asSubmit">Ajouter</button>
+        <button class="btn btn-primary" id="asSubmit">${isEdit ? "Enregistrer" : "Ajouter"}</button>
         <button class="btn btn-ghost" id="asCancel">Annuler</button>
       </div>
     </div>`;
@@ -170,16 +223,25 @@ function renderAddSourceSheet(s) {
     }
     if (!domains.length) { _fieldErr("asDomains", "asDomainsErr", "Au moins un domaine est requis"); firstInvalid = firstInvalid || "asDomains"; }
     if (firstInvalid) { document.getElementById(firstInvalid).focus(); return; }
-    const id = name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "").slice(0, 30) || ("source" + Date.now());
     try {
-      await Store.addSource({ id, name, entry_url, allowed_domains: domains, category, vector_primary,
-        vector_secondary: vector_primary === "html" ? "sitemap" : "", guinee_filter });
-      Store.closeSheet();
-      snack("Source ajoutée.");
-    } catch (err) { snack("Erreur : " + (err.message || "échec de l'ajout.")); }
+      if (isEdit) {
+        await Store.updateSource(editEntry.id, { name, entry_url, allowed_domains: domains, category, vector_primary,
+          vector_secondary: vector_primary === "html" ? "sitemap" : "", guinee_filter });
+        Store.closeSheet();
+        snack("Source modifiée.");
+      } else {
+        const id = name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "").slice(0, 30) || ("source" + Date.now());
+        await Store.addSource({ id, name, entry_url, allowed_domains: domains, category, vector_primary,
+          vector_secondary: vector_primary === "html" ? "sitemap" : "", guinee_filter });
+        Store.closeSheet();
+        snack("Source ajoutée.");
+      }
+    } catch (err) { snack("Erreur : " + (err.message || (isEdit ? "échec de la modification." : "échec de l'ajout."))); }
   };
   document.getElementById("asName").focus();
 }
+function renderAddSourceSheet(s) { _renderSourceForm(s, null); }
+function renderEditSourceSheet(s) { _renderSourceForm(s, s.sheet.source); }
 
 
 // Bulle de rejet (wireframe 4.3b) : au clic sur "Rejeter", propose un choix
@@ -344,6 +406,7 @@ function renderSheet(s) {
   if (sh.type === "confirm") return renderConfirmSheet(s);
   if (sh.type === "source-detail") return renderSourceDetail(s);
   if (sh.type === "add-source") return renderAddSourceSheet(s);
+  if (sh.type === "edit-source") return renderEditSourceSheet(s);
   const f = sh.fact; const c = f.champion || {};
   const img = imgSrc(f);
   const ph = placeholderSvg(Store.getTheme());

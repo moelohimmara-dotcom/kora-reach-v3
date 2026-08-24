@@ -7,6 +7,12 @@
 @import "@fontsource/source-sans-3/400.css";
 @import "@fontsource/source-sans-3/600.css";
 @import "@fontsource/source-sans-3/700.css";
+/* Masqué visuellement mais présent pour un lecteur d'écran (label de champ
+   sans intitulé visible redondant avec un placeholder, ex. recherche). */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
 /* ============================================================
    KORA — Design System "Glass Command × Claude" (Raffiné)
    Design Tokens Material Design 3 COMPLETS + app concaténés (bundle Vite)

@@ -22,6 +22,10 @@ export const Store = (() => {
     decisions: {},
     audit: [],
     auditFilter: { type: "all", q: "" },
+    // Filtre/recherche (suggestion audit UX Sources, 2026-08-24) : 13-17
+    // sources listées sans aucun moyen de filtrer, prévu pour rester
+    // praticable au-delà d'une vingtaine.
+    sourceFilter: { q: "" },
     sources: [],
     videos: [],
     // Centre de notifications PERSISTANT (2026-08-22) : remplace l'ancien

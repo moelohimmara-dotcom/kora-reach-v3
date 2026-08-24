@@ -29,9 +29,17 @@ function _statusChip(status) {
 }
 
 function viewSources(s) {
-  const src = s.sources || [];
-  if (!src.length) return stateBox("i-sources", "Sources en chargement…", "Récupération de la liste de sources autorisées.", !!s.ui.loading);
+  const allSrc = s.sources || [];
+  if (!allSrc.length) return stateBox("i-sources", "Sources en chargement…", "Récupération de la liste de sources autorisées.", !!s.ui.loading);
   const isAdvanced = (s.auth && isAdvancedRole(s.auth.role));
+  // Filtre/recherche (suggestion audit UX Sources, 2026-08-24) : nom,
+  // catégorie, vecteur ou URL -- même esprit que la recherche du Journal
+  // d'audit déjà existante (audit.js).
+  const q = (s.sourceFilter?.q || "").trim().toLowerCase();
+  const src = q ? allSrc.filter(e =>
+    (e.name || "").toLowerCase().includes(q) || (e.entry_url || "").toLowerCase().includes(q) ||
+    (e.category || "").toLowerCase().includes(q) || (e.vector || "").toLowerCase().includes(q)
+  ) : allSrc;
   const gn = src.filter(e => e.category === "GN_NAT");
   const intl = src.filter(e => e.category !== "GN_NAT");
   // e.guinea_filter (pas "guinee_filter") et e.vector (pas "vector_primary") :
@@ -58,16 +66,22 @@ function viewSources(s) {
       ${icon("i-chevron-right", "src-row-chevron")}
     </button>`;
   };
-  return `<div class="section-title">Gouvernance des sources (${src.length})</div>
+  // Le titre reflète le TOTAL (allSrc), pas la liste filtrée -- doit
+  // rester aligné avec le badge de la sidebar (B1) même filtre actif.
+  return `<div class="section-title">Gouvernance des sources (${allSrc.length})</div>
     <p class="muted" style="margin-bottom:16px">Ajout et suspension gérés depuis cet écran (advanced) — chaque modification est tracée dans le journal d'audit.</p>
+    <label style="display:block;max-width:360px;margin-bottom:16px">
+      <span class="sr-only">Rechercher une source</span>
+      <input class="text-input" type="search" id="sourceSearch" placeholder="Rechercher (nom, URL, catégorie, vecteur)…" value="${esc(s.sourceFilter?.q || "")}">
+    </label>
     ${isAdvanced ? `<button type="button" class="btn btn-primary" id="addSourceBtn" style="margin-bottom:16px">${icon("i-plus")}<span>Ajouter une source</span></button>` : ""}
     <section class="fact-group">
       <div class="group-head"><span class="group-ic">${icon("i-level1")}</span><h3 class="group-title">Sources nationales guinéennes</h3><span class="group-count">${gn.length}</span></div>
-      ${gn.map(srcRow).join("") || `<div class="muted" style="padding:8px 0">Aucune source nationale.</div>`}
+      ${gn.map(srcRow).join("") || `<div class="muted" style="padding:8px 0">${q ? "Aucun résultat." : "Aucune source nationale."}</div>`}
     </section>
     <section class="fact-group" style="margin-top:20px">
       <div class="group-head"><span class="group-ic">${icon("i-sources")}</span><h3 class="group-title">Sources internationales</h3><span class="group-count">${intl.length}</span></div>
-      ${intl.map(srcRow).join("") || `<div class="muted" style="padding:8px 0">Aucune source internationale.</div>`}
+      ${intl.map(srcRow).join("") || `<div class="muted" style="padding:8px 0">${q ? "Aucun résultat." : "Aucune source internationale."}</div>`}
     </section>`;
 }
 
@@ -78,6 +92,10 @@ function bindSources() {
   });
   const addBtn = document.getElementById("addSourceBtn");
   if (addBtn) addBtn.onclick = () => { Store.openSheet({ type: "add-source" }); renderSheet(Store.state); };
+  // Filtre/recherche (suggestion audit UX Sources, 2026-08-24) : même
+  // pattern que la recherche du Journal d'audit (audit.js, oninput direct).
+  const search = document.getElementById("sourceSearch");
+  if (search) search.oninput = () => Store.setState({ sourceFilter: { q: search.value } });
 }
 
 export { viewSources, bindSources, SOURCE_STATUS_FR };

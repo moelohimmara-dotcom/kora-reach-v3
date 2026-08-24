@@ -364,10 +364,25 @@ class ReachAgent:
             with ThreadPoolExecutor(max_workers=8) as ex:
                 futs = {ex.submit(_collect, e): e for e in entries}
                 for fut in as_completed(futs):
+                    # Suivi RÉEL du statut de collecte par source (2026-08-24,
+                    # suggestion audit UX Sources) : un raws vide N'EST PAS un
+                    # échec (une source peut légitimement n'avoir rien de
+                    # nouveau) -- seule une exception ici est un vrai échec de
+                    # collecte. futs[fut] donne la source même si fut.result()
+                    # lève (e n'est pas encore lié dans ce cas).
+                    src_for_status = futs[fut]
                     try:
                         raws, e = fut.result()
-                    except Exception:
+                    except Exception as fetch_exc:
+                        try:
+                            wl.record_fetch_result(src_for_status.id, ok=False, error=str(fetch_exc))
+                        except Exception:
+                            pass
                         continue
+                    try:
+                        wl.record_fetch_result(e.id, ok=True, n_items=len(raws))
+                    except Exception:
+                        pass
                     if raws:
                         sources_ok += 1
                     for r in raws:

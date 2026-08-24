@@ -486,6 +486,11 @@ class Handler(BaseHTTPRequestHandler):
                 "vector": e.vector_primary, "vector_secondary": e.vector_secondary,
                 "guinea_filter": e.guinee_filter, "responsible": e.responsible,
                 "version": e.version, "status": e.status,
+                # Suivi RÉEL du statut de collecte (2026-08-24, suggestion
+                # audit UX Sources) -- distinct de "status" ci-dessus
+                # (gouvernance) ; voir collection/whitelist.py::record_fetch_result().
+                "last_fetch_at": e.last_fetch_at, "last_fetch_status": e.last_fetch_status,
+                "last_fetch_items": e.last_fetch_items, "last_fetch_error": e.last_fetch_error,
             } for e in wl.all_entries()])
         if path == "/api/audit":
             if not self._require_auth():

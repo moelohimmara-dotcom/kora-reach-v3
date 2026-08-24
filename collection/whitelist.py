@@ -36,6 +36,13 @@ class WhitelistEntry:
     responsible: str = "edito"   # responsable validation
     version: str = "2026-08-02"  # version de CETTE entrée (bump à chaque édition)
     status: str = "active"       # active | suspended | retired
+    # Suivi RÉEL du statut de collecte (2026-08-24, suggestion audit UX
+    # Sources) -- distinct de `status` ci-dessus (gouvernance). Écrit par
+    # record_fetch_result(), lu par le widget Cockpit et la page Sources.
+    last_fetch_at: Optional[str] = None      # horodatage ISO de la dernière tentative
+    last_fetch_status: Optional[str] = None  # "ok" | "error" | None (jamais tenté)
+    last_fetch_items: Optional[int] = None   # nb d'articles trouvés lors de cette tentative
+    last_fetch_error: Optional[str] = None   # message d'erreur si last_fetch_status == "error"
 
     @property
     def url(self) -> str:
@@ -161,6 +168,23 @@ def _init_locked():
             responsible TEXT DEFAULT 'edito', version TEXT, status TEXT DEFAULT 'active',
             created_at TEXT, updated_at TEXT)""")
         con.commit()
+        # Suivi RÉEL du statut de collecte par source (2026-08-24, suggestion
+        # d'ajout de l'audit UX Sources) : jusqu'ici, le widget "Sources" du
+        # tableau de bord (cockpit.js, sourceStatusChip) affichait un statut
+        # ok/error/warning/unknown, mais AUCUN champ de ce type n'a jamais
+        # existé sur cette table -- seul `status` (active/suspended/retired,
+        # gouvernance) existait, permanemment lu à tort comme un statut de
+        # fetch -> toujours "unknown" (⚪), quel que soit l'historique réel
+        # des collectes. Colonnes ajoutées ici, écrites par
+        # record_fetch_result() (appelée depuis orchestration/reach_agent.py
+        # après chaque tentative de collecte par source, succès ou échec).
+        for col, ctype in (("last_fetch_at", "TEXT"), ("last_fetch_status", "TEXT"),
+                           ("last_fetch_items", "INTEGER"), ("last_fetch_error", "TEXT")):
+            try:
+                cur.execute(f"ALTER TABLE whitelist_sources ADD COLUMN {col} {ctype}")
+                con.commit()
+            except Exception:
+                con.rollback()  # colonne déjà présente
         cur.execute("SELECT COUNT(*) AS n FROM whitelist_sources")
         row = cur.fetchone()
         n = row["n"] if isinstance(row, dict) else row[0]
@@ -205,6 +229,8 @@ def _row_to_entry(row) -> WhitelistEntry:
         guinee_filter=(str(r.get("guinee_filter")).lower() == "true"),
         responsible=r.get("responsible") or "edito", version=r.get("version") or "",
         status=r.get("status") or "active",
+        last_fetch_at=r.get("last_fetch_at"), last_fetch_status=r.get("last_fetch_status"),
+        last_fetch_items=r.get("last_fetch_items"), last_fetch_error=r.get("last_fetch_error"),
     )
 
 
@@ -326,6 +352,35 @@ def update_entry(source_id: str, patch: dict) -> WhitelistEntry:
     finally:
         con.close()
     return get_entry(source_id)
+
+
+def record_fetch_result(source_id: str, ok: bool, n_items: int = 0, error: str = "") -> None:
+    """Enregistre le résultat d'UNE tentative de collecte pour une source
+    (2026-08-24, suggestion audit UX Sources -- voir commentaire sur les
+    colonnes last_fetch_* dans _init_locked()). Appelée depuis
+    orchestration/reach_agent.py après chaque source, succès ou échec.
+
+    Volontairement SÉPARÉE de update_entry() : ceci n'est PAS une décision
+    éditoriale (pas de bump de `version`, pas d'entrée dans le journal
+    d'audit -- une collecte automatique toutes les quelques heures y
+    créerait un bruit constant, sans valeur de gouvernance). Ne lève
+    JAMAIS d'exception : un échec d'écriture de ce statut ne doit jamais
+    interrompre le cycle de collecte lui-même."""
+    try:
+        now = datetime.now().isoformat(timespec="seconds")
+        con, mode = db.conn()
+        try:
+            cur = con.cursor()
+            p = _ph()
+            cur.execute(
+                f"UPDATE whitelist_sources SET last_fetch_at={p}, last_fetch_status={p}, "
+                f"last_fetch_items={p}, last_fetch_error={p} WHERE id={p}",
+                (now, "ok" if ok else "error", n_items, (error or "")[:500] if not ok else None, source_id))
+            con.commit()
+        finally:
+            con.close()
+    except Exception:
+        pass
 
 
 def _host(url: str) -> str:

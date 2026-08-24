@@ -162,8 +162,14 @@ function viewCockpit(s) {
               // seule une infobulle au survol (absente au tactile) le
               // distinguait. Message explicite ajouté au-dessus des puces
               // dans ce cas précis, plutôt que de laisser un état ambigu.
+              // Correctif du 2026-08-24 (suggestion audit UX Sources) :
+              // `last_fetch` n'a jamais existé comme champ -- toujours
+              // undefined, donc ce test "marchait" par coïncidence, jamais
+              // pour la vraie raison. `last_fetch_at` est le champ réel,
+              // écrit par record_fetch_result() (collection/whitelist.py)
+              // depuis reach_agent.py après chaque tentative de collecte.
               const activeOnly = sources.filter(s => (s.status || "active") === "active");
-              const neverFetched = activeOnly.length > 0 && activeOnly.every(s => !s.last_fetch);
+              const neverFetched = activeOnly.length > 0 && activeOnly.every(s => !s.last_fetch_at);
               return neverFetched
                 ? `<p class="muted" style="margin:0 0 10px">Aucune collecte effectuée pour l'instant — lance un cycle pour interroger ces sources.</p>`
                 : "";
@@ -245,11 +251,18 @@ function statCard({ icon, value, label, variant = "primary", onClick, trend, loa
 }
 
 function sourceStatusChip(source) {
-  const status = source.status || "unknown";
+  // Correctif du 2026-08-24 (suggestion audit UX Sources) : ce composant
+  // lisait `source.status`, le champ de GOUVERNANCE (active/suspended/
+  // retired) -- jamais "ok"/"error"/"warning", donc toujours ⚪ (unknown)
+  // quel que soit l'historique réel des collectes. Le vrai statut de fetch
+  // vit dans last_fetch_status/last_fetch_at/last_fetch_error, écrits par
+  // record_fetch_result() (collection/whitelist.py) depuis reach_agent.py.
+  const status = source.last_fetch_status || "unknown";
   const statusIcon = { ok: "🟢", error: "🔴", warning: "🟡", unknown: "⚪" }[status] || "⚪";
-  const lastFetch = source.last_fetch ? new Date(source.last_fetch).toLocaleTimeString("fr-FR") : "—";
+  const lastFetch = source.last_fetch_at ? new Date(source.last_fetch_at).toLocaleTimeString("fr-FR") : "—";
+  const errDetail = (status === "error" && source.last_fetch_error) ? ` (${source.last_fetch_error})` : "";
   return `
-    <span class="source-chip" data-source-id="${source.id}" data-tooltip="${source.name || source.id} · Dernier: ${lastFetch}">
+    <span class="source-chip" data-source-id="${source.id}" data-tooltip="${source.name || source.id} · Dernier: ${lastFetch}${errDetail}">
       <span class="source-dot ${status}"></span>
       <span class="source-name">${source.name || source.id}</span>
       <span class="source-status">${statusIcon}</span>
