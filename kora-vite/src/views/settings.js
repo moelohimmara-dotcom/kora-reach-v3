@@ -8,7 +8,25 @@ import { esc, icon, chip, isAdvancedRole, ROLE_LABEL_FR, snack, guardClick, frie
 import { confirmAction } from "../sheet.js";
 import { navigate, render } from "../app.js";
 import { bindPasswordToggles } from "./auth.js";
-import QRCode from "qrcode";
+// QR code 2FA (T6) : vendorisé (src/vendor/qrcode-gen.js), pas de dépendance
+// npm — cohérent avec le principe "zéro dépendance tierce" déjà posé dans
+// identity/totp.py pour tout ce qui touche au secret TOTP.
+import qrcodeGen from "../vendor/qrcode-gen.js";
+
+// Génère le SVG du QR code pour un otpauth_uri, en augmentant le "typeNumber"
+// (taille de la grille QR) jusqu'à ce que les données tiennent — la lib
+// vendorisée ne fait pas de détection automatique de taille.
+function _qrSvgFor(text) {
+  for (let typeNumber = 4; typeNumber <= 20; typeNumber++) {
+    try {
+      const qr = qrcodeGen(typeNumber, "M");
+      qr.addData(text);
+      qr.make();
+      return qr.createSvgTag({ cellSize: 5, margin: 8 });
+    } catch (e) { /* code length overflow : on tente une taille supérieure */ }
+  }
+  return null;
+}
 
 function viewSettings(s) {
   const theme = Store.getTheme();
@@ -711,9 +729,8 @@ function bindSettings() {
         </div>`;
       const qrEl = document.getElementById("sec2FAQr");
       if (qrEl && otpauthUri) {
-        QRCode.toDataURL(otpauthUri, { width: 180, margin: 1 })
-          .then(url => { qrEl.innerHTML = `<img src="${esc(url)}" width="180" height="180" alt="">`; })
-          .catch(() => { qrEl.remove(); });
+        const svg = _qrSvgFor(otpauthUri);
+        if (svg) qrEl.innerHTML = svg; else qrEl.remove();
       }
       const secretEl = document.getElementById("sec2FASecret");
       if (secretEl) secretEl.onclick = () => {
