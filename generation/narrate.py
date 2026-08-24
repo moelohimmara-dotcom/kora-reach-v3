@@ -72,15 +72,30 @@ FISH_AUDIO_SPEED = float(os.environ.get("FISH_AUDIO_SPEED", "0.97"))
 # NotebookLM, deux voix qui discutent). Trois emplacements configurables --
 # jamais de nom de personne réelle en dur ici (demande explicite : "je ne
 # veux pas que tu notes... les noms des officiels"), uniquement des
-# identifiants techniques Fish Audio, choisis génériques par défaut.
-# Duo homme-femme : VOICE_MALE_1 + VOICE_FEMALE_1. Duo deux hommes :
-# VOICE_MALE_1 + VOICE_MALE_2. Surchargeables sans toucher au code -- la
-# sélection finale des voix reste une décision utilisateur, faite en dehors
-# de ce fichier (valeurs par défaut = candidates génériques déjà vérifiées
-# en conditions réelles, pas des personnalités publiques).
-FISH_AUDIO_VOICE_MALE_1 = os.environ.get("FISH_AUDIO_VOICE_MALE_1", "4f2a0684dd0247dda68f339738c780e6").strip()
-FISH_AUDIO_VOICE_MALE_2 = os.environ.get("FISH_AUDIO_VOICE_MALE_2", "9f0935a47689459480b820ed3f6d782d").strip()
-FISH_AUDIO_VOICE_FEMALE_1 = os.environ.get("FISH_AUDIO_VOICE_FEMALE_1", "5567200c7d8341738f0892bbacd3be3c").strip()
+# identifiants techniques Fish Audio. Duo homme-femme : VOICE_MALE_1 +
+# VOICE_FEMALE_1. Duo deux hommes : VOICE_MALE_1 + VOICE_MALE_2.
+# Surchargeables sans toucher au code.
+#
+# MAJ 2026-08-24 (retour utilisateur : "ça ne sonne pas très pro... je
+# veux des voix qui sonnent journalistiquement") -- les 3 premiers choix
+# (voix "narrateur cinématique", "voix mâle dynamique", voix générique)
+# jugés pas assez pro. Remplacés par 3 voix de la bibliothèque Fish Audio
+# dont la DESCRIPTION officielle (pas le titre, ni les tags -- peu fiables,
+# renseignés par les uploadeurs) correspond explicitement à un registre
+# actualité/documentaire :
+# - MALE_1 = "frances 1" (966a09df9c194c04818dbb9bf27e6ae0) : "professional
+#   and authoritative... reminiscent of a traditional news anchor".
+# - MALE_2 = "frances 2" (d1e5c6c4b9694cde8048824ce8116279) : "professional
+#   and informative... well-suited for news reporting or documentary
+#   narration" (voix distincte de MALE_1, pour le duo deux hommes).
+# - FEMALE_1 = voix identifiée "Mariano Closs Diálogos 2" dans la
+#   bibliothèque (d1e5c6c... -- nom d'upload non pertinent, PAS une
+#   personnalité utilisée ici, seule la description compte) :
+#   "clear and warm... professional yet gentle... measured and empathetic".
+# Aucune de ces 3 voix n'est un clone de personnalité publique.
+FISH_AUDIO_VOICE_MALE_1 = os.environ.get("FISH_AUDIO_VOICE_MALE_1", "966a09df9c194c04818dbb9bf27e6ae0").strip()
+FISH_AUDIO_VOICE_MALE_2 = os.environ.get("FISH_AUDIO_VOICE_MALE_2", "d1e5c6c4b9694cde8048824ce8116279").strip()
+FISH_AUDIO_VOICE_FEMALE_1 = os.environ.get("FISH_AUDIO_VOICE_FEMALE_1", "7366956b694c4a5dae0a7d94321bef4a").strip()
 # Pause de respiration entre deux répliques (secondes) -- un enchaînement
 # immédiat sans le moindre silence sonne mécanique, un vrai duo laisse
 # toujours un micro-blanc entre deux prises de parole.
@@ -257,14 +272,24 @@ _DIALOGUE_SYSTEM_PROMPT = (
     "salutation courtoise et professionnelle, puis présente clairement le "
     "sujet et fait une brève introduction -- jamais 'Titre :', jamais de "
     "symbole markdown, jamais de label.\n"
-    "3. RELAIS RÉEL : B prend ensuite le relais et RÉAGIT à ce que A vient de "
-    "dire (jamais une simple redite) -- apporte un angle complémentaire, "
-    "creuse un point, relance A par une question, ou souligne ce qui frappe "
-    "dans le sujet. Puis l'échange continue en alternance NATURELLE (pas "
-    "forcément une stricte réplique chacun -- une voix peut enchaîner deux "
-    "phrases si le naturel du dialogue l'exige), avec de vraies transitions "
-    "parlées ('Alors justement,', 'Ce qui est frappant, c'est que...', 'Tu "
-    "peux nous en dire plus sur...', 'Exactement, et en plus...').\n"
+    "3. QUESTION-RÉPONSE RÉEL (le coeur du dialogue) : après l'ouverture, "
+    "A pose à B une VRAIE question, précise et sur le fond ('Alors, "
+    "qu'est-ce qui explique...', 'Comment expliquer que...', 'Qu'est-ce "
+    "qu'on sait exactement sur...'). B répond EN REPRENANT LES TERMES DE LA "
+    "QUESTION (jamais un simple enchaînement à côté du sujet) avant de "
+    "développer -- par exemple si A demande 'que penses-tu de X ?', B "
+    "commence par 'Alors sur X, ...' ou 'C'est une bonne question, et pour "
+    "ma part...', jamais une réponse qui ignore ce qui vient d'être demandé. "
+    "Après cette réponse, A rebondit à son tour sur ce que B vient de dire "
+    "(reformule un point précis de la réponse de B avant d'enchaîner, ou "
+    "pose une question de relance qui découle directement de la réponse "
+    "précédente -- jamais une nouvelle question sans lien). Ce mécanisme "
+    "question -> réponse qui reprend la question -> rebond se répète "
+    "plusieurs fois de suite sur les différents éléments de l'article : "
+    "chaque échange doit ressembler à une vraie conversation entre deux "
+    "journalistes qui S'ÉCOUTENT, pas à deux monologues juxtaposés ni à un "
+    "simple résumé découpé en deux voix. Alterne QUI pose la question (pas "
+    "toujours A) au fil du dialogue.\n"
     "4. TON : percutant et pertinent -- va à l'essentiel, ne dilue jamais, "
     "chaleureux mais professionnel, factuel et neutre sur le fond -- "
     "l'énergie vient du RYTHME et de l'interaction réelle entre les deux "
@@ -285,9 +310,17 @@ _DIALOGUE_SYSTEM_PROMPT = (
     "9. FORMAT DE SORTIE STRICT : une réplique par ligne, chaque ligne "
     "commence EXACTEMENT par 'A : ' ou 'B : ' (lettre, espace, deux-points, "
     "espace), rien avant. Aucune autre ligne, aucun commentaire, aucun "
-    "texte hors de ce format. Exemple de forme (contenu fictif) :\n"
-    "A : Bonsoir et bienvenue dans cette édition de KORA...\n"
-    "B : Merci Adja. Alors justement, ce qui frappe dans cette affaire...\n"
+    "texte hors de ce format. Exemple de forme illustrant le mécanisme "
+    "question -> réponse qui reprend la question -> rebond (contenu "
+    "fictif) :\n"
+    "A : Bonsoir et bienvenue dans cette édition de KORA. Ce soir, on "
+    "revient sur la situation à Conakry.\n"
+    "A : Alors, qu'est-ce qui explique vraiment ce qui s'est passé hier ?\n"
+    "B : C'est une bonne question, et justement, sur ce qui s'est passé "
+    "hier, plusieurs éléments se recoupent...\n"
+    "A : Donc si je te suis bien, c'est surtout ce point-là qui a fait "
+    "basculer les choses ?\n"
+    "B : Exactement, et c'est là que ça devient intéressant, parce que...\n"
 )
 
 
