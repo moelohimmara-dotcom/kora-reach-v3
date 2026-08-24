@@ -1211,8 +1211,20 @@ html.icons-ready .material-icons { visibility: visible; }
 .setting-card-head .name { font-weight: 700; font-size: var(--t-body); }
 .setting-card-head .sub { font-size: var(--t-label-sm); color: var(--md-sys-color-on-surface-variant); }
 .setting-card .field { display: flex; flex-direction: column; gap: 5px; }
-.setting-card .field > span { font-size: var(--t-label-sm); color: var(--md-sys-color-on-surface-variant); }
+.setting-card .field > span, .setting-card .field > label { font-size: var(--t-label-sm); color: var(--md-sys-color-on-surface-variant); }
 .setting-card .field .text-input { margin-top: 0; }
+.setting-card .field .text-input.invalid { border-color: var(--md-sys-color-error); }
+.setting-card .field-error {
+  font-size: var(--t-label-sm); color: var(--md-sys-color-error); min-height: 0;
+}
+.setting-card .field-error:empty { display: none; }
+.pw-strength { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.pw-strength-bar { flex: 1; height: 4px; border-radius: 2px; background: var(--md-sys-color-surface-variant, rgba(127,127,127,.25)); overflow: hidden; }
+.pw-strength-bar i { display: block; height: 100%; width: 33%; border-radius: 2px; transition: width var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease); background: var(--md-sys-color-error); }
+.pw-strength span { font-size: var(--t-label-sm); color: var(--md-sys-color-on-surface-variant); white-space: nowrap; }
+.pw-strength.lvl-1 .pw-strength-bar i { width: 33%; background: var(--md-sys-color-error); }
+.pw-strength.lvl-2 .pw-strength-bar i { width: 66%; background: #E0A030; }
+.pw-strength.lvl-3 .pw-strength-bar i { width: 100%; background: #3FA85C; }
 .setting-card .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
 @media (max-width: 520px) { .setting-card .field-row { grid-template-columns: 1fr; } }
 .setting-card .actions { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
@@ -2448,6 +2460,13 @@ html.icons-ready .material-icons { visibility: visible; }
 /* 2FA (9.3) : clé TOTP à saisir manuellement dans l'appli d'authentification
    (cliquable pour copier) et grille des codes de secours affichés une seule
    fois — même famille visuelle que le reste des cartes de Paramètres. */
+.totp-qr {
+  display: flex; justify-content: center; padding: 12px;
+  background: #fff; border-radius: var(--radius-md);
+  border: 1px solid var(--border, var(--glass-border-strong));
+  margin-bottom: 10px; min-height: 40px;
+}
+.totp-qr img { display: block; border-radius: 4px; }
 .totp-secret {
   font-family: var(--mono, monospace); font-size: 15px; letter-spacing: 1.5px; text-align: center;
   padding: 12px 14px; border-radius: var(--radius-md); background: var(--surface-raised, var(--glass-bg-strong));

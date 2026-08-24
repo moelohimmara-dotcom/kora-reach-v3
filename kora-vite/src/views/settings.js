@@ -8,6 +8,7 @@ import { esc, icon, chip, isAdvancedRole, ROLE_LABEL_FR, snack, guardClick, frie
 import { confirmAction } from "../sheet.js";
 import { navigate, render } from "../app.js";
 import { bindPasswordToggles } from "./auth.js";
+import QRCode from "qrcode";
 
 function viewSettings(s) {
   const theme = Store.getTheme();
@@ -102,9 +103,9 @@ function viewSettings(s) {
         <div class="setting-card">
           <div class="setting-card-head"><span class="meta-ic">${icon("i-lock")}</span><div class="meta"><div class="name">Changer le mot de passe</div><div class="sub">8 caractères minimum. Tu seras déconnecté après validation.</div></div></div>
           <div class="field-row">
-            <div class="field"><span>Mot de passe actuel</span><span class="pw-wrap"><input class="text-input" id="setCurPw" type="password" maxlength="64" autocomplete="current-password"><button type="button" class="pw-toggle" data-pw="setCurPw" aria-label="Afficher le mot de passe">${icon("i-eye")}</button></span></div>
-            <div class="field"><span>Nouveau</span><span class="pw-wrap"><input class="text-input" id="setNewPw" type="password" maxlength="64" autocomplete="new-password"><button type="button" class="pw-toggle" data-pw="setNewPw" aria-label="Afficher le mot de passe">${icon("i-eye")}</button></span></div>
-            <div class="field"><span>Confirmer</span><span class="pw-wrap"><input class="text-input" id="setNewPw2" type="password" maxlength="64" autocomplete="new-password"><button type="button" class="pw-toggle" data-pw="setNewPw2" aria-label="Afficher le mot de passe">${icon("i-eye")}</button></span></div>
+            <div class="field"><label for="setCurPw">Mot de passe actuel</label><span class="pw-wrap"><input class="text-input" id="setCurPw" type="password" maxlength="64" autocomplete="current-password" aria-describedby="setCurPwErr"><button type="button" class="pw-toggle" data-pw="setCurPw" aria-label="Afficher le mot de passe">${icon("i-eye")}</button></span><span class="field-error" id="setCurPwErr" role="alert"></span></div>
+            <div class="field"><label for="setNewPw">Nouveau</label><span class="pw-wrap"><input class="text-input" id="setNewPw" type="password" maxlength="64" autocomplete="new-password" aria-describedby="setNewPwErr"><button type="button" class="pw-toggle" data-pw="setNewPw" aria-label="Afficher le mot de passe">${icon("i-eye")}</button></span><span class="field-error" id="setNewPwErr" role="alert"></span><div class="pw-strength" id="setNewPwStrength" hidden><div class="pw-strength-bar"><i></i></div><span></span></div></div>
+            <div class="field"><label for="setNewPw2">Confirmer</label><span class="pw-wrap"><input class="text-input" id="setNewPw2" type="password" maxlength="64" autocomplete="new-password" aria-describedby="setNewPw2Err"><button type="button" class="pw-toggle" data-pw="setNewPw2" aria-label="Afficher le mot de passe">${icon("i-eye")}</button></span><span class="field-error" id="setNewPw2Err" role="alert"></span></div>
           </div>
           <div class="actions"><button class="btn btn-primary" id="setChangePw">Mettre à jour le mot de passe</button></div>
         </div>
@@ -384,14 +385,53 @@ function bindSettings() {
     if (el) el.oninput = liveLabels;
   });
   // Compte : changement de mot de passe + déconnexion
+  // Erreurs de formulaire : rattachées visuellement au champ fautif (contour
+  // rouge + texte en dessous, aria-describedby), le toast reste en complément
+  // pour les erreurs non liées à un champ précis (13.T5 audit Compte).
+  const _pwFieldError = (inputId, errId, msg) => {
+    const input = document.getElementById(inputId);
+    const errEl = document.getElementById(errId);
+    if (input) input.classList.toggle("invalid", !!msg);
+    if (errEl) errEl.textContent = msg || "";
+  };
+  const _clearPwErrors = () => {
+    ["setCurPw", "setNewPw", "setNewPw2"].forEach(id => _pwFieldError(id, id + "Err", ""));
+  };
+  // Robustesse du mot de passe (T10) : estimation simple par longueur +
+  // diversité de caractères, purement indicative (la seule règle imposée
+  // reste 8 caractères minimum).
+  const _pwStrength = (pw) => {
+    if (!pw) return null;
+    let score = 0;
+    if (pw.length >= 8) score++;
+    if (pw.length >= 12) score++;
+    if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++;
+    if (/\d/.test(pw)) score++;
+    if (/[^A-Za-z0-9]/.test(pw)) score++;
+    if (score <= 1) return { label: "Faible", level: 1 };
+    if (score <= 3) return { label: "Moyen", level: 2 };
+    return { label: "Fort", level: 3 };
+  };
+  const newPwInput = document.getElementById("setNewPw");
+  if (newPwInput) newPwInput.addEventListener("input", () => {
+    const wrap = document.getElementById("setNewPwStrength");
+    if (!wrap) return;
+    const s = _pwStrength(newPwInput.value);
+    wrap.hidden = !s;
+    if (s) {
+      wrap.className = "pw-strength lvl-" + s.level;
+      wrap.querySelector("span").textContent = s.label;
+    }
+  });
   const changePw = document.getElementById("setChangePw");
   if (changePw) changePw.onclick = async () => {
+    _clearPwErrors();
     const cur = document.getElementById("setCurPw")?.value || "";
     const n1 = document.getElementById("setNewPw")?.value || "";
     const n2 = document.getElementById("setNewPw2")?.value || "";
-    if (!cur) { snack("Renseigne ton mot de passe actuel"); return; }
-    if (n1.length < 8) { snack("Le nouveau mot de passe doit faire au moins 8 caractères"); return; }
-    if (n1 !== n2) { snack("Les mots de passe ne correspondent pas"); return; }
+    if (!cur) { _pwFieldError("setCurPw", "setCurPwErr", "Renseigne ton mot de passe actuel"); snack("Renseigne ton mot de passe actuel"); return; }
+    if (n1.length < 8) { _pwFieldError("setNewPw", "setNewPwErr", "8 caractères minimum"); snack("Le nouveau mot de passe doit faire au moins 8 caractères"); return; }
+    if (n1 !== n2) { _pwFieldError("setNewPw2", "setNewPw2Err", "Ne correspond pas au nouveau mot de passe"); snack("Les mots de passe ne correspondent pas"); return; }
     try {
       await Store.changePassword(cur, n1);
       snack("Mot de passe mis à jour. Reconnecte-toi.");
@@ -400,7 +440,9 @@ function bindSettings() {
       App.renderAuth("login", null, true);
     } catch (e) {
       // Message clair si le mot de passe actuel est erroné (ou autre erreur)
-      const msg = e && e.message === "wrong_current" ? "Mot de passe actuel incorrect" : (e && e.message || "Erreur");
+      const wrongCurrent = e && e.message === "wrong_current";
+      const msg = wrongCurrent ? "Mot de passe actuel incorrect" : (e && e.message || "Erreur");
+      if (wrongCurrent) _pwFieldError("setCurPw", "setCurPwErr", msg);
       snack(msg);
     }
   };
@@ -639,7 +681,7 @@ function bindSettings() {
     if (!body) return;
     if (state === "off") {
       body.innerHTML = `
-        <p class="muted" style="margin:0 0 12px">Non activée — n'importe qui connaissant ton mot de passe peut se connecter.</p>
+        <p class="muted" style="margin:0 0 12px">Non activée — n'importe qui connaissant ton mot de passe peut se connecter. Installe d'abord une application d'authentification sur ton téléphone (Google Authenticator, Authy, 1Password…) avant de continuer.</p>
         <div class="actions"><button class="btn btn-primary" id="sec2FAEnableBtn">${icon("i-shield")} Activer la 2FA</button></div>`;
       const btn = document.getElementById("sec2FAEnableBtn");
       if (btn) btn.onclick = async () => {
@@ -648,15 +690,23 @@ function bindSettings() {
       };
     } else if (state === "setup") {
       const secret = _sec2faSetup?.secret || "";
+      const otpauthUri = _sec2faSetup?.otpauth_uri || "";
       const grouped = secret.replace(/(.{4})/g, "$1 ").trim();
       body.innerHTML = `
-        <p class="muted" style="margin:0 0 10px">Dans ton application d'authentification (Google Authenticator, Authy, 1Password…), ajoute un compte manuellement avec cette clé, puis saisis le code à 6 chiffres généré pour confirmer.</p>
+        <p class="muted" style="margin:0 0 10px">Scanne ce QR code avec ton application d'authentification (Google Authenticator, Authy, 1Password…), ou ajoute un compte manuellement avec la clé ci-dessous. Saisis ensuite le code à 6 chiffres généré pour confirmer.</p>
+        <div class="totp-qr" id="sec2FAQr" aria-hidden="true"></div>
         <div class="totp-secret" id="sec2FASecret" title="Cliquer pour copier">${esc(grouped)}</div>
         <div class="field" style="margin-top:10px"><span>Code de vérification</span><input class="text-input" id="sec2FAConfirmCode" type="text" inputmode="numeric" maxlength="6" placeholder="123456"></div>
         <div class="actions">
           <button class="btn btn-primary" id="sec2FAConfirmBtn">Confirmer et activer</button>
           <button class="btn btn-ghost" id="sec2FACancelSetup">Annuler</button>
         </div>`;
+      const qrEl = document.getElementById("sec2FAQr");
+      if (qrEl && otpauthUri) {
+        QRCode.toDataURL(otpauthUri, { width: 180, margin: 1 })
+          .then(url => { qrEl.innerHTML = `<img src="${esc(url)}" width="180" height="180" alt="">`; })
+          .catch(() => { qrEl.remove(); });
+      }
       const secretEl = document.getElementById("sec2FASecret");
       if (secretEl) secretEl.onclick = () => {
         navigator.clipboard?.writeText(secret).then(() => snack("Clé copiée")).catch(() => {});
