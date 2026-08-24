@@ -817,6 +817,28 @@ html.icons-ready .material-icons { visibility: visible; }
 .sheet-close:hover { background: var(--glass-bg-hover); color: var(--md-sys-color-on-surface); }
 .sheet-close .ic { width: 16px; height: 16px; }
 
+/* Onglet Texte/Vidéo (2026-08-25, retour utilisateur : "la vidéo masque le
+   texte") -- segmented control MD3-like, pleine largeur (mobile ET desktop :
+   le tiroir/fiche reste étroit aux deux gabarits, pas besoin de variante
+   dédiée). Cible tactile ≥44px (WCAG 2.5.5 AAA / recommandation courante) --
+   priorité 2 du référentiel UI/UX interne (Touch & Interaction, CRITICAL). */
+.mode-toggle {
+  display: flex; gap: 4px; margin: 14px 0; padding: 4px;
+  background: var(--neu-base); border-radius: var(--radius-pill);
+  border: 1px solid var(--glass-border);
+}
+.mode-tab {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px; padding: 8px 14px; border: none; border-radius: var(--radius-pill);
+  background: transparent; color: var(--md-sys-color-on-surface-variant);
+  font-size: var(--t-label-sm); font-weight: 600; cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.mode-tab .ic { width: 18px; height: 18px; }
+.mode-tab:hover { background: var(--glass-bg-hover); }
+.mode-tab.active { background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
+.mode-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 .sheet-textwrap { margin: 14px 0; }
 .sheet-text { max-height: none; overflow: visible; line-height: 1.7; border: none; padding: 0; background: transparent; color: var(--md-sys-color-on-surface); font-size: 1.02rem; white-space: pre-wrap; }
 .sheet-audit-note { display: flex; align-items: center; gap: 8px; margin: 10px 0 var(--space-4); padding: 10px 13px; border-radius: var(--radius-sm);

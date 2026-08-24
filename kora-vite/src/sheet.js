@@ -362,7 +362,25 @@ export function isEditingActive() { return _editingActive; }
 // la même image de couverture réelle que l'article -> .mp4 (ffmpeg, zoom Ken
 // Burns). Génération à la demande (1-3 min), jamais automatique -- coût
 // CPU, inutile pour un brouillon jamais publié.
-function videoSection(f, locked = false) {
+// Lecture Texte / Vidéo (2026-08-25, retour utilisateur explicite) : "la
+// vidéo apparaît et je n'arrive plus à lire le texte... le texte passe en
+// arrière-plan... la vidéo masque le texte". Cause racine identifiée : le
+// lecteur <video> (jusqu'à 360px + contrôles) vivait DANS .sheet-actions,
+// qui est en position: sticky; bottom: 0 avec un fond opaque (barre pensée
+// pour de petits boutons d'action, pas un lecteur vidéo) -- en scrollant la
+// fiche, cette barre collée au bas du viewport recouvrait bel et bien le
+// texte de l'article qui défilait derrière elle. Corrigé en scindant
+// l'ancien videoSection() en deux :
+//   - videoActionBar() : reste dans .sheet-actions (sticky) -- seulement
+//     les états COURTS (bouton "Générer", bandeau "en cours", erreur),
+//     plus jamais le lecteur lui-même.
+//   - videoPlayerPanel() : le lecteur + ses contrôles (durée, mode, régé-
+//     nérer), déplacé dans le flux normal du contenu, sous un onglet
+//     Texte/Vidéo (articleModeToggle()) qui bascule l'un OU l'autre --
+//     jamais les deux en même temps, donc plus jamais de recouvrement,
+//     et le choix explicite demandé par l'utilisateur ("un petit bouton
+//     qui m'indique si je veux lire le texte ou la vidéo").
+function videoActionBar(f, locked = false) {
   const status = f.video_status;
   // `locked` (2026-08-23, même logique que le verrouillage des actions
   // éditoriales pour un article TRANSMITTED, voir renderSheet ci-dessous) --
@@ -382,9 +400,24 @@ function videoSection(f, locked = false) {
       <div class="video-generating"><span class="dot dot-busy"></span> Génération de la vidéo en cours… (1-3 min)</div>
     </div>`;
   }
-  if (status === "done" && f.video_path) {
-    const dur = f.video_duration_sec ? `${Math.round(f.video_duration_sec / 60)} min` : "";
-    return `<div class="video-section">
+  return ""; // "done" -> le lecteur vit désormais dans videoPlayerPanel(), plus rien à afficher ici
+}
+
+// Onglet Texte/Vidéo -- visible UNIQUEMENT quand une vidéo est prête (avant
+// ça, rien à basculer : le texte est la seule chose à lire). Cible tactile
+// ≥44px (voir CSS .mode-tab), rôle tablist/tab pour les lecteurs d'écran.
+function articleModeToggle(f, mode) {
+  if (!(f.video_status === "done" && f.video_path)) return "";
+  return `<div class="mode-toggle" role="tablist" aria-label="Format de consultation">
+    <button type="button" class="mode-tab ${mode === "text" ? "active" : ""}" data-mode-tab="text" role="tab" aria-selected="${mode === "text"}">${icon("i-facts")}<span>Texte</span></button>
+    <button type="button" class="mode-tab ${mode === "video" ? "active" : ""}" data-mode-tab="video" role="tab" aria-selected="${mode === "video"}">${icon("i-play")}<span>Vidéo</span></button>
+  </div>`;
+}
+
+function videoPlayerPanel(f, locked, mode) {
+  if (!(f.video_status === "done" && f.video_path)) return "";
+  const dur = f.video_duration_sec ? `${Math.round(f.video_duration_sec / 60)} min` : "";
+  return `<div class="video-section video-panel" data-mode-panel="video" ${mode !== "video" ? "hidden" : ""}>
       <video class="video-preview" src="/kora-v2/media/${esc(f.video_path)}" controls preload="metadata"></video>
       <div class="video-actions">
         <span class="muted">${dur ? `Durée : ${dur}` : ""}${dur ? " · " : ""}${esc(NARRATION_MODE_LABELS[f.video_narration_mode] || NARRATION_MODE_LABELS.solo)}</span>
@@ -392,8 +425,6 @@ function videoSection(f, locked = false) {
       </div>
       ${locked ? "" : narrationModeSelect(f, /* forRegen */ true)}
     </div>`;
-  }
-  return "";
 }
 
 // Mode de narration (2026-08-24, dialogue à deux voix façon NotebookLM) --
@@ -472,6 +503,17 @@ function renderSheet(s) {
   const imgCaption = f.image_meta?.provider === "source"
     ? (imgSourceName ? `Photo : ${imgSourceName}` : "Photo — KORA (source)")
     : "Photo d'illustration — KORA";
+  // Mode de lecture (2026-08-25) : "texte" par défaut -- ne bascule jamais
+  // automatiquement sur "vidéo" (un article vient d'abord d'être ouvert
+  // pour être LU, l'ouverture ne doit pas se mettre à jouer un son sans
+  // que l'utilisateur l'ait demandé). `sh.mode` vit sur l'objet sheet en
+  // mémoire (pas dans Store.state) -- persiste le temps où CETTE fiche
+  // reste ouverte (bascule Texte<->Vidéo sans réinitialiser le choix à
+  // chaque re-rendu), mais repart à "texte" à la prochaine ouverture
+  // (openFact() crée un nouvel objet sheet à chaque fois).
+  const videoReady = f.video_status === "done" && !!f.video_path;
+  const mode = videoReady ? (sh.mode || "text") : "text";
+  sh.mode = mode;
   body.innerHTML = `
     <article class="sheet-article">
       ${img ? `<figure class="sheet-figure"><img class="sheet-img" src="${esc(img)}" alt="" onerror="this.src='${ph}'"><figcaption class="sheet-cap">${esc(imgCaption)}</figcaption></figure>` : `<figure class="sheet-figure"><img class="sheet-img" src="${ph}" alt=""><figcaption class="sheet-cap">${esc(imgCaption)}</figcaption></figure>`}
@@ -491,10 +533,14 @@ function renderSheet(s) {
         </div>
         <button class="sheet-close" data-close="1" title="Fermer" aria-label="Fermer">${icon("i-close")}</button>
       </div>
-      <p class="sheet-standfirst">${mdToHtmlInline(standfirst)}</p>
-      <div class="fact-chips" style="margin:6px 0 16px">${factMeta(f, status)}</div>
-      <div class="sheet-textwrap"><div class="sheet-text">${mdToHtml(bodyText || text)}</div></div>
-      <div class="sheet-audit-note">${icon("i-audit")} Décision enregistrée dans l'historique · ${esc(f.n_sources || 1)} source(s) fusionnée(s)</div>
+      ${articleModeToggle(f, mode)}
+      <div data-mode-panel="text" ${mode !== "text" ? "hidden" : ""}>
+        <p class="sheet-standfirst">${mdToHtmlInline(standfirst)}</p>
+        <div class="fact-chips" style="margin:6px 0 16px">${factMeta(f, status)}</div>
+        <div class="sheet-textwrap"><div class="sheet-text">${mdToHtml(bodyText || text)}</div></div>
+        <div class="sheet-audit-note">${icon("i-audit")} Décision enregistrée dans l'historique · ${esc(f.n_sources || 1)} source(s) fusionnée(s)</div>
+      </div>
+      ${videoPlayerPanel(f, (s.auth && s.auth.role === "lecteur") || status === "TRANSMITTED", mode)}
     </article>
     ${(s.auth && s.auth.role === "lecteur") ? `
     <p class="muted source-detail-footnote" style="margin:14px 0 0">${icon("i-lock")} Rôle Lecteur : consultation seule, aucune action possible sur cet article.</p>
@@ -518,7 +564,7 @@ function renderSheet(s) {
           </div>
         </div>
       </div>
-      ${videoSection(f, true)}
+      ${videoActionBar(f, true)}
     </div>
     ` : `
     <div class="sheet-actions">
@@ -534,7 +580,7 @@ function renderSheet(s) {
         <div class="regen-chips" id="regenChips"></div>
         <button class="btn btn-ghost btn-sm" data-regen-cancel="1">Annuler</button>
       </div>
-      ${videoSection(f)}
+      ${videoActionBar(f)}
     </div>`}`;
   sheet.hidden = false; scrim.hidden = false;
 
@@ -734,6 +780,38 @@ function renderSheet(s) {
     const sel = body.querySelector("#narrationModeRegen");
     startVideoFlow(videoRegenBtn, sel ? sel.value : (f.video_narration_mode || "solo"));
   };
+
+  // ---- Onglet Texte/Vidéo (2026-08-25) : bascule locale, SANS re-rendu
+  // complet de la fiche -- un renderSheet() ici rechargerait le <video>
+  // (reset de la position de lecture) et ramènerait le scroll en haut,
+  // deux régressions inutiles pour un simple changement d'onglet. Juste du
+  // show/hide + mise à jour visuelle des onglets ; `sh.mode` est mis à jour
+  // pour que la fiche rouvre sur le même onglet si renderSheet() est
+  // rappelé pour une AUTRE raison (ex. sondage de génération vidéo).
+  const modeTabs = $$("[data-mode-tab]", body);
+  if (modeTabs.length) {
+    modeTabs.forEach(tab => tab.onclick = () => {
+      const newMode = tab.dataset.modeTab;
+      sh.mode = newMode;
+      modeTabs.forEach(t => {
+        const active = t === tab;
+        t.classList.toggle("active", active);
+        t.setAttribute("aria-selected", active ? "true" : "false");
+      });
+      const textPanel = body.querySelector('[data-mode-panel="text"]');
+      const videoPanel = body.querySelector('[data-mode-panel="video"]');
+      if (textPanel) textPanel.hidden = newMode !== "text";
+      if (videoPanel) videoPanel.hidden = newMode !== "video";
+      // En quittant l'onglet Vidéo, on met en pause plutôt que de laisser
+      // la narration continuer à jouer hors champ (surprise sonore sur
+      // mobile en particulier, notamment si l'onglet Texte est repris pour
+      // lire pendant que la vidéo continuerait de tourner en arrière-plan).
+      if (newMode !== "video") {
+        const v = videoPanel ? videoPanel.querySelector("video") : null;
+        if (v && !v.paused) v.pause();
+      }
+    });
+  }
 }
 
 export { renderSheet, confirmAction };
