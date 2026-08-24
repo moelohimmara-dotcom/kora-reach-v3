@@ -224,7 +224,31 @@ def assemble_video_multi(image_paths: list, audio_path: str, out_path: str,
         return {"ok": False, "path": None, "duration_sec": None, "error": f"audio_illisible: {type(e).__name__}: {e}"}
 
     fade = min(FADE_SEC, audio_dur / 3) if audio_dur > 0 else 0.0
-    per = max(audio_dur / n, fade * 2 + 0.1)  # jamais plus court que 2 fondus + marge
+    # MIN_SEGMENT_SEC (revue qualite, 2026-08-24 : etait declare mais jamais
+    # cable, le vrai plancher etait fade*2+0.1 -- incoherent avec la doc et
+    # avec l'intention "un segment doit avoir le temps d'exister a l'ecran").
+    # Reduit le nombre d'images REELLEMENT utilisees si l'audio est trop
+    # court pour que chaque segment atteigne MIN_SEGMENT_SEC, plutot que de
+    # forcer des segments trop courts pour que le zoom soit perceptible.
+    # n*per - (n-1)*fade = audio_dur (voir plus bas) => per >= MIN_SEGMENT_SEC
+    # <=> n <= (audio_dur - fade) / (MIN_SEGMENT_SEC - fade).
+    if MIN_SEGMENT_SEC > fade:
+        n_max = int((audio_dur - fade) / (MIN_SEGMENT_SEC - fade))
+        n = max(MIN_IMAGES_FOR_MULTI, min(n, n_max)) if n_max >= MIN_IMAGES_FOR_MULTI else 0
+    if n < MIN_IMAGES_FOR_MULTI:
+        return {"ok": False, "path": None, "duration_sec": None,
+                "error": f"audio_trop_court_pour_multi_images ({audio_dur:.1f}s)"}
+    image_paths = image_paths[:n]
+    # Bug corrige (revue qualite, 2026-08-24) : chaque transition xfade
+    # RACCOURCIT la duree totale de `fade` secondes (offset_i chevauche le
+    # clip precedent) -- la sortie finale du chainage xfade dure
+    # n*per - (n-1)*fade, PAS n*per. Avec per = audio_dur/n tel quel, la
+    # video finale etait plus courte que l'audio de (n-1)*fade secondes, et
+    # "-shortest" coupait la fin de la narration (silencieusement, aucune
+    # erreur -- un article de 20s avec 4 images perdait 1.8s de narration).
+    # Corrige en compensant les (n-1) chevauchements des le calcul de `per`
+    # pour que n*per - (n-1)*fade == audio_dur exactement.
+    per = max((audio_dur + (n - 1) * fade) / n, fade * 2 + 0.1)  # jamais plus court que 2 fondus + marge
     work_dir = tempfile.mkdtemp(prefix="kora_video_multi_")
     try:
         clip_paths = []
