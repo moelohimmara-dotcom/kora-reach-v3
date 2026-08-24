@@ -110,10 +110,10 @@ function factMeta(f, status, compact) {
   const st = status || f.status || "PENDING_REVIEW";
   // Nommage métier unifié (2026-08-25, demande explicite utilisateur) :
   // PENDING_REVIEW s'appelait "En attente" ICI mais "À décider" sur la
-  // carte KPI du tableau de bord (views/cockpit.js) -- deux libellés pour
+  // carte KPI du tableau de bord (views/dashboard.js) -- deux libellés pour
   // le même statut, incohérence jamais remarquée avant l'audit de
   // nommage. Unifié sur "À approuver" (forme compacte) / "Articles à
-  // approuver" (forme longue, cockpit.js) -- vocabulaire commun à tout
+  // approuver" (forme longue, dashboard.js) -- vocabulaire commun à tout
   // l'écran, voir STATUS_FR export plus bas pour la version longue.
   const stMap = { PENDING_REVIEW: "À approuver", APPROVED: "Approuvé", REJECTED: "Rejeté", TRANSMITTED: "Transmis", EDITED: "Édité", TRANSMISSION_FAILED: "Échec d'envoi" };
   const stLabel = stMap[st] || st || "À approuver";

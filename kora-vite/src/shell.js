@@ -93,7 +93,7 @@ export const SHELL = `
       <button class="left-drawer-close" id="leftDrawerClose" aria-label="Fermer le menu">${ic("i-chevron")}</button>
     </div>
     <div class="left-drawer-body">
-      <button class="navitem" data-route="cockpit"><svg class="ic"><use href="#i-dashboard"/></svg><span>Tableau de bord</span></button>
+      <button class="navitem" data-route="dashboard"><svg class="ic"><use href="#i-dashboard"/></svg><span>Tableau de bord</span></button>
       <button class="navitem" data-route="facts"><svg class="ic"><use href="#i-facts"/></svg><span>Actifs</span><span class="nav-badge" data-badge="facts"></span></button>
       <button class="navitem" data-route="audit"><svg class="ic"><use href="#i-check"/></svg><span>Historique</span></button>
       <button class="navitem" data-route="drafts"><svg class="ic"><use href="#i-edit"/></svg><span>Brouillons</span></button>
@@ -129,7 +129,7 @@ export const SHELL = `
     </div>
 
     <div class="rail-group">Pilotage</div>
-    <button class="item" data-route="cockpit"><span class="ico">${ic("i-dashboard")}</span><span class="lbl">Tableau de bord</span></button>
+    <button class="item" data-route="dashboard"><span class="ico">${ic("i-dashboard")}</span><span class="lbl">Tableau de bord</span></button>
     <button class="item" data-route="audit"><span class="ico">${ic("i-check")}</span><span class="lbl">Historique</span></button>
 
     <div class="rail-group">Contenu</div>
@@ -167,7 +167,7 @@ export const SHELL = `
   <main class="view" id="view"></main>
 
   <nav class="bottomnav" id="bottomnav" tabindex="-1">
-    <button class="navitem navitem-active" data-route="cockpit" aria-current="page">
+    <button class="navitem navitem-active" data-route="dashboard" aria-current="page">
       <div class="nav-ico">${ic("i-dashboard")}</div>
       <span>Tableau de bord</span>
     </button>

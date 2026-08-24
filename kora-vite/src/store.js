@@ -7,7 +7,7 @@ const BASE = "/kora-v2";  // nginx route /kora-v2/api -> backend Python (port 87
 
 export const Store = (() => {
   const state = {
-    route: "cockpit",
+    route: "dashboard",
     // busy : indicateur GÉNÉRIQUE (petit statut "agent occupé" dans le topbar) —
     // posé par TOUTE action en cours (suppression, décision, restauration...).
     // cycleBusy : vrai UNIQUEMENT pendant un cycle de génération (startCycle) —
@@ -496,7 +496,7 @@ export const Store = (() => {
       }
     }
     // Libellés d'interface (white-label) : navitems par data-route + tagline
-    const routeMap = { cockpit: s.label_cockpit, facts: s.label_facts, sources: s.label_sources, drafts: s.label_drafts, audit: s.label_audit };
+    const routeMap = { dashboard: s.label_dashboard, facts: s.label_facts, sources: s.label_sources, drafts: s.label_drafts, audit: s.label_audit };
     Object.keys(routeMap).forEach(route => {
       const lbl = routeMap[route];
       if (!lbl) return;
@@ -1081,10 +1081,10 @@ export const Store = (() => {
   }
 
   // ============================================================
-  // COCKPIT — Agrégation multi-API + Auto-refresh
+  // DASHBOARD — Agrégation multi-API + Auto-refresh
   // ============================================================
   async function loadAll() {
-    // Charge tout en parallèle pour le cockpit
+    // Charge tout en parallèle pour le tableau de bord
     try {
       setState({ ui: { ...state.ui, loading: true, error: null } });
       const [health, audit, hitl, sources, stats] = await Promise.allSettled([
@@ -1111,7 +1111,7 @@ export const Store = (() => {
       // échec réseau sur une ou plusieurs requêtes retombait silencieusement
       // sur une valeur par défaut (health:null, audit vide...) sans jamais
       // poser ui.error, empêchant tout affichage d'erreur côté UI (même une
-      // fois l'indicateur ajouté au cockpit, il ne se déclenchait jamais).
+      // fois l'indicateur ajouté au tableau de bord, il ne se déclenchait jamais).
       // stats est la source des tuiles du dashboard -- son échec est le plus
       // significatif ; on remonte aussi si health/audit échouent (moins
       // visible mais réel). lastRefresh n'avance QUE si stats a réussi, pour
@@ -1308,7 +1308,7 @@ export const Store = (() => {
     setSelectMode, toggleSelect, clearSelection, selectedIds,
     bulkAction, restoreFact, deleteForever, loadTrash, finishDraft,
     regenerate,
-    // Cockpit
+    // Dashboard
     loadAll, startAutoRefresh, stopAutoRefresh
   };
 })();

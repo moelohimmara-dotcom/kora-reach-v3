@@ -1,5 +1,5 @@
 /* ============================================================
-   KORA — views/cockpit.js : Tableau de bord (page d'accueil). Extrait de
+   KORA — views/dashboard.js : Tableau de bord (page d'accueil). Extrait de
    app.js le 22/08/2026 (refacto plan étape 4).
    ============================================================ */
 import { esc, icon } from "../utils.js";
@@ -83,7 +83,7 @@ function evolutionChart(s) {
     </section>`;
 }
 
-function viewCockpit(s) {
+function viewDashboard(s) {
   // SSOT : tous les compteurs viennent de s.stats (calcules une fois par le backend).
   // Plus aucun recalcul divergent cote front (ancien cat.pending / s.trash, etc.).
   const st = s.stats || {};
@@ -113,7 +113,7 @@ function viewCockpit(s) {
   const lastCycle = s.lastCycle;
 
   return `
-    <div class="cockpit kora-wire">
+    <div class="dashboard kora-wire">
       <!-- HERO : le fact en attente de décision (cœur du produit) -->
       ${heroFact(s, pending)}
 
@@ -132,7 +132,7 @@ function viewCockpit(s) {
           if (ts) return `<p class="stats-freshness">Mis à jour à ${ts}</p>`;
           return "";
         })()}
-      <div class="cockpit-grid stats-row kora-stats">
+      <div class="dashboard-grid stats-row kora-stats">
         ${statCard({ icon: "article", value: total, label: "Articles", variant: "primary", onClick: "nav-facts-all", loading: s.ui?.loading && total === 0, error: !!s.ui?.error })}
         ${statCard({ icon: "i-help", value: pending, label: "Articles à approuver", variant: "warning", onClick: "nav-pending", loading: s.ui?.loading && pending === 0, error: !!s.ui?.error })}
         ${statCard({ icon: "fact_check", value: approved, label: "Publiés", variant: "success", onClick: "nav-facts-approved", loading: s.ui?.loading && approved === 0, error: !!s.ui?.error })}
@@ -152,7 +152,7 @@ function viewCockpit(s) {
            dans la Console Root, réservée au développeur/administrateur système
            (voir root-console.html, panneau "Supervision", déjà complet et plus
            riche que ce qui était affiché ici). -->
-      <div class="cockpit-grid system-row">
+      <div class="dashboard-grid system-row">
         <section class="system-section sources-section">
           <h2 class="section-title">Sources</h2>
           ${(() => {
@@ -231,7 +231,7 @@ function heroFact(s, pendingCount) {
 
 
 // ============================================================
-// COCKPIT COMPONENTS — Dynamiques, cliquables, temps réel
+// DASHBOARD COMPONENTS — Dynamiques, cliquables, temps réel
 // ============================================================
 
 function statCard({ icon, value, label, variant = "primary", onClick, trend, loading = false, error = false, full = false }) {
@@ -361,4 +361,4 @@ function cycleControl(lastCycle) {
     </div>`;
 }
 
-export { viewCockpit, statCard };
+export { viewDashboard, statCard };

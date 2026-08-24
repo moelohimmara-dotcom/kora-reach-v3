@@ -4,7 +4,7 @@
    22/08/2026 (refacto plan étape 4).
    ============================================================ */
 import { esc, statusBadge, icon } from "../utils.js";
-import { statCard } from "./cockpit.js";
+import { statCard } from "./dashboard.js";
 
 function viewStyleGuide(s) {
   const tok = (name, desc) => `
@@ -13,7 +13,7 @@ function viewStyleGuide(s) {
       <div class="sg-token-meta"><code>${name}</code><div class="muted">${esc(desc)}</div></div>
     </div>`;
   return `
-  <div class="cockpit kora-wire sg-page">
+  <div class="dashboard kora-wire sg-page">
     <h1 class="section-title">Style Guide — Design System KORA</h1>
     <p class="muted">Référence vivante. Toute modification visuelle se vérifie ici avant merge. Source : <code>docs/DESIGN_SYSTEM.md</code>.</p>
 
@@ -48,7 +48,7 @@ function viewStyleGuide(s) {
     </div>
 
     <h2 class="section-title">Carte KPI</h2>
-    <div class="cockpit-grid stats-row sg-kpi">
+    <div class="dashboard-grid stats-row sg-kpi">
       ${statCard({ icon: "i-help", value: 12, label: "Articles à approuver", variant: "warning" })}
     </div>
   </div>`;

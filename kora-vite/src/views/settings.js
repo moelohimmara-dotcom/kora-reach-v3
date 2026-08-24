@@ -166,7 +166,7 @@ function viewSettings(s) {
         <div class="setting-card">
           <div class="setting-card-head"><span class="meta-ic">${icon("i-edit")}</span><div class="meta"><div class="name">Libellés de l'interface</div><div class="sub">Personnalise le nom des onglets et le sous-titre (white-label).</div></div></div>
           <div class="field-row">
-            <div class="field"><span>Tableau</span><input class="text-input" id="setLblCockpit" type="text" maxlength="30" value="${esc(s.settings?.label_cockpit || "Tableau")}"></div>
+            <div class="field"><span>Tableau</span><input class="text-input" id="setLblDashboard" type="text" maxlength="30" value="${esc(s.settings?.label_dashboard || "Tableau")}"></div>
             <div class="field"><span>Articles</span><input class="text-input" id="setLblFacts" type="text" maxlength="30" value="${esc(s.settings?.label_facts || "Articles")}"></div>
             <div class="field"><span>Sources</span><input class="text-input" id="setLblSources" type="text" maxlength="30" value="${esc(s.settings?.label_sources || "Sources")}"></div>
             <div class="field"><span>Brouillons</span><input class="text-input" id="setLblDrafts" type="text" maxlength="30" value="${esc(s.settings?.label_drafts || "Brouillons")}"></div>
@@ -366,7 +366,7 @@ function bindSettings() {
         try { localStorage.setItem("kora-token", tk); } catch (e) {}
       }
     }
-    const lblIds = { cockpit: "setLblCockpit", facts: "setLblFacts", sources: "setLblSources", drafts: "setLblDrafts", audit: "setLblAudit" };
+    const lblIds = { dashboard: "setLblDashboard", facts: "setLblFacts", sources: "setLblSources", drafts: "setLblDrafts", audit: "setLblAudit" };
     const payload = {
       app_name: (document.getElementById("setAppName")?.value || "").trim(),
       accent_coral: coral ? coral.value : undefined,
@@ -389,7 +389,7 @@ function bindSettings() {
   };
   // Preview live des libellés d'onglets
   const liveLabels = () => {
-    const lblIds = { cockpit: "setLblCockpit", facts: "setLblFacts", sources: "setLblSources", drafts: "setLblDrafts", audit: "setLblAudit" };
+    const lblIds = { dashboard: "setLblDashboard", facts: "setLblFacts", sources: "setLblSources", drafts: "setLblDrafts", audit: "setLblAudit" };
     Object.keys(lblIds).forEach(route => {
       const el = document.getElementById(lblIds[route]);
       if (el) document.querySelectorAll(`.navitem[data-route="${route}"] span`).forEach(sp => { sp.textContent = el.value || sp.textContent; });
@@ -398,7 +398,11 @@ function bindSettings() {
     const tl = document.querySelector(".about-tagline");
     if (tg && tl) tl.textContent = tg.value || tl.textContent;
   };
-  ["setLblCockpit","setLblFacts","setLblHitl","setLblSources","setLblDrafts","setLblAudit","setTagline"].forEach(id => {
+  // "setLblHitl" retiré (2026-08-25, audit de nommage) : référence morte --
+  // aucun champ avec cet id n'a jamais existé dans le formulaire ci-dessus
+  // (seuls Tableau/Articles/Sources/Brouillons/Historique sont rendus),
+  // resté par erreur dans cette liste de nettoyage depuis l'origine.
+  ["setLblDashboard","setLblFacts","setLblSources","setLblDrafts","setLblAudit","setTagline"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.oninput = liveLabels;
   });

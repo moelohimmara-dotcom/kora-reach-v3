@@ -248,7 +248,7 @@ function bindAuth(mode, token, alreadyAuth) {
     if (continueBtn) continueBtn.onclick = () => {
       _forceAuthOverlay = false;
       _authRendered = false;
-      navigate("cockpit");
+      navigate("dashboard");
     };
     return;
   }

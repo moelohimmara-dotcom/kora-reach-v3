@@ -13,15 +13,29 @@ DEFAULTS = {
     "app_name": "KORA Veille Guinée",
     "accent_coral": "#E9705D",
     "accent_bordeaux": "#E08A84",
-    # Libellés de l'interface (white-label)
-    "label_cockpit": "Tableau de bord",
+    # Libellés de l'interface (white-label). "label_cockpit" -> "label_dashboard"
+    # (2026-08-25, audit de nommage : "cockpit" est un terme aéronautique
+    # générique, aucun rapport avec le métier -- aligné sur "dashboard" côté
+    # frontend, voir kora-vite/src/views/dashboard.js). "label_hitl" retiré :
+    # référence morte, aucun champ de formulaire ne l'a jamais consommé côté
+    # frontend (settings.js) -- laissait un défaut ("Validation") jamais
+    # affiché nulle part.
+    "label_dashboard": "Tableau de bord",
     "label_facts": "Articles",
-    "label_hitl": "Validation",
     "label_sources": "Sources",
     "label_drafts": "Brouillons",
     "label_audit": "Historique",
     "app_tagline": "Poste de pilotage de l'agent éditorial",
 }
+
+# Migration de compatibilité (2026-08-25) : une base existante peut avoir une
+# ligne kora_config persistée sous l'ANCIENNE clé "label_cockpit" (valeur
+# personnalisée par un utilisateur avant ce renommage) -- sans ce mapping,
+# cette personnalisation serait silencieusement perdue (le nouveau code ne
+# lit plus que "label_dashboard", jamais "label_cockpit"). Voir _migrate_keys()
+# dans get_settings(), qui applique ce mapping une fois puis ré-écrit sous le
+# nouveau nom.
+_RENAMED_KEYS = {"label_cockpit": "label_dashboard"}
 
 _LABEL_KEYS = [k for k in DEFAULTS if k.startswith("label_")] + ["app_tagline"]
 _LABEL_RE = re.compile(r"^[^<>]{1,30}$")
@@ -53,13 +67,66 @@ def _norm_hex(v: str) -> str:
     return v.upper()
 
 
+def _migrate_renamed_keys(con) -> None:
+    """Renomme en base toute ligne kora_config encore sous une ANCIENNE clé
+    (voir _RENAMED_KEYS) -- idempotent (ne fait rien si la ligne n'existe
+    pas ou a déjà été migrée), jamais bloquant (échec silencieux : une
+    valeur par défaut reste toujours disponible via DEFAULTS)."""
+    try:
+        cur = con.cursor()
+        for old_key, new_key in _RENAMED_KEYS.items():
+            cur.execute(f"SELECT value FROM kora_config WHERE key={_ph()}", (old_key,))
+            row = cur.fetchone()
+            if not row:
+                continue  # jamais personnalisée sous l'ancienne clé -> rien à migrer
+            if db.is_postgres():
+                cur.execute(f"DELETE FROM kora_config WHERE key={_ph()}", (new_key,))
+                cur.execute(f"INSERT INTO kora_config(key,value) VALUES({_ph()},{_ph()})", (new_key, row["value"]))
+            else:
+                cur.execute(f"INSERT OR REPLACE INTO kora_config(key,value) VALUES({_ph()},{_ph()})", (new_key, row["value"]))
+            cur.execute(f"DELETE FROM kora_config WHERE key={_ph()}", (old_key,))
+        con.commit()
+    except Exception as e:
+        # Bug corrigé (2026-08-25, incident réel constaté en production) :
+        # `pass` sans rollback() laissait la transaction Postgres dans l'état
+        # "InFailedSqlTransaction" -- toute requête SUIVANTE sur CETTE MEME
+        # connexion (ici : le SELECT de get_settings() juste après cet appel,
+        # sur le `con` partagé) échouait à son tour avec la même erreur,
+        # cascadant sur /api/settings (appelé à CHAQUE chargement de page,
+        # y compris l'écran de connexion) -- observé en conditions réelles :
+        # plusieurs requêtes en échec puis le service ne répondait plus.
+        # rollback() restaure la connexion à un état utilisable avant de
+        # continuer -- reste "jamais bloquant" (l'exception est toujours
+        # absorbée ici, une valeur par défaut restant disponible via
+        # DEFAULTS), mais sans empoisonner le `con` partagé pour la suite.
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        print(f"[settings] migration de clé renommée échouée (non bloquant) : {type(e).__name__}: {e}")
+
+
 def get_settings() -> dict:
     _ensure_table()
     con, _ = db.conn()
+    # Défense en profondeur (2026-08-25, suite à l'incident ci-dessus) :
+    # /api/settings est appelé à CHAQUE chargement de page (y compris
+    # l'écran de connexion, avant toute authentification) -- un échec ici
+    # ne doit JAMAIS bloquer l'accès à l'app, même en cas d'incident DB
+    # imprévu (le rollback ci-dessus couvre le cas identifié, mais pas
+    # tout incident futur). Repli sur DEFAULTS si la lecture échoue.
+    rows = []
     try:
+        _migrate_renamed_keys(con)
         cur = con.cursor()
         cur.execute("SELECT key, value FROM kora_config")
         rows = cur.fetchall()
+    except Exception as e:
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        print(f"[settings] lecture kora_config échouée (repli sur DEFAULTS) : {type(e).__name__}: {e}")
     finally:
         con.close()
     d = dict(DEFAULTS)

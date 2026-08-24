@@ -14,7 +14,7 @@
    gain nul.
 
    Modules extraits : utils.js (helpers partagés), sheet.js (panneau de
-   détail #sheet), notifications.js, tour.js, views/{cockpit,facts,trash,
+   détail #sheet), notifications.js, tour.js, views/{dashboard,facts,trash,
    videos,sources,settings,audit,styleguide,auth}.js — chacun dans son
    propre fichier, une page = un module.
    ============================================================ */
@@ -25,7 +25,13 @@ import {
 } from "./utils.js";
 import { renderSheet, confirmAction, isEditingActive } from "./sheet.js";
 import { renderNotifCenter } from "./notifications.js";
-import { viewCockpit } from "./views/cockpit.js";
+// "dashboard" (2026-08-25, audit de nommage : s'appelait "cockpit" --
+// terme aéronautique générique, aucun rapport avec le métier éditorial).
+// Fichier renommé views/cockpit.js -> views/dashboard.js, fonction
+// viewCockpit -> viewDashboard, route interne "cockpit" -> "dashboard"
+// (toutes les occurrences ci-dessous). L'URL "jolie" n'est PAS affectée
+// (ROUTE_SLUGS mappait déjà cockpit -> "" (racine), inchangé).
+import { viewDashboard } from "./views/dashboard.js";
 import { viewFacts, viewDrafts, viewPublished, onBulkAction, openWpChoice, openTrashChoice, doBulkApprove, doBulkTrash } from "./views/facts.js";
 import { viewTrash } from "./views/trash.js";
 import { viewVideos, bindVideos, bindVideoPlayers } from "./views/videos.js";
@@ -285,7 +291,7 @@ function render() {
   renderErrorBanner(s);
   const view = document.getElementById("view");
   if (!view) return;
-  const map = { cockpit: viewCockpit, facts: viewFacts, sources: viewSources, videos: viewVideos, audit: viewAudit, drafts: viewDrafts, published: viewPublished, settings: viewSettings, trash: viewTrash, styleguide: viewStyleGuide };
+  const map = { dashboard: viewDashboard, facts: viewFacts, sources: viewSources, videos: viewVideos, audit: viewAudit, drafts: viewDrafts, published: viewPublished, settings: viewSettings, trash: viewTrash, styleguide: viewStyleGuide };
   // Garde de rôle au niveau du routage (13.3) : jusqu'ici seul le LIEN vers
   // /style-guide était masqué pour un rôle non-advanced, mais la route
   // elle-même restait accessible en tapant #styleguide directement (aucune
@@ -312,7 +318,7 @@ function render() {
   const videosPlayingMounted = s.route === "videos" && _lastRenderedRoute === "videos" && !blocked
     && Array.from(view.querySelectorAll("[data-video-el]")).some(v => !v.paused && !v.ended);
   if (!settingsAlreadyMounted && !videosPlayingMounted) {
-    view.innerHTML = blocked ? view403() : (map[s.route] || viewCockpit)(s);
+    view.innerHTML = blocked ? view403() : (map[s.route] || viewDashboard)(s);
   }
   _lastRenderedRoute = blocked ? "403" : s.route;
   $$(".navitem, .rail .navitem, .item, .rail .item").forEach(n => {
@@ -337,7 +343,7 @@ function render() {
       // "facts" (2026-08-23, ADR-0005, tâche T4) : active_facts exclut les
       // articles TRANSMITTED (comptés séparément par le badge "published"
       // ci-dessous) -- cohérent avec viewFacts() qui les a exclus (T3) et
-      // avec la tuile "Articles" du cockpit (voir views/cockpit.js).
+      // avec la tuile "Articles" du tableau de bord (voir views/dashboard.js).
       facts: (typeof stats.active_facts === "number") ? stats.active_facts
         : (typeof stats.total_facts === "number") ? stats.total_facts
         : ((typeof stats.articles === "number") ? stats.articles : facts.length),
@@ -544,7 +550,7 @@ function render() {
       // N'apparaît QUE sur les pages de contenu (sélection pertinente) et
       // uniquement si au moins un article est coché. Sinon elle reste cachée
       // (pas de barre "perdue" sur Sources / Paramètres / Historique / Corbeille).
-      const SEL_ROUTES = ["cockpit", "facts", "drafts", "trash"];
+      const SEL_ROUTES = ["dashboard", "facts", "drafts", "trash"];
       const n = Store.selectedIds().length;
       sb.hidden = !(s.selectMode && n > 0 && SEL_ROUTES.includes(s.route));
       const cnt = document.getElementById("selectCount");
@@ -610,7 +616,7 @@ function render() {
 // une URL à deux segments de profondeur casserait le chargement des assets
 // (mauvaise résolution relative), une URL à un seul segment reste sûre.
 const ROUTE_SLUGS = {
-  cockpit: "", facts: "articles", drafts: "brouillons", trash: "corbeille",
+  dashboard: "", facts: "articles", drafts: "brouillons", trash: "corbeille",
   sources: "sources", videos: "videos", audit: "historique", settings: "parametres", styleguide: "style-guide",
 };
 const SLUG_ROUTES = Object.fromEntries(
@@ -641,7 +647,7 @@ function navigate(route, push = true) {
   else if (route === "audit") Store.loadAudit();
   else if (route === "sources") Store.loadSources();
   else if (route === "videos") Store.loadVideos();
-  else if (route === "cockpit") { Store.loadLast(); Store.loadHITL(); }
+  else if (route === "dashboard") { Store.loadLast(); Store.loadHITL(); }
   render();
 }
 function openFact(id) {
@@ -811,7 +817,7 @@ function bind() {
   if (trashDef) trashDef.onchange = () => { document.getElementById("trashDelete").hidden = !trashDef.checked; };
 
   const btn403 = document.querySelector("[data-403-home]");
-  if (btn403) btn403.onclick = () => navigate("cockpit");
+  if (btn403) btn403.onclick = () => navigate("dashboard");
 
   // ---- Identite du compte connecte (topbar) ----
   const topbarIdentity = document.getElementById("topbarIdentity");
@@ -928,7 +934,7 @@ function bind() {
     navigate(n.dataset.route);
   });
   const tc = document.getElementById("topbarCycle");
-  if (tc) tc.onclick = () => { navigate("cockpit"); Store.startCycle(); };
+  if (tc) tc.onclick = () => { navigate("dashboard"); Store.startCycle(); };
   // Rail drawer : toggle collapse (desktop) + menu (mobile drawer)
   const closeRailDrawer = () => {
     const rail = document.getElementById("rail");
@@ -957,9 +963,9 @@ function bind() {
   // Clic sur le scrim = ferme le drawer mobile (corrige l'impossibilité de refermer)
   const rsc = document.getElementById("railScrim");
   if (rsc) rsc.onclick = closeRailDrawer;
-  // Widget "à décider" du rail retiré (redondant avec la carte KPI "À décider"
-  // du Cockpit, qui fait déjà la même chose et est déjà enseignée dans le
-  // tour guidé — cf. shell.js).
+  // Widget "articles à approuver" du rail retiré (redondant avec la carte
+  // KPI "Articles à approuver" du tableau de bord, qui fait déjà la même
+  // chose et est déjà enseignée dans le tour guidé — cf. shell.js).
 
   // =========================================================
   // RIGHT DRAWER OVERLAY — Desktop/Tablet (≥820px) : "Plus" menu
@@ -1078,7 +1084,7 @@ function bind() {
     fab.classList.remove("open"); menu.classList.remove("open");
     // La génération est prioritaire : on bascule toujours sur le Tableau de bord
     // (vue de génération) et on y reste, peu importe l'écran d'origine.
-    if (a.dataset.act === "cycle") { navigate("cockpit"); Store.startCycle(); }
+    if (a.dataset.act === "cycle") { navigate("dashboard"); Store.startCycle(); }
   });
   const sc = $("#sheetScrim"); if (sc) sc.onclick = () => Store.closeSheet();
   // Clic-dehors (point 2) : clic dans N'IMPORTE QUEL périmètre HORS du conteneur interne ferme.
@@ -1095,7 +1101,7 @@ function bind() {
     // navigateur, pas seulement la route.
     const route = (e.state && e.state.route) || (() => {
       const seg = location.pathname.replace(/^\/kora-v2\/?/, "").split("/")[0];
-      return seg ? (SLUG_ROUTES[seg] || "cockpit") : "cockpit";
+      return seg ? (SLUG_ROUTES[seg] || "dashboard") : "dashboard";
     })();
     if (route === "facts") {
       const qf = new URLSearchParams(location.search).get("filtre");
@@ -1107,7 +1113,7 @@ function bind() {
   // pour que le bouton "retour" du navigateur (mobile) puisse revenir en
   // arrière. IMPORTANT (2026-08-20, bug corrigé) : bind() s'exécute AVANT
   // boot() (voir main.js) -- Store.state.route vaut encore sa valeur par
-  // défaut ("cockpit") à ce stade, la vraie route n'est déterminée par
+  // défaut ("dashboard") à ce stade, la vraie route n'est déterminée par
   // boot() qu'ensuite depuis l'URL. Réécrire l'URL ICI avec routeToPath()
   // écrasait donc systématiquement une navigation directe (ex.
   // /kora-v2/articles) par "/kora-v2/" avant même que boot() ne s'exécute.
@@ -1116,9 +1122,9 @@ function bind() {
   try { history.replaceState({ route: Store.state.route }, "", location.href); } catch (e) {}
 
   // =========================================================
-  // COCKPIT — Delegated event binding (dynamic components)
+  // DASHBOARD — Delegated event binding (dynamic components)
   // =========================================================
-  function bindCockpitEvents() {
+  function bindDashboardEvents() {
     // StatCard clicks -> navigation / filter
     document.addEventListener("click", (e) => {
       const card = e.target.closest("[data-action^='nav-']");
@@ -1224,8 +1230,8 @@ function bind() {
     });
   }
 
-  // Call cockpit binding
-  bindCockpitEvents();
+  // Call dashboard binding
+  bindDashboardEvents();
 
   // NOTE: tout le chargement initial (settings, health, auth, routing, auto-refresh)
   // est fait UNE FOIS dans boot() (appelé par main.js), PAS ici. Sinon bind()
@@ -1329,8 +1335,23 @@ function boot() {
   // lien en #hash (deja marque-page par un utilisateur avant ce changement)
   // est encore reconnu une fois, puis migre silencieusement vers la nouvelle
   // URL (replaceState) pour que le prochain partage/marque-page soit a jour.
+  // _LEGACY_ROUTE_ALIASES (2026-08-25, bug réel trouvé lors de l'audit de
+  // nommage cockpit -> dashboard) : un ANCIEN lien/marque-page en #hash
+  // (ex. "#cockpit", datant d'avant le passage aux URLs par chemin du
+  // 2026-08-20) était utilisé ICI tel quel comme route, SANS passer par
+  // SLUG_ROUTES -- tant que la clé de route interne s'appelait "cockpit",
+  // ça marchait par coïncidence. Une fois renommée "dashboard", un vieux
+  // "#cockpit" devenait une route INCONNUE (jamais dans `map`, jamais
+  // "dashboard" pour le state.route) : la vue retombait visuellement sur
+  // le tableau de bord (repli générique `map[s.route] || viewDashboard`),
+  // mais state.route restait bloqué sur la chaîne "cockpit" -- aucun des
+  // chargements de données gatés sur `route === "dashboard"` ne se
+  // déclenchait plus, laissant les compteurs à zéro indéfiniment. Vérifié
+  // en conditions réelles (hasDashboard: false avant ce correctif).
+  const _LEGACY_ROUTE_ALIASES = { cockpit: "dashboard" };
   const legacyHash = (location.hash || "").replace(/^#/, "").trim();
-  const r = legacyHash || (pathSeg0 ? (SLUG_ROUTES[pathSeg0] || "cockpit") : "cockpit");
+  const legacyHashResolved = _LEGACY_ROUTE_ALIASES[legacyHash] || legacyHash;
+  const r = legacyHashResolved || (pathSeg0 ? (SLUG_ROUTES[pathSeg0] || "dashboard") : "dashboard");
   if (Store.state.route !== r) Store.state.route = r;
   // F1 : filtre de la vue Articles lu depuis l'URL (?filtre=pending) au
   // premier chargement -- lien direct partageable/rechargeable.

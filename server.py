@@ -808,14 +808,19 @@ class Handler(BaseHTTPRequestHandler):
                     if n > 0:
                         notifications.create("cycle_done", f"Cycle terminé : {n} article(s) généré(s).", route="facts")
                     else:
-                        notifications.create("info", "Cycle terminé : rien de nouveau à générer.", route="cockpit")
+                        # route="dashboard" (2026-08-25, audit de nommage : la route
+                        # frontend interne "cockpit" a été renommée "dashboard" --
+                        # voir kora-vite/src/views/dashboard.js. Ce champ est stocké
+                        # tel quel en base (table notifications) et consommé par
+                        # navigate(n.route) côté frontend.
+                        notifications.create("info", "Cycle terminé : rien de nouveau à générer.", route="dashboard")
                 except Exception as _cyc:
                     import traceback as _tb
                     _tb.print_exc()
                     with _LAST_LOCK:
                         LAST_CYCLE["result"] = {"error": str(_cyc)}
                         LAST_CYCLE["ts"] = datetime.now().isoformat(timespec="seconds")
-                    notifications.create("cycle_error", f"Le cycle a échoué : {str(_cyc)[:200]}", route="cockpit")
+                    notifications.create("cycle_error", f"Le cycle a échoué : {str(_cyc)[:200]}", route="dashboard")
                 finally:
                     with _LAST_LOCK:
                         LAST_CYCLE["running"] = False
