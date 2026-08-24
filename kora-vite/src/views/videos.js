@@ -181,6 +181,7 @@ function viewVideos(s) {
           <div class="sub">
             ${v.created_at ? esc(new Date(v.created_at).toLocaleString("fr-FR")) : "Date inconnue"}
             ${v.status ? ` · ${statusBadge(v.status)}` : ""}
+            ${v.video_narration_mode === "duo_hh" || v.video_narration_mode === "duo_hf" ? ` · ${chip("Dialogue à deux voix", "secondary", "i-facts")}` : ""}
           </div>
           ${v.video_status === "generating" ? videoStageStepper(v.video_stage) : ""}
         </div>

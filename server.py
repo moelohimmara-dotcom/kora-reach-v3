@@ -917,8 +917,13 @@ class Handler(BaseHTTPRequestHandler):
             # /api/regenerate. Le correctif racine (json.loads protégé) reste
             # en place ; ce filet de sécurité couvre toute autre exception
             # imprévue de la même famille.
+            # narration_mode (2026-08-24, dialogue à deux voix) : 'solo'
+            # (défaut, inchangé) | 'duo_hf' | 'duo_hh'. Validation déléguée à
+            # l'orchestrateur (retombe sur 'solo' si valeur inconnue).
+            narration_mode = payload.get("narration_mode") or "solo"
             try:
-                res = video_orchestrator.start_video_generation(fid, on_complete=_release_video_lock_state)
+                res = video_orchestrator.start_video_generation(
+                    fid, on_complete=_release_video_lock_state, narration_mode=narration_mode)
             except Exception as _ve:
                 _release_video_lock_state()
                 import traceback as _tb

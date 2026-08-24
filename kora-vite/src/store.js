@@ -1205,11 +1205,11 @@ export const Store = (() => {
   // Vidéo narrée (2026-08-20, simplifiée 2026-08-21 : 1-3 min) : démarre en
   // arrière-plan côté serveur, jamais bloquant -- l'appelant (app.js) poll
   // ensuite getVideoStatus() à intervalle régulier jusqu'à done/error.
-  async function startVideoGeneration(fact_id) {
+  async function startVideoGeneration(fact_id, narration_mode) {
     const r = await api("/api/video/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fact_id }),
+      body: JSON.stringify({ fact_id, narration_mode: narration_mode || "solo" }),
     });
     // r.detail || r.error (2026-08-21) : privilégie le message clair côté
     // serveur (ex: "Une vidéo est déjà en cours...", "un cycle est en
@@ -1238,8 +1238,8 @@ export const Store = (() => {
   // Bandeau vidéo global (2026-08-21, demande explicite) : démarre le job ET
   // le sondage -- survit à la navigation/fermeture de la fiche d'origine,
   // contrairement à l'ancien sondage local scopé au DOM du sheet.
-  async function startVideoJob(fact_id, title) {
-    await startVideoGeneration(fact_id); // laisse l'appelant catcher l'échec de démarrage
+  async function startVideoJob(fact_id, title, narration_mode) {
+    await startVideoGeneration(fact_id, narration_mode); // laisse l'appelant catcher l'échec de démarrage
     setState({ videoJob: { fact_id, title: title || "", status: "generating", stage: null, error: null } });
     setTimeout(() => _pollVideoJob(fact_id), 8000);
   }
@@ -1251,7 +1251,7 @@ export const Store = (() => {
       _patchVideoEverywhere(fact_id, {
         video_status: st.video_status, video_stage: st.video_stage,
         video_path: st.video_path, video_duration_sec: st.video_duration_sec,
-        video_error: st.video_error,
+        video_error: st.video_error, video_narration_mode: st.video_narration_mode,
       });
       if (st.video_status === "generating") {
         setState({ videoJob: { ...state.videoJob, status: "generating", stage: st.video_stage } });

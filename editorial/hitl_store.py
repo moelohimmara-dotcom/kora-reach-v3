@@ -241,6 +241,29 @@ def _init_locked():
     finally:
         try: con.close()
         except Exception: pass
+    # Mode de narration vidéo (2026-08-24, demande explicite : narration à
+    # deux voix façon NotebookLM) -- 'solo' (un seul présentateur, défaut,
+    # comportement historique) | 'duo_hf' | 'duo_hh' (voir
+    # generation/narrate.py::_DIALOGUE_VOICE_MODES). Persisté pour que la
+    # page Vidéos/la fiche affiche le mode utilisé et que "Régénérer"
+    # réutilise le même choix par défaut. Idempotent, même motif que
+    # video_status ci-dessus.
+    try:
+        con, mode = db.conn()
+        cur = con.cursor()
+        if mode == "postgres":
+            cur.execute("ALTER TABLE hitl_facts ADD COLUMN IF NOT EXISTS video_narration_mode TEXT")
+        else:
+            try:
+                cur.execute("ALTER TABLE hitl_facts ADD COLUMN video_narration_mode TEXT")
+            except Exception:
+                pass
+        con.commit()
+    except Exception:
+        pass
+    finally:
+        try: con.close()
+        except Exception: pass
     # Traçabilité WordPress (2026-08-23, demande explicite du client : "un
     # article déjà publié/transféré ne doit plus pouvoir être ré-approuvé/
     # retransmis") -- jusqu'ici mark_transmitted() ne stockait AUCUN lien
@@ -445,6 +468,25 @@ def set_video_status(fact_id: str, status: str, path: str = None,
             f"video_duration_sec={ph}, video_error={ph}, video_stage={ph} WHERE fact_id={ph}",
             (status, path, duration_sec, error, stage, fact_id),
         )
+        con.commit()
+    except Exception:
+        pass
+    finally:
+        con.close()
+
+
+def set_video_narration_mode(fact_id: str, narration_mode: str) -> None:
+    """Enregistre le mode de narration ('solo' | 'duo_hf' | 'duo_hh')
+    utilisé pour la génération en cours (2026-08-24) -- appelé UNE FOIS au
+    lancement du job, séparé de set_video_status() pour ne pas alourdir sa
+    signature déjà utilisée à plusieurs endroits du pipeline. Fail-open,
+    même convention que set_video_status()."""
+    ph = _ph()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(f"UPDATE hitl_facts SET video_narration_mode={ph} WHERE fact_id={ph}",
+                    (narration_mode, fact_id))
         con.commit()
     except Exception:
         pass

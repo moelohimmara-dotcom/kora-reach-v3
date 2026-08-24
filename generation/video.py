@@ -148,7 +148,8 @@ def assemble_video(image_path: str, audio_path: str, out_path: str,
 
 def generate_video_for_article(title: str, article_text: str, image_url: str,
                                 out_dir: str, out_name: str, voice: str = None,
-                                fact_id: str = "", on_stage=None) -> dict:
+                                fact_id: str = "", on_stage=None,
+                                narration_mode: str = "solo") -> dict:
     """Pipeline complet : narration + telechargement de l'image de couverture
     DEJA CHOISIE pour l'article + assemblage. Retourne {ok, video_path,
     duration_sec, error}. Nettoie systematiquement les fichiers de travail
@@ -159,7 +160,14 @@ def generate_video_for_article(title: str, article_text: str, image_url: str,
     appele avec 'narration' | 'image' | 'assemblage' au debut de chaque
     etape -- ce module reste PUR (aucun acces DB, voir docstring en tete de
     fichier) : c'est l'appelant (orchestration/video.py) qui persiste la
-    progression via ce callback, jamais ce module directement."""
+    progression via ce callback, jamais ce module directement.
+
+    `narration_mode` (2026-08-24, narration a deux voix façon NotebookLM) :
+    'solo' (defaut, comportement historique -- un seul présentateur, voir
+    narrate.build_edito_script/narrate_to_file) | 'duo_hf' | 'duo_hh' (deux
+    voix qui dialoguent, voir narrate.build_dialogue_script/
+    narrate_dialogue_to_file). Un mode inconnu retombe sur 'solo' -- jamais
+    de blocage de la video pour une valeur mal formee venue de l'appelant."""
     def _stage(name):
         if on_stage:
             try:
@@ -171,16 +179,25 @@ def generate_video_for_article(title: str, article_text: str, image_url: str,
     work_dir = tempfile.mkdtemp(prefix="kora_video_work_")
     try:
         _stage("narration")
-        # Édito (2026-08-23, demande explicite : "sa lecture doit être vivante
-        # et réaliste, comme le ferait un lecteur humain. Il doit le faire sous
-        # forme d'édito") -- l'article ECRIT (titre markdown, chapô, corps,
-        # signature) n'est pas narré tel quel : voir
-        # generation/narrate.py::build_edito_script pour la transformation en
-        # script oral. Repli mécanique intégré à cette fonction (jamais de
-        # blocage de la vidéo si le LLM édito échoue).
-        edito_text = narrate.build_edito_script(title, article_text)
         audio_path = os.path.join(work_dir, "voix.mp3")
-        nres = narrate.narrate_to_file(edito_text, audio_path, voice=voice)
+        if narration_mode in ("duo_hf", "duo_hh"):
+            # Dialogue a deux voix (2026-08-24) : voir narrate.py pour le
+            # detail (script LLM en A/B avec vrai mecanisme question ->
+            # reponse -> rebond, balises d'emotion, correction phonetique
+            # des noms guinéens -- tout ça est géré en amont dans narrate.py,
+            # ce module n'a qu'à enchaîner script -> synthèse).
+            turns = narrate.build_dialogue_script(title, article_text)
+            nres = narrate.narrate_dialogue_to_file(turns, audio_path, mode=narration_mode)
+        else:
+            # Édito (2026-08-23, demande explicite : "sa lecture doit être
+            # vivante et réaliste, comme le ferait un lecteur humain. Il doit
+            # le faire sous forme d'édito") -- l'article ECRIT (titre
+            # markdown, chapô, corps, signature) n'est pas narré tel quel :
+            # voir generation/narrate.py::build_edito_script pour la
+            # transformation en script oral. Repli mécanique intégré à cette
+            # fonction (jamais de blocage de la vidéo si le LLM édito échoue).
+            edito_text = narrate.build_edito_script(title, article_text)
+            nres = narrate.narrate_to_file(edito_text, audio_path, voice=voice)
         if not nres["ok"]:
             return {"ok": False, "video_path": None, "duration_sec": None,
                     "error": f"narration: {nres['error']}"}

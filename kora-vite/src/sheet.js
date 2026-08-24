@@ -372,6 +372,7 @@ function videoSection(f, locked = false) {
   if (!status || status === "error") {
     if (locked) return "";
     return `<div class="video-section">
+      ${narrationModeSelect(f)}
       <button class="btn btn-tonal btn-block" id="videoGenBtn">${icon("i-spark")} Générer la vidéo narrée</button>
       ${status === "error" ? `<p class="muted" style="margin-top:6px">Échec précédent : ${esc(f.video_error || "erreur inconnue")}</p>` : ""}
     </div>`;
@@ -386,12 +387,36 @@ function videoSection(f, locked = false) {
     return `<div class="video-section">
       <video class="video-preview" src="/kora-v2/media/${esc(f.video_path)}" controls preload="metadata"></video>
       <div class="video-actions">
-        <span class="muted">${dur ? `Durée : ${dur}` : ""}</span>
+        <span class="muted">${dur ? `Durée : ${dur}` : ""}${dur ? " · " : ""}${esc(NARRATION_MODE_LABELS[f.video_narration_mode] || NARRATION_MODE_LABELS.solo)}</span>
         ${locked ? "" : `<button class="btn btn-ghost btn-sm" id="videoRegenBtn">${icon("i-refresh")} Régénérer la vidéo</button>`}
       </div>
+      ${locked ? "" : narrationModeSelect(f, /* forRegen */ true)}
     </div>`;
   }
   return "";
+}
+
+// Mode de narration (2026-08-24, dialogue à deux voix façon NotebookLM) --
+// 'solo' garde le comportement historique (un seul présentateur) par
+// défaut, les deux modes duo sont un choix explicite de l'utilisateur.
+// Libellés volontairement sans nom de personnalité réelle (même contrainte
+// que le code narrate.py -- voir DIALOGUE_ALLOWED_MARKERS).
+const NARRATION_MODE_LABELS = {
+  solo: "Présentateur unique",
+  duo_hf: "Duo (voix 1 + voix 2)",
+  duo_hh: "Duo (voix 1 + voix 2)",
+};
+
+function narrationModeSelect(f, forRegen = false) {
+  const current = f.video_narration_mode || "solo";
+  const id = forRegen ? "narrationModeRegen" : "narrationMode";
+  return `<label class="field-label" style="display:block;${forRegen ? "margin-top:10px" : "margin-bottom:8px"}">
+    <span class="sr-only">Mode de narration</span>
+    <select class="text-input" id="${id}">
+      <option value="solo" ${current === "solo" ? "selected" : ""}>🎙️ Présentateur unique</option>
+      <option value="duo_hh" ${current === "duo_hh" ? "selected" : ""}>🗣️ Dialogue à deux voix</option>
+    </select>
+  </label>`;
 }
 
 
@@ -685,14 +710,14 @@ function renderSheet(s) {
   // ---- Vidéo narrée (2026-08-20) : déclenchement + sondage du statut ----
   const videoGenBtn = body.querySelector("#videoGenBtn");
   const videoRegenBtn = body.querySelector("#videoRegenBtn");
-  const startVideoFlow = async (btn) => {
+  const startVideoFlow = async (btn, narrationMode) => {
     if (btn) { btn.disabled = true; btn.textContent = "Démarrage…"; }
     try {
       // Sondage désormais géré par le Store (Store.startVideoJob), pas ici --
       // il pilote le bandeau global #videoJobBanner et survit à la fermeture
       // de cette fiche (2026-08-21). Le rendu de la fiche se met à jour tout
       // seul via renderSheet() rappelé depuis render() à chaque tick du Store.
-      await Store.startVideoJob(f.fact_id, f.title || "");
+      await Store.startVideoJob(f.fact_id, f.title || "", narrationMode);
       f.video_status = "generating";
       renderSheet(s);
     } catch (e) {
@@ -700,10 +725,14 @@ function renderSheet(s) {
       renderSheet(s);
     }
   };
-  if (videoGenBtn) videoGenBtn.onclick = () => startVideoFlow(videoGenBtn);
+  if (videoGenBtn) videoGenBtn.onclick = () => {
+    const sel = body.querySelector("#narrationMode");
+    startVideoFlow(videoGenBtn, sel ? sel.value : "solo");
+  };
   if (videoRegenBtn) videoRegenBtn.onclick = () => {
     if (!window.confirm("Régénérer la vidéo va remplacer la vidéo actuelle (nouvelle narration, nouvelles images). Continuer ?")) return;
-    startVideoFlow(videoRegenBtn);
+    const sel = body.querySelector("#narrationModeRegen");
+    startVideoFlow(videoRegenBtn, sel ? sel.value : (f.video_narration_mode || "solo"));
   };
 }
 

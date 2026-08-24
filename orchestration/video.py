@@ -12,8 +12,13 @@ import json
 import threading
 
 import generation.video as gvideo
-from editorial.hitl_store import get_fact, set_video_status
+from editorial.hitl_store import get_fact, set_video_status, set_video_narration_mode
 import editorial.notifications as notifications
+
+# Modes de narration vidéo valides (2026-08-24, voir generation/narrate.py::
+# _DIALOGUE_VOICE_MODES) -- toute valeur hors de cet ensemble retombe sur
+# "solo", jamais de blocage pour une valeur mal formée venue du frontend.
+NARRATION_MODES = ("solo", "duo_hf", "duo_hh")
 
 # Racine du repo (voir commentaire equivalent dans editorial/audit.py,
 # identity/auth.py, core/db.py -- meme piege deja rencontre et evite lors
@@ -45,7 +50,7 @@ def _extract_article_text(row: dict) -> str:
 
 
 def _run_generation(fact_id: str, title: str, article_text: str, image_url: str,
-                     on_complete=None):
+                     on_complete=None, narration_mode: str = "solo"):
     """`on_complete` (2026-08-21, verrou d'exclusivite) : callable optionnel
     appele UNE FOIS a la toute fin (succes ou echec) -- utilise par server.py
     pour liberer le verrou video global des que ce thread se termine, sans
@@ -59,7 +64,7 @@ def _run_generation(fact_id: str, title: str, article_text: str, image_url: str,
         res = gvideo.generate_video_for_article(
             title=title, article_text=article_text, image_url=image_url,
             out_dir=VIDEO_OUT_DIR, out_name=out_name, fact_id=fact_id,
-            on_stage=_on_stage)
+            on_stage=_on_stage, narration_mode=narration_mode)
     except Exception as e:
         set_video_status(fact_id, "error", error=f"{type(e).__name__}: {e}")
         # Notification persistante (2026-08-22) : generation 1-3 min, souvent
@@ -83,11 +88,17 @@ def _run_generation(fact_id: str, title: str, article_text: str, image_url: str,
         except Exception: pass
 
 
-def start_video_generation(fact_id: str, on_complete=None) -> dict:
+def start_video_generation(fact_id: str, on_complete=None, narration_mode: str = "solo") -> dict:
     """Demarre la generation en arriere-plan. Retourne immediatement
     {ok, status} ou {ok: False, error}. Le statut reel se suit via
     editorial.hitl_store.get_fact(fact_id)['video_status']. `on_complete`
-    (2026-08-21) : voir _run_generation -- passe tel quel."""
+    (2026-08-21) : voir _run_generation -- passe tel quel.
+
+    `narration_mode` (2026-08-24) : 'solo' (défaut) | 'duo_hf' | 'duo_hh' --
+    toute valeur hors de NARRATION_MODES retombe silencieusement sur 'solo'
+    (jamais de blocage pour une valeur mal formée)."""
+    if narration_mode not in NARRATION_MODES:
+        narration_mode = "solo"
     try:
         row = get_fact(fact_id)
     except Exception as e:
@@ -117,8 +128,9 @@ def start_video_generation(fact_id: str, on_complete=None) -> dict:
     if not image_url:
         return {"ok": False, "error": "image_de_couverture_absente"}
     set_video_status(fact_id, "generating", stage="narration")
+    set_video_narration_mode(fact_id, narration_mode)
     t = threading.Thread(target=_run_generation,
-                           args=(fact_id, title, article_text, image_url, on_complete),
+                           args=(fact_id, title, article_text, image_url, on_complete, narration_mode),
                            daemon=False)
     t.start()
     return {"ok": True, "status": "generating"}
@@ -136,6 +148,7 @@ def video_status(fact_id: str) -> dict:
         "video_path": row.get("video_path"),
         "video_duration_sec": row.get("video_duration_sec"),
         "video_error": row.get("video_error"),
+        "video_narration_mode": row.get("video_narration_mode"),
     }
 
 
@@ -156,7 +169,8 @@ def list_videos() -> list:
         cur = con.cursor()
         cur.execute(
             """SELECT fact_id, champion, status, video_status, video_stage,
-                      video_path, video_duration_sec, video_error, created_at, image
+                      video_path, video_duration_sec, video_error, created_at, image,
+                      video_narration_mode
                FROM hitl_facts
                WHERE video_status IS NOT NULL
                ORDER BY created_at DESC""")
@@ -185,5 +199,6 @@ def list_videos() -> list:
             "video_duration_sec": d.get("video_duration_sec"),
             "video_error": d.get("video_error"),
             "created_at": d.get("created_at"),
+            "video_narration_mode": d.get("video_narration_mode"),
         })
     return out
