@@ -249,7 +249,11 @@ function guardClick(btn, run) {
 function snack(msg) {
   const sn = document.getElementById("snackbar");
   if (sn) {
-    sn.textContent = msg; sn.hidden = false;
+    // B4 (audit UX Sources, 2026-08-24) : hidden retiré AVANT de poser le
+    // texte -- un lecteur d'écran n'annonce fiablement une mutation
+    // aria-live que sur une région déjà présente/visible dans l'arbre
+    // d'accessibilité, pas sur l'insertion simultanée contenu+affichage.
+    sn.hidden = false; sn.textContent = msg;
     // Duree adaptee a la longueur du message (2026-08-20) : les 2.6s fixes
     // suffisent pour "Erreur : ..." mais pas pour un message explicatif
     // complet (ex. fin de cycle "rien de neuf", plusieurs phrases) --

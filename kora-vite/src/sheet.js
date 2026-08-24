@@ -13,6 +13,7 @@ import {
   imgSrc, guardClick, snack, friendlyActionError, transmissionMessage,
 } from "./utils.js";
 import { openWpChoiceForFact } from "./app.js";
+import { SOURCE_STATUS_FR } from "./views/sources.js";
 
 // Détail d'une source (wireframe 7.2, gouvernance ouverte à l'UI 2026-08-19) :
 // advanced peut activer/suspendre depuis cet écran, tracé en audit côté serveur.
@@ -35,7 +36,7 @@ function renderSourceDetail(s) {
       <div class="source-detail-badges">
         ${chip(e.category === "GN_NAT" ? "Nationale guinéenne" : esc(e.category), "primary")}
         ${e.guinea_filter ? chip("Filtre Guinée exigé", "warning", "i-shield") : ""}
-        ${chip(active ? "Active" : esc(e.status), active ? "tertiary" : "error")}
+        ${chip(active ? "Active" : (SOURCE_STATUS_FR[e.status] || esc(e.status)), active ? "tertiary" : "error")}
       </div>
       <div class="source-detail-field">
         <div class="source-detail-label">URL d'entrée</div>
@@ -102,15 +103,18 @@ function renderAddSourceSheet(s) {
       </div>
       <label class="form-field">
         <span>Nom éditorial</span>
-        <input type="text" id="asName" placeholder="Ex : Le Nouveau Média" />
+        <input type="text" id="asName" placeholder="Ex : Le Nouveau Média" aria-describedby="asNameErr" />
+        <span class="field-error" id="asNameErr" role="alert"></span>
       </label>
       <label class="form-field">
         <span>URL d'entrée</span>
-        <input type="text" id="asUrl" placeholder="https://exemple.com/" />
+        <input type="url" id="asUrl" placeholder="https://exemple.com/" aria-describedby="asUrlErr" />
+        <span class="field-error" id="asUrlErr" role="alert"></span>
       </label>
       <label class="form-field">
         <span>Domaines autorisés (séparés par une virgule)</span>
-        <input type="text" id="asDomains" placeholder="exemple.com, www.exemple.com" />
+        <input type="text" id="asDomains" placeholder="exemple.com, www.exemple.com" aria-describedby="asDomainsErr" />
+        <span class="field-error" id="asDomainsErr" role="alert"></span>
       </label>
       <div class="form-row">
         <label class="form-field">
@@ -132,14 +136,40 @@ function renderAddSourceSheet(s) {
   sheet.hidden = false; scrim.hidden = false;
   const cancelBtn = document.getElementById("asCancel");
   cancelBtn.onclick = () => Store.closeSheet();
+  // B5/F6 (audit UX Sources, 2026-08-24) : le champ URL n'avait AUCUNE
+  // validation de format, ni HTML (type="text" simple) ni JS (seul un test
+  // de présence) -- une chaîne arbitraire type "not-a-valid-url" aurait été
+  // enregistrée telle quelle en base sur une page qui gère justement les
+  // URLs de collecte. Erreur désormais rattachée au champ fautif (bordure
+  // rouge + texte, aria-describedby déjà posé sur l'input) plutôt qu'un
+  // seul toast générique listant 3 champs sans dire lequel.
+  const _fieldErr = (inputId, errId, msg) => {
+    const input = document.getElementById(inputId);
+    const errEl = document.getElementById(errId);
+    if (input) input.classList.toggle("invalid", !!msg);
+    if (errEl) errEl.textContent = msg || "";
+  };
   document.getElementById("asSubmit").onclick = async () => {
+    ["asName", "asUrl", "asDomains"].forEach(id => _fieldErr(id, id + "Err", ""));
     const name = document.getElementById("asName").value.trim();
     const entry_url = document.getElementById("asUrl").value.trim();
     const domains = document.getElementById("asDomains").value.split(",").map(d => d.trim()).filter(Boolean);
     const category = document.getElementById("asCategory").value;
     const vector_primary = document.getElementById("asVector").value;
     const guinee_filter = document.getElementById("asGuineeFilter").checked;
-    if (!name || !entry_url || !domains.length) { snack("Erreur : nom, URL et au moins un domaine sont requis."); return; }
+    let firstInvalid = null;
+    if (!name) { _fieldErr("asName", "asNameErr", "Le nom éditorial est requis"); firstInvalid = firstInvalid || "asName"; }
+    let urlOk = false;
+    if (!entry_url) { _fieldErr("asUrl", "asUrlErr", "L'URL d'entrée est requise"); firstInvalid = firstInvalid || "asUrl"; }
+    else {
+      try {
+        const parsed = new URL(entry_url);
+        urlOk = parsed.protocol === "http:" || parsed.protocol === "https:";
+      } catch (e) { urlOk = false; }
+      if (!urlOk) { _fieldErr("asUrl", "asUrlErr", "URL invalide (doit commencer par http:// ou https://)"); firstInvalid = firstInvalid || "asUrl"; }
+    }
+    if (!domains.length) { _fieldErr("asDomains", "asDomainsErr", "Au moins un domaine est requis"); firstInvalid = firstInvalid || "asDomains"; }
+    if (firstInvalid) { document.getElementById(firstInvalid).focus(); return; }
     const id = name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "").slice(0, 30) || ("source" + Date.now());
     try {
       await Store.addSource({ id, name, entry_url, allowed_domains: domains, category, vector_primary,

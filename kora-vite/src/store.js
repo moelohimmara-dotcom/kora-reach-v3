@@ -815,8 +815,38 @@ export const Store = (() => {
     }
   }
   function setRoute(r) { setState({ route: r }); }
-  function openSheet(s) { setState({ sheet: s }); }
-  function closeSheet() { setState({ sheet: null }); }
+  // F8 (audit UX Sources, 2026-08-24) : à la fermeture d'un panneau (Échap,
+  // clic sur l'overlay, bouton "Fermer"), le focus retombait sur <body>
+  // (ou un <svg> masqué) au lieu de revenir sur l'élément qui avait ouvert
+  // le panneau -- un utilisateur clavier devait retaper depuis le sommet
+  // du DOM pour retrouver sa place. Pattern standard WAI-ARIA APG pour les
+  // dialogues : le focus doit revenir au déclencheur. Générique à TOUS les
+  // types de panneau (détail article, détail/ajout de source, confirmation),
+  // pas seulement Sources -- variable de module (pas de re-render inutile).
+  // Une référence directe à l'élément ne suffit PAS : render() reconstruit
+  // tout le DOM de #view à chaque setState() (voir plus haut dans ce
+  // fichier), le nœud capturé est donc déjà détaché au moment de la
+  // fermeture -- besoin d'un SÉLECTEUR stable (id réel, sinon premier
+  // attribut data-*) pour re-cibler l'élément équivalent après reconstruction.
+  const _elementSelector = (el) => {
+    if (!el || el === document.body) return null;
+    if (el.id) return "#" + CSS.escape(el.id);
+    for (const attr of el.attributes || []) {
+      if (attr.name.startsWith("data-")) return `[${attr.name}="${CSS.escape(attr.value)}"]`;
+    }
+    return null;
+  };
+  let _sheetTriggerSelector = null;
+  function openSheet(s) {
+    _sheetTriggerSelector = _elementSelector(document.activeElement);
+    setState({ sheet: s });
+  }
+  function closeSheet() {
+    const sel = _sheetTriggerSelector;
+    setState({ sheet: null });
+    if (sel) { try { document.querySelector(sel)?.focus(); } catch (e) {} }
+    _sheetTriggerSelector = null;
+  }
 
   // Centre de notifications (10.2) : DÉLIBÉRÉMENT PAS dans le Store réactif.
   // Voir app.js (_notifications, addNotif) — un setState ici déclencherait un

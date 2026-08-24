@@ -203,7 +203,12 @@ export const SHELL = `
     <div id="sheetBody"></div>
   </div>
 
-  <div class="snackbar" id="snackbar" hidden></div>
+  <!-- B4 (audit UX Sources, 2026-08-24) : le toast n'était annoncé à
+       aucun lecteur d'écran (ni role, ni aria-live) -- un message
+       d'erreur de formulaire par exemple passait totalement inaperçu.
+       role="status" + aria-live="polite" : correctif global, bénéficie
+       à tous les appels snack() de l'app, pas seulement Sources. -->
+  <div class="snackbar" id="snackbar" role="status" aria-live="polite" hidden></div>
   <!-- Écran plein écran "cycle en cours" (wireframe 3.3 étendu) : animation
        centrée + messages chaleureux personnifiés, fermable vers le bandeau
        compact #cycleBanner sans interrompre le cycle en arrière-plan. -->
