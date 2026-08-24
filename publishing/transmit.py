@@ -57,7 +57,7 @@ WP_CATEGORY_MAP = {
 WP_FALLBACK_MAP = {"À la une": 41, "Alertes": 48}
 # Règle sémantique généralisable (2026-08-24, incident : 10 articles distincts
 # sur le même éboulement de Dar-es-Salam, jamais fusionnés à cause d'un bug de
-# clustering -- voir collection/clusterer.py -- resté chacun dans sa catégorie
+# regroupement en dossiers -- voir collection/dossiers.py -- resté chacun dans sa catégorie
 # thématique habituelle "Société"/"Justice"/etc. au lieu d'être mis en avant).
 # Contrairement à _fallback_category() ci-dessous (qui ne joue QUE si aucun
 # thème ne correspond), cette règle-ci PRIME sur le thème choisi : un fait
@@ -68,7 +68,7 @@ WP_FALLBACK_MAP = {"À la une": 41, "Alertes": 48}
 # _fallback_category (n_sources>=2, qui ne sert qu'à trancher entre deux
 # catégories de repli quand RIEN d'autre n'a matché) : ici on écrase un choix
 # thématique déjà valide, ça doit rester rare et net. Déterministe, basé sur
-# n_sources (signal réel déjà calculé par la fusion de cluster), jamais laissé
+# n_sources (signal réel déjà calculé par la fusion de dossier), jamais laissé
 # à l'appréciation floue d'un LLM sur ce qui est "important" -- même
 # philosophie que _fallback_category. S'applique à N'IMPORTE QUEL sujet futur,
 # pas seulement celui de l'incident qui l'a motivée.
@@ -81,7 +81,7 @@ def _is_major_story(n_sources) -> bool:
     except (TypeError, ValueError):
         return False
 # Règle algo du repli (2026-08-23) : hors-cadre thématique, un fait corroboré
-# par PLUSIEURS sources (n_sources >= 2, signal déjà calculé par le cluster
+# par PLUSIEURS sources (n_sources >= 2, signal déjà calculé par le dossier
 # de fusion -- voir collection/whitelist.py et le pipeline de génération)
 # est objectivement plus susceptible d'être un sujet majeur qui dépasse une
 # seule catégorie -> "À la une". Un fait à source UNIQUE, hors thème, est
@@ -193,7 +193,7 @@ def _fallback_category(n_sources) -> str:
     """Repli hors-cadre (2026-08-23) -- voir commentaire de WP_FALLBACK_MAP :
     règle algo DÉTERMINISTE (jamais laissée à un LLM, pour rester
     explicable et reproductible), basée sur un signal RÉEL déjà présent
-    dans le pipeline (n_sources, calculé par la fusion de cluster) plutôt
+    dans le pipeline (n_sources, calculé par la fusion de dossier) plutôt
     que deviné. >= 2 sources corroborantes -> sujet objectivement plus
     susceptible d'être majeur -> "À la une" ; source unique -> "Alertes"."""
     try:
@@ -316,7 +316,7 @@ def _build_payload(fact: dict, final_text: str) -> dict:
         "n_sources": fact.get("n_sources", 1),
         "generated_model": fact.get("gen_model", ""),
         # provider de l'image (2026-08-21) : "source" = vraie photo d'une des
-        # sources du cluster, "loremflickr"/"picsum" = photo stock de repli --
+        # sources du dossier, "loremflickr"/"picsum" = photo stock de repli --
         # utilise pour la legende WP (jamais "IA" desormais, voir _upload_media).
         "image_provider": (fact.get("image_meta", {}) or {}).get("provider", ""),
         # Nom de la source réelle de l'image (2026-08-23, demande explicite :

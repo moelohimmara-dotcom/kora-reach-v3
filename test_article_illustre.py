@@ -1,4 +1,4 @@
-"""test_article_illustre.py — test bout en bout : collecte réelle -> clustering ->
+"""test_article_illustre.py — test bout en bout : collecte réelle -> regroupement en dossiers ->
 génération d'un article de synthèse ILLUSTRÉ (image du champion).
 Le 'writer' ici est un template (le LLM writer KORA serait branché ensuite).
 Prouve que Reach livre un article prêt à publier AVEC son image."""
@@ -21,7 +21,7 @@ res = agent.run(scope_filter="GN_NAT", demand=3)
 assert res.get("status") == "ok", res
 facts = res["facts"]
 print(f"✅ Cycle OK | sources_ok={res['sources_ok']} items={res['total_items']} "
-      f"clusters={res['clusters']} faits={res['facts_to_generate']}\n")
+      f"dossiers={res['dossiers']} faits={res['facts_to_generate']}\n")
 
 # Génère le 1er article de synthèse illustré
 f = facts[0]

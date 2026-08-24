@@ -2,7 +2,7 @@
 """test_smoke_illustrate.py — verrouille la nouvelle regle de selection
 d'image de couverture (2026-08-21, demande explicite : refleter la realite
 plutot que fabriquer -- retrait complet de FAL/Pollinations) : priorite
-absolue a une image REELLE issue d'une des sources du cluster (champion,
+absolue a une image REELLE issue d'une des sources du dossier (champion,
 puis contextes par fiabilite), repli sur une photo stock (LoremFlickr/
 Picsum) UNIQUEMENT si aucune source n'a d'image. Verifie aussi qu'AUCUN
 appel reseau n'est tente quand une image reelle existe deja (preuve que
@@ -52,22 +52,22 @@ def main():
     if img3 != champ3["image"]:
         failed.append(f"source unique avec image aurait du etre choisie, obtenu : {img3!r}")
     else:
-        print("OK   cluster a une seule source : son image est choisie (cas degenere de la regle)")
+        print("OK   dossier a une seule source : son image est choisie (cas degenere de la regle)")
 
-    # ---- 4. Aucune source du cluster n'a d'image -> "" (pas de candidat reel) ----
+    # ---- 4. Aucune source du dossier n'a d'image -> "" (pas de candidat reel) ----
     champ4 = {"title": "T", "image": ""}
     ctx4 = [{"image": ""}, {"image": ""}]
     img4 = illustrate.select_source_image(champ4, ctx4)
     if img4 != "":
-        failed.append(f"aucune image dans le cluster aurait du renvoyer '', obtenu : {img4!r}")
+        failed.append(f"aucune image dans le dossier aurait du renvoyer '', obtenu : {img4!r}")
     else:
-        print("OK   aucune image dans le cluster -> select_source_image renvoie '' (pas de faux positif)")
+        print("OK   aucune image dans le dossier -> select_source_image renvoie '' (pas de faux positif)")
 
     # ---- 5. AUCUN appel reseau quand une image reelle existe (preuve du
     # retrait de Pollinations) : on fait planter _call_loremflickr si jamais
     # invoque -- illustrate() ne doit JAMAIS l'atteindre dans ce cas. ----
     def _boom(*a, **k):
-        raise AssertionError("_call_loremflickr appele alors qu'une image reelle du cluster existait")
+        raise AssertionError("_call_loremflickr appele alors qu'une image reelle du dossier existait")
     _orig_lf = illustrate._call_loremflickr
     illustrate._call_loremflickr = _boom
     try:
@@ -81,7 +81,7 @@ def main():
     finally:
         illustrate._call_loremflickr = _orig_lf
 
-    # ---- 6. Aucune image dans le cluster -> repli LoremFlickr (mocke, pas de reseau) ----
+    # ---- 6. Aucune image dans le dossier -> repli LoremFlickr (mocke, pas de reseau) ----
     illustrate._call_loremflickr = lambda title, salt="", lock_override=None: ("https://loremflickr.example/mock.jpg", "loremflickr")
     try:
         res6 = illustrate.illustrate(champ4, ctx4, "Sujet")

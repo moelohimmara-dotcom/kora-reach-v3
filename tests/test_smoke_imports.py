@@ -53,7 +53,7 @@ MODULES = [
     "identity.totp", "identity.permissions", "identity.auth", "identity.root_auth",
     "editorial.audit", "editorial.state_store", "editorial.hitl_store",
     "collection.normalizer", "collection.guinea_filter", "collection.dedup",
-    "collection.clusterer", "collection.guardrails", "collection.fetchers",
+    "collection.dossiers", "collection.guardrails", "collection.fetchers",
     "collection.alt_sources", "collection.whitelist",
     "generation.agent_prompts", "generation.illustrate", "generation.writer",
     "generation.narrate", "generation.video",

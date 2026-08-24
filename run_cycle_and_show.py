@@ -11,7 +11,7 @@ print("Déclenchement cycle INTL (demand=3)...")
 res = post("/api/cycle", {"scope":"INTL","demand":3,"initiator":"demo"})
 print("STATUS:", res.get("status"))
 print("sources_ok=",res.get("sources_ok"),"items=",res.get("total_items"),
-      "rejected_intl=",res.get("rejected_intl"),"clusters=",res.get("clusters"),
+      "rejected_intl=",res.get("rejected_intl"),"dossiers=",res.get("dossiers"),
       "facts=",res.get("facts_to_generate"))
 if res.get("facts"):
     for i,f in enumerate(res["facts"][:3]):

@@ -1,4 +1,8 @@
-"""clusterer.py — fingerprint + clustering par sujet (sans LLM).
+"""dossiers.py — fingerprint + regroupement en dossiers par sujet (sans LLM).
+Anciennement clusterer.py (renommé 2026-08-26, audit de nommage métier
+Temps 2 : "cluster" est du jargon algorithmique générique, sans rapport
+avec le métier éditorial -- un "dossier" est le regroupement de plusieurs
+sources qui parlent du même fait, terme déjà utilisé côté rédaction).
 
 Refonte 2026-08-19 (diagnostic P0 §1) : l'ancienne version comparait des
 ensembles d'entités tronqués arbitrairement aux 5 premiers (ordre alphabétique
@@ -91,28 +95,28 @@ def _sim(es: set, c_union: set) -> float:
 def _key_of(it: dict) -> str:
     return it["title"] + " " + it.get("raw_content", "")[:300]
 
-def cluster(items: list, thr: float = 0.35) -> list:
-    """Regroupe les items par ENTITÉS communes (même fait). 1 fait = 1 cluster.
+def regrouper_dossiers(items: list, thr: float = 0.35) -> list:
+    """Regroupe les items par ENTITÉS communes (même fait). 1 fait = 1 dossier.
     Compare le nouvel item contre l'UNION des entités de TOUS les membres du
-    cluster (pas seulement le premier), avec un vrai Jaccard (intersection sur
+    dossier (pas seulement le premier), avec un vrai Jaccard (intersection sur
     union) et un plancher absolu d'entités partagées (voir _MIN_SHARED_ENTITIES).
     Seuil par défaut abaissé (0.5 -> 0.35) car un Jaccard sur union est
     structurellement plus strict qu'un Jaccard sur min (l'ancien calcul)."""
-    clusters = []       # list[list[item]]
-    cluster_ents = []   # union d'entités courante, parallèle à `clusters`
+    dossiers = []        # list[list[item]]
+    dossier_ents = []    # union d'entités courante, parallèle à `dossiers`
     for it in items:
         es = _entities(_key_of(it))
         placed = False
-        for idx, c_union in enumerate(cluster_ents):
+        for idx, c_union in enumerate(dossier_ents):
             if _sim(es, c_union) >= thr:
-                clusters[idx].append(it)
-                cluster_ents[idx] = c_union | es
+                dossiers[idx].append(it)
+                dossier_ents[idx] = c_union | es
                 placed = True
                 break
         if not placed:
-            clusters.append([it])
-            cluster_ents.append(es)
-    return clusters
+            dossiers.append([it])
+            dossier_ents.append(es)
+    return dossiers
 
 def score_item(it: dict) -> float:
     """Pertinence : +source_level, +richesse, +factuel, +fraîcheur."""
@@ -126,7 +130,7 @@ def score_item(it: dict) -> float:
         s += 0.5  # dates
     return s
 
-def pick_champion(cluster: list) -> tuple:
-    """Retourne (champion, contextes) pour un cluster."""
-    ranked = sorted(cluster, key=score_item, reverse=True)
+def pick_champion(dossier: list) -> tuple:
+    """Retourne (champion, contextes) pour un dossier."""
+    ranked = sorted(dossier, key=score_item, reverse=True)
     return ranked[0], ranked[1:]

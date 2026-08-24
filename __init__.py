@@ -9,7 +9,7 @@ Modules:
   fetchers.py        -> RSS (feedparser) + HTML (trafilatura)
   normalizer.py      -> schéma commun
   dedup.py           -> hash url + similarité titre
-  clusterer.py       -> fingerprint + clustering par sujet (sans LLM)
+  dossiers.py        -> fingerprint + regroupement en dossiers par sujet (sans LLM)
   state_store.py     -> mémoire SQLite locale (persistance)
   reach_agent.py     -> orchestrateur (le cerveau Reach)
   run.py             -> CLI: déclenche un cycle à la demande

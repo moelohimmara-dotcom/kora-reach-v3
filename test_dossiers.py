@@ -1,9 +1,9 @@
-"""test_clustering.py — prouve la fusion multi-sources sur un même fait.
+"""test_dossiers.py — prouve la fusion multi-sources sur un même fait.
 Simule 3 'articles' de 3 médias guinéens parlant du MÊME fait (match Guinée-Mali)
-avec rédactions différentes, comme en réalité. Vérifie que Reach les clusterise
-en 1 fait + sélectionne le champion le plus parlant.
+avec rédactions différentes, comme en réalité. Vérifie que Reach les regroupe
+en 1 dossier/fait + sélectionne le champion le plus parlant.
 """
-from collection.clusterer import cluster, pick_champion, score_item
+from collection.dossiers import regrouper_dossiers, pick_champion, score_item
 
 items = [
     {"title": "Guinée bat Mali 2-1 en match amical à Conakry",
@@ -24,13 +24,13 @@ items = [
      "source_level": 1, "source": "Mosaique"},
 ]
 
-clusters = cluster(items)  # seuil par defaut (0.35, Jaccard reel — voir clusterer.py)
-assert len(clusters) == 2, f"ERREUR: {len(clusters)} clusters (attendu 2)"
-c = clusters[0]
-assert len(c) == 3, f"ERREUR: le fait match n'a fusionné que {len(c)} sources"
-champ, ctx = pick_champion(c)
+dossiers = regrouper_dossiers(items)  # seuil par defaut (0.35, Jaccard reel — voir collection/dossiers.py)
+assert len(dossiers) == 2, f"ERREUR: {len(dossiers)} dossiers (attendu 2)"
+d = dossiers[0]
+assert len(d) == 3, f"ERREUR: le fait match n'a fusionné que {len(d)} sources"
+champ, ctx = pick_champion(d)
 assert len(ctx) == 2
 print("✅ TEST OK")
-print(f"  - 3 sources même fait (match Guinée-Mali) → 1 cluster (fusion)")
+print(f"  - 3 sources même fait (match Guinée-Mali) → 1 dossier (fusion)")
 print(f"  - Champion: {champ['source']} | Contextes: {[x['source'] for x in ctx]}")
-print(f"  - Fait économie BCRG → cluster séparé (non fusionné)")
+print(f"  - Fait économie BCRG → dossier séparé (non fusionné)")

@@ -41,7 +41,7 @@ try:
     res = json.loads(b)
     print("CYCLE:", res.get("status"), "| src_ok=",res.get("sources_ok"),
           "| items=",res.get("total_items"), "| rej=",res.get("rejected_intl"),
-          "| clusters=",res.get("clusters"), "| facts=",res.get("facts_to_generate"))
+          "| dossiers=",res.get("dossiers"), "| facts=",res.get("facts_to_generate"))
     if res.get("facts"):
         f0=res["facts"][0]
         print("  FACT0:", f0["champion"]["source"], "::", f0["champion"]["title"][:45],

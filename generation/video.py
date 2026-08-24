@@ -1,5 +1,5 @@
 """video.py — assemble une video "article narre" pour un article : image(s)
-de couverture REELLE(S) issues des sources du cluster (voir
+de couverture REELLE(S) issues des sources du dossier (voir
 generation/illustrate.py, plus aucune generation IA depuis le 2026-08-21) +
 narration audio (narrate.py), montees via ffmpeg (deja installe sur le
 serveur -- verifie avant integration, voir tests/test_smoke_ffmpeg.py).
@@ -12,13 +12,13 @@ seul appel ffmpeg.
 
 Pipeline MULTI-images (2026-08-24, demande explicite : "est-ce qu'il y a
 une possibilite d'utiliser plusieurs images dans la video ? plusieurs
-successions d'images, mais avec des effets de zoom") : quand le cluster
+successions d'images, mais avec des effets de zoom") : quand le dossier
 fournit AU MOINS 2 images reelles distinctes (voir
 illustrate._candidate_images -- champion + contextes, jamais d'IA), chaque
 image devient un clip avec son propre zoom Ken Burns (duree = duree_audio /
 nb_images), enchaines par des transitions en fondu (xfade). Repli AUTOMATIQUE
 sur le pipeline mono-image des qu'il y a moins de 2 images reelles
-telechargeables -- jamais de blocage de la video pour un cluster pauvre en
+telechargeables -- jamais de blocage de la video pour un dossier pauvre en
 images. Technique reprise de l'ancien diaporama Pollinations (retire le
 2026-08-21 -- UNIQUEMENT pour la provenance IA des images, voir commit
 054f121, jamais pour un defaut du mecanisme xfade lui-meme, qui reste
@@ -55,7 +55,7 @@ ZOOM_MAX = 1.15
 ZOOM_STEP = 0.0008
 # Multi-images (2026-08-24) : nombre max de photos distinctes utilisees dans
 # un meme montage -- au-dela, chaque segment devient trop court pour que le
-# zoom Ken Burns soit perceptible (voir MIN_SEGMENT_SEC), et un cluster de
+# zoom Ken Burns soit perceptible (voir MIN_SEGMENT_SEC), et un dossier de
 # breaking news genere rarement plus de 4-5 photos vraiment distinctes de
 # toute facon. MIN_IMAGES_FOR_MULTI = 2 : en dessous, retombe sur le
 # pipeline mono-image (une seule vraie photo ne justifie pas un montage).
@@ -94,7 +94,7 @@ def _fetch_image_to(image_url: str, path: str) -> bool:
 
 def fetch_cover_image(image_url: str, out_dir: str) -> str:
     """Telecharge l'image de couverture DEJA CHOISIE pour l'article (voir
-    generation/illustrate.py -- image reelle d'une source du cluster, ou
+    generation/illustrate.py -- image reelle d'une source du dossier, ou
     repli photo stock) vers un fichier local (ffmpeg a besoin d'un fichier
     sur disque). Retourne le chemin local, ou "" en cas d'echec."""
     if not image_url:
@@ -107,7 +107,7 @@ def fetch_cover_image(image_url: str, out_dir: str) -> str:
 def fetch_images(image_urls: list, out_dir: str, limit: int = MAX_MULTI_IMAGES) -> list:
     """Telecharge JUSQU'A `limit` images REELLES distinctes (2026-08-24,
     montage multi-images) -- `image_urls` est deja l'ordre de preference du
-    cluster (champion puis contextes par fiabilite, voir
+    dossier (champion puis contextes par fiabilite, voir
     illustrate._candidate_images), donc on s'arrete des qu'on a assez
     d'images telechargeables plutot que de toutes les essayer. Une image
     dont le telechargement echoue est simplement IGNOREE (pas de blocage) --
@@ -258,7 +258,7 @@ def assemble_video_multi(image_paths: list, audio_path: str, out_path: str,
             # Alterne zoom avant/arriere PAR IMAGE (pas seulement par fait --
             # 2026-08-24, demande explicite "avec des effets de zoom") pour
             # que le montage varie visuellement d'un clip a l'autre, tout en
-            # restant deterministe (meme cluster -> meme sequence de zooms).
+            # restant deterministe (meme dossier -> meme sequence de zooms).
             direction = _zoom_direction(f"{fact_id}_{i}", f"{title}_{i}")
             if direction == "out":
                 z_expr = f"if(eq(on,0),{ZOOM_MAX},max(zoom-{ZOOM_STEP},{ZOOM_MIN}))"
@@ -357,7 +357,7 @@ def generate_video_for_article(title: str, article_text: str, image_url: str,
     utilise assemble_video_multi() (zoom + transitions entre plusieurs
     photos) ; sinon (liste absente, vide, ou un seul telechargement reussi)
     retombe SANS accroc sur le pipeline mono-image historique via
-    `image_url` seul -- jamais de blocage pour un cluster pauvre en images."""
+    `image_url` seul -- jamais de blocage pour un dossier pauvre en images."""
     def _stage(name):
         if on_stage:
             try:
@@ -394,7 +394,7 @@ def generate_video_for_article(title: str, article_text: str, image_url: str,
 
         _stage("image")
         # Multi-images (2026-08-24) : tente d'abord les candidats reels du
-        # cluster si fournis. `image_urls` porte deja `image_url` comme
+        # dossier si fournis. `image_urls` porte deja `image_url` comme
         # premier element cote appelant (orchestration/video.py) -- ne PAS
         # re-telecharger `image_url` separement si la liste suffit.
         multi_image_paths = []

@@ -287,7 +287,7 @@ def _template_article(fact: Dict) -> str:
 
 def _illustrate_fact(fact: Dict) -> Dict:
     """Choisit l'image de couverture (2026-08-21 : image réelle d'une source
-    du cluster en priorité, plus aucune génération IA -- voir generation/
+    du dossier en priorité, plus aucune génération IA -- voir generation/
     illustrate.py). Retourne dict image/métadonnées."""
     champ = fact.get("champion", {}) or {}
     contexts = fact.get("contexts", []) or []

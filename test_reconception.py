@@ -1,6 +1,6 @@
 """test_reconception.py — prouve le flux reconçu sur items factices <24h.
 Pas de collecte réseau : on injecte des documents normalisés récents pour
-valider fenêtre glissante + filtre Guinée + cluster + writer + audit.
+valider fenêtre glissante + filtre Guinée + regroupement en dossiers + writer + audit.
 """
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -9,7 +9,7 @@ import collection.whitelist as wl
 from collection.normalizer import normalize, TZ
 from collection.guinea_filter import filter_guinea
 from collection.dedup import url_hash, is_dup
-from collection.clusterer import cluster, pick_champion
+from collection.dossiers import regrouper_dossiers, pick_champion
 from generation.writer import write_article
 from editorial.audit import log, get_events
 import os
@@ -46,7 +46,7 @@ assert g_ok is True, f"Filtre Guinée a échoué: {mot2}"
 pool = [d for d in docs if d["actual"]]
 assert len(pool) == 4, f"Fenêtre 24h: attendu 4 actual, eu {len(pool)}"
 
-# Dedup + cluster
+# Dedup + regroupement en dossiers
 seen_u, seen_t = set(), []
 uniq = []
 for d in pool:
@@ -54,17 +54,17 @@ for d in pool:
         continue
     seen_u.add(url_hash(d["url"])); seen_t.append(d["title"]); uniq.append(d)
 
-clusters = cluster(uniq, config.LIMITS["cluster_sim_threshold"])
-assert len(clusters) == 2, f"Attendu 2 clusters (1 fusion + 1 Bissau), eu {len(clusters)}"
+dossiers = regrouper_dossiers(uniq, config.LIMITS["dossier_sim_threshold"])
+assert len(dossiers) == 2, f"Attendu 2 dossiers (1 fusion + 1 Bissau), eu {len(dossiers)}"
 
-# Le plus gros cluster = fusion attendue
-big = max(clusters, key=len)
+# Le plus gros dossier = fusion attendue
+big = max(dossiers, key=len)
 assert len(big) == 3, f"Fusion 3->1 attendue, eu {len(big)} membres"
 champ, ctx = pick_champion(big)
 assert len(ctx) >= 1, "Champion doit avoir >=1 contexte (fusion)"
 
 # Writer
-fact = {"champion": champ, "contexts": ctx, "n_sources": len(clusters[0])}
+fact = {"champion": champ, "contexts": ctx, "n_sources": len(dossiers[0])}
 written = write_article(fact)
 assert written["article"], "Article vide"
 
@@ -76,7 +76,7 @@ assert any(e["event"] == "FACT_GEN" for e in events), "Audit manquant"
 print("✅ RECONCEPTION OK")
 print(f"  - Fenêtre 24h: 4 actual / 4 items")
 print(f"  - Filtre Guinée: accepté | Bissau: rejeté ({mot})")
-print(f"  - Clustering: {len(clusters)} clusters (fusion 3->1 prouvée)")
+print(f"  - Regroupement: {len(dossiers)} dossiers (fusion 3->1 prouvée)")
 print(f"  - Champion: {champ['source']} + {len(ctx)} contexte(s)")
 print(f"  - Writer: {written['model']} | article {len(written['article'])} car.")
 print(f"  - Audit: {len(events)} événement(s) tracé(s)")

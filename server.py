@@ -793,7 +793,7 @@ class Handler(BaseHTTPRequestHandler):
             # des faits FRAIS et uniques collectes lors du cycle, pas un seul.
             # demand optionnel (payload) permet de plafonner explicitement une
             # demande ciblee ; sinon reach_agent applique le garde-fou quotidien
-            # (config.LIMITS["daily_article_limit"]) sur le nombre de clusters.
+            # (config.LIMITS["daily_article_limit"]) sur le nombre de dossiers.
             demand = payload.get("demand")
             initiator = payload.get("initiator", "dashboard")
             # Détache le cycle en arrière-plan (il peut durer 1-2 min en prod)

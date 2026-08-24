@@ -328,7 +328,10 @@ function auditSub(ev) {
   const st = pairs.status || pairs.decision;
   if (st) parts.push("statut : " + (statusFr[st.toUpperCase()] || st));
   if (pairs.facts) parts.push(pairs.facts + " fait(s)");
-  if (pairs.clusters) parts.push(pairs.clusters + " groupe(s)");
+  // pairs.dossiers (2026-08-26, audit de nommage Temps 2 : anciennement
+  // "clusters") -- lu depuis la ligne de log CYCLE_END ("dossiers=N"),
+  // voir orchestration/reach_agent.py.
+  if (pairs.dossiers) parts.push(pairs.dossiers + " groupe(s)");
   // B3 (audit UX Cockpit, 2026-08-24) : "fact=fact_4aaf7583d126602d" ne
   // matchait aucune clé reconnue ci-dessus et tombait tel quel (ID interne
   // complet) dans le fallback brut plus bas. Repli court, lisible.

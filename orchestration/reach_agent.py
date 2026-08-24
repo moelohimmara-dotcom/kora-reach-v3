@@ -3,7 +3,7 @@
 Cycle on-demand (mutex) :
   whitelist versionnee -> collecte (redirections bloquees) -> normalisation
   (fenetre glissante 24h, anomalie date) -> filtre Guinee INTL -> dedup ->
-  clustering Jaccard 0.5 -> champion -> writer LLM -> audit -> rapport.
+  regroupement en dossiers (Jaccard 0.5) -> champion -> writer LLM -> audit -> rapport.
 Toute defaillance source/LLM = isolee (jamais crash global).
 """
 from datetime import datetime, timezone, timedelta
@@ -15,7 +15,7 @@ from collection.fetchers import fetch_source
 from collection.normalizer import normalize, TZ, _parse_date
 from collection.guinea_filter import filter_guinea
 from collection.dedup import url_hash, is_dup
-from collection.clusterer import cluster, pick_champion, score_item
+from collection.dossiers import regrouper_dossiers, pick_champion, score_item
 from editorial.state_store import (seen, mark, new_cycle, end_cycle, init as _init_state,
                           get_avg_article_seconds, record_article_seconds)
 from generation.writer import write_article, llm_circuit_status, angle_directive
@@ -479,27 +479,28 @@ class ReachAgent:
                         "rejected_intl": rejected_intl, "date_anomalies": anomalies,
                         "skipped_dup": skipped, "facts": []}
 
-            clusters = cluster(uniq, config.LIMITS["cluster_sim_threshold"])
+            dossiers = regrouper_dossiers(uniq, config.LIMITS["dossier_sim_threshold"])
 
-            # Garde-fou defensif : cluster() ne peut structurellement pas renvoyer
-            # 0 cluster pour une liste uniq non vide (tout item non place demarre
-            # son propre cluster) -> filet de securite pour ne jamais perdre un item.
-            if not clusters and uniq:
-                clusters = [[it] for it in uniq]
+            # Garde-fou defensif : regrouper_dossiers() ne peut structurellement pas
+            # renvoyer 0 dossier pour une liste uniq non vide (tout item non place
+            # demarre son propre dossier) -> filet de securite pour ne jamais perdre
+            # un item.
+            if not dossiers and uniq:
+                dossiers = [[it] for it in uniq]
                 log(cid, "FALLBACK_SINGLETONS",
-                    f"clustering n'a produit aucun groupe -> {len(uniq)} clusters singleton")
+                    f"regroupement n'a produit aucun dossier -> {len(uniq)} dossiers singleton")
 
             # REGLE METIER (LOGIQUE-METIER-REACH.md §7, retablie 2026-08-19) :
             # Kora Agent genere TOUS les articles issus des faits FRAIS et
-            # uniques collectes lors du cycle (un cluster = un fait = un
+            # uniques collectes lors du cycle (un dossier = un fait = un
             # article), meme si cela prend du temps. N = min(demande explicite,
-            # nb clusters disponibles, garde-fou quotidien). Les clusters les
+            # nb dossiers disponibles, garde-fou quotidien). Les dossiers les
             # plus pertinents (score du champion) sont generes en premier, afin
             # qu'une interruption utilisateur laisse toujours les faits les plus
             # importants deja traites.
-            clusters.sort(key=lambda c: max(score_item(i) for i in c), reverse=True)
+            dossiers.sort(key=lambda d: max(score_item(i) for i in d), reverse=True)
             safety_cap = config.LIMITS.get("daily_article_limit", 10)
-            limit = min(demand, len(clusters), safety_cap) if demand else min(len(clusters), safety_cap)
+            limit = min(demand, len(dossiers), safety_cap) if demand else min(len(dossiers), safety_cap)
             _reset_progress(cid=cid, total=limit)
             _update_progress_eta()  # estimation initiale (moyenne historique) avant le 1er article
 
@@ -514,16 +515,16 @@ class ReachAgent:
             # facts, dedup mark(), logs) restent faites par le thread
             # PRINCIPAL au fur et a mesure que les resultats arrivent
             # (as_completed), donc sans besoin de lock supplementaire.
-            def _gen_one(c):
+            def _gen_one(dossier):
                 if CANCEL_FLAG["requested"]:
                     return {"status": "cancelled"}, None, None, 0.0
-                champ, ctx = pick_champion(c)
+                champ, ctx = pick_champion(dossier)
                 # Par fact, pas globalement au cycle : seul un item réellement
                 # bypassé (STALE, jamais présent hors "Forcer") doit porter le
                 # tag "Hors fenêtre 48h" -- un cycle forcé peut très bien
                 # mélanger des faits frais normaux et des faits bypassés.
                 fact_forced_stale = champ.get("date_status") == "STALE"
-                fact = {"champion": champ, "contexts": ctx, "n_sources": len(c), "forced_stale": fact_forced_stale, "cycle_id": cid}
+                fact = {"champion": champ, "contexts": ctx, "n_sources": len(dossier), "forced_stale": fact_forced_stale, "cycle_id": cid}
                 _t0 = datetime.now(TZ).timestamp()
                 # Bug corrige 2026-08-19 (rapporte : "Interrompre" restait
                 # sans effet plusieurs minutes) : should_cancel est revérifié
@@ -539,9 +540,9 @@ class ReachAgent:
             facts_by_idx = {}
             cancel_logged = False
             with ThreadPoolExecutor(max_workers=concurrency) as gen_ex:
-                gen_futs = {gen_ex.submit(_gen_one, c): (idx, c) for idx, c in enumerate(clusters[:limit])}
+                gen_futs = {gen_ex.submit(_gen_one, dossier): (idx, dossier) for idx, dossier in enumerate(dossiers[:limit])}
                 for fut in as_completed(gen_futs):
-                    idx, c = gen_futs[fut]
+                    idx, dossier = gen_futs[fut]
                     try:
                         written, fact, champ, _elapsed = fut.result()
                     except Exception as _we:
@@ -578,7 +579,7 @@ class ReachAgent:
                     fact["critique_issues"] = written.get("critique_issues", 0)
                     facts_by_idx[idx] = fact
                     # Dedup inter-cycles : on marque CHAQUE item unique (pas que le champion)
-                    for it in c:
+                    for it in dossier:
                         mark(url_hash(it["url"]), it["title"])
                     log(cid, "FACT_GEN", f"provider={written['model']} src={champ['source']} durée={_elapsed:.0f}s",
                         written["model"], fact_id=fact_id_of(champ), action="GENERE")
@@ -603,7 +604,7 @@ class ReachAgent:
             end_cycle(cid, "OK")
             _release_cycle_lock()
             _reset_progress()
-            log(cid, "CYCLE_END", f"facts={len(facts)} clusters={len(clusters)}")
+            log(cid, "CYCLE_END", f"facts={len(facts)} dossiers={len(dossiers)}")
             return {
                 "status": "ok",
                 "cycle_id": cid,
@@ -613,7 +614,9 @@ class ReachAgent:
                 "rejected_intl": rejected_intl,
                 "date_anomalies": anomalies,
                 "skipped_dup": skipped,
-                "clusters": len(clusters),
+                # "dossiers" (2026-08-26, audit de nommage Temps 2 : anciennement
+                # "clusters") -- consommé par le frontend (audit.js, dashboard.js).
+                "dossiers": len(dossiers),
                 "facts_to_generate": len(facts),
                 "facts": facts,
             }

@@ -4,18 +4,18 @@ RÈGLE MÉTIER (révision 2026-08-21, demande explicite : "refléter la réalit�
 plutôt que fabriquer) : KORA ne génère PLUS AUCUNE image par IA (FAL et
 Pollinations retirés). L'image de couverture d'un article est désormais
 TOUJOURS une vraie photo :
-  1) en priorité, une image réelle issue d'une des sources du cluster
+  1) en priorité, une image réelle issue d'une des sources du dossier
      (champion en premier, puis les contextes par fiabilité de source) --
      c'est précisément le cas "2+ sources sur le même sujet -> on choisit
-     l'une de leurs images" demandé ; un cluster à une seule source suit la
+     l'une de leurs images" demandé ; un dossier à une seule source suit la
      même règle en dégénérant naturellement (un seul candidat) ;
-  2) si aucune source du cluster n'a d'image, repli sur une VRAIE photo
+  2) si aucune source du dossier n'a d'image, repli sur une VRAIE photo
      générique liée au sujet (LoremFlickr, photos Flickr réelles par
      mot-clé) ;
   3) en tout dernier recours, une photo générique sans rapport (Picsum),
      uniquement pour ne jamais laisser un article sans aucun visuel.
 Aucune de ces trois étapes ne fabrique d'image : "generated" dans le retour
-signifie désormais "pas issue d'une source du cluster" (stock photo), jamais
+signifie désormais "pas issue d'une source du dossier" (stock photo), jamais
 "IA".
 """
 import os
@@ -138,7 +138,7 @@ def _call_loremflickr(title: str, salt: str = "", lock_override: int = None):
 
 
 def _candidate_images(champion: dict, contexts: list) -> list:
-    """Liste ordonnée des images réelles candidates pour un cluster : le
+    """Liste ordonnée des images réelles candidates pour un dossier : le
     champion d'abord (meilleure source), puis les contextes triés par
     fiabilité de source (source_level décroissant). Retourne des tuples
     (url, nom_source) -- non vides uniquement, sans doublon d'URL. Le nom de
@@ -163,12 +163,12 @@ def _candidate_images(champion: dict, contexts: list) -> list:
 
 
 def select_source_image(champion: dict, contexts: list, exclude: set = None) -> tuple:
-    """Choisit la meilleure image RÉELLE parmi les sources d'un cluster
+    """Choisit la meilleure image RÉELLE parmi les sources d'un dossier
     (champion prioritaire, puis contextes par fiabilité), en évitant les
     URLs déjà utilisées par un autre article du même cycle (`exclude`, pour
     la garantie d'unicité inter-articles -- voir illustrate_all()).
-    Retourne (url, nom_source), ou ("", "") si aucune source du cluster n'a
-    d'image (ou si toutes les images du cluster sont déjà utilisées ailleurs)."""
+    Retourne (url, nom_source), ou ("", "") si aucune source du dossier n'a
+    d'image (ou si toutes les images du dossier sont déjà utilisées ailleurs)."""
     exclude = exclude or set()
     for img, src_name in _candidate_images(champion, contexts):
         if img not in exclude:
@@ -179,9 +179,9 @@ def select_source_image(champion: dict, contexts: list, exclude: set = None) -> 
 def illustrate(champion: dict, contexts: list, title: str = "", fact_id: str = "",
                 exclude: set = None) -> dict:
     """Retourne toujours un dict : {image, provider, generated(bool), detail}.
-    Ordre : image réelle d'une source du cluster (champion puis contextes) ->
+    Ordre : image réelle d'une source du dossier (champion puis contextes) ->
     LoremFlickr (photo réelle par mot-clé) -> Picsum (photo générique).
-    `generated` signifie ici "n'est pas une photo du cluster de sources"
+    `generated` signifie ici "n'est pas une photo du dossier de sources"
     (stock photo de repli), jamais "fabriquée par IA" -- KORA n'en génère
     plus aucune (retrait de FAL/Pollinations, 2026-08-21)."""
     title = title or (champion or {}).get("title", "")
@@ -189,8 +189,8 @@ def illustrate(champion: dict, contexts: list, title: str = "", fact_id: str = "
     if src_img:
         return {"image": src_img, "provider": "source", "generated": False,
                 "image_source_name": src_name,
-                "detail": "Image réelle issue d'une source du cluster (champion ou contexte)."}
-    # Aucune source du cluster n'a d'image (ou toutes déjà utilisées par un
+                "detail": "Image réelle issue d'une source du dossier (champion ou contexte)."}
+    # Aucune source du dossier n'a d'image (ou toutes déjà utilisées par un
     # autre article de ce cycle) -> repli sur une vraie photo générique, avec
     # un texte de recherche enrichi (titre + résumé + extrait du contenu
     # source, pas le titre seul -- 2026-08-21, renfort mots-clés) pour mieux
@@ -201,7 +201,7 @@ def illustrate(champion: dict, contexts: list, title: str = "", fact_id: str = "
         url, provider = _call_loremflickr(search_text, salt=fact_id)
         if url:
             return {"image": url, "provider": provider, "generated": True,
-                    "detail": "Aucune image dans les sources du cluster -> photo réelle (LoremFlickr) liée au sujet."}
+                    "detail": "Aucune image dans les sources du dossier -> photo réelle (LoremFlickr) liée au sujet."}
     except Exception as e:
         lf_err = f"LoremFlickr indisponible ({type(e).__name__})"
     # Dernier recours : photo générique sans rapport avec le sujet, pour ne
@@ -222,7 +222,7 @@ def illustrate_all(facts: list) -> list:
     doublon) dans le cycle. Pour chaque fact, essaie ses propres candidats
     réels (champion puis contextes) dans l'ordre, en sautant ceux déjà
     utilisés par un fact précédent de ce même cycle ; ne tombe sur le repli
-    stock (LoremFlickr/Picsum) que si TOUS les candidats réels du cluster
+    stock (LoremFlickr/Picsum) que si TOUS les candidats réels du dossier
     sont épuisés (vides ou déjà pris). Retourne la même liste de facts,
     enrichie de 'image'/'image_meta'."""
     used = set()
@@ -261,7 +261,7 @@ def illustrate_all(facts: list) -> list:
 
 
 if __name__ == "__main__":
-    # Test local : cluster à 2 sources, la seconde a une image -> doit la choisir
+    # Test local : dossier à 2 sources, la seconde a une image -> doit la choisir
     # (le champion en amont n'en a pas).
     champ = {"title": "Guinée: accord minier signé à Conakry", "image": ""}
     ctx = [{"image": "https://exemple-source.example/photo-accord.jpg", "source_level": 2}]

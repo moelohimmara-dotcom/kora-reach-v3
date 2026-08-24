@@ -125,7 +125,7 @@ def main():
         else:
             print("OK   fact_id inconnu gere proprement")
 
-        # 2026-08-21 : un fait sans aucune image de couverture (cluster sans
+        # 2026-08-21 : un fait sans aucune image de couverture (dossier sans
         # source illustree, cas limite) doit etre refuse explicitement, PAS
         # tenter une generation video sans image.
         fid_sans_image = hitl_store.upsert_fact({

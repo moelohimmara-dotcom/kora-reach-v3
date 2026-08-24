@@ -50,7 +50,10 @@ function viewAudit(s) {
     const st = pairs.status || pairs.decision;
     if (st) parts.push("statut : " + (statusFr[st.toUpperCase()] || st));
     if (pairs.facts) parts.push(pairs.facts + " fait(s)");
-    if (pairs.clusters) parts.push(pairs.clusters + " groupe(s)");
+    // pairs.dossiers (2026-08-26, audit de nommage Temps 2 : anciennement
+    // "clusters") -- lu depuis la ligne de log CYCLE_END ("dossiers=N"),
+    // voir orchestration/reach_agent.py.
+    if (pairs.dossiers) parts.push(pairs.dossiers + " groupe(s)");
     if (ev.editor) parts.push("par " + ev.editor);
     if (parts.length) return parts.join(" · ");
     const clean = d.replace(/\s+/g, " ").trim();

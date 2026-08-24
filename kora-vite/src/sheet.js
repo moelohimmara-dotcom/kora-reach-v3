@@ -517,7 +517,7 @@ function renderSheet(s) {
   // KORA n'en génère plus aucune (voir generation/illustrate.py) -- une
   // vraie photo de source ne doit jamais être présentée comme une
   // illustration IA. Dérivée de image_meta.provider ("source" = photo
-  // réelle d'une source du cluster, "loremflickr"/"picsum" = photo stock).
+  // réelle d'une source du dossier, "loremflickr"/"picsum" = photo stock).
   // Nom de la source réelle (2026-08-23, demande explicite : "il faut que le
   // nom de la source d'où provient l'image figure au niveau de l'article") --
   // même donnée que celle créditée sur WordPress (voir publishing/transmit.py),

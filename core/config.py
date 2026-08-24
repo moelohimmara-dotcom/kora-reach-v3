@@ -50,7 +50,7 @@ LIMITS = {
     "rate_limit_per_host_sec": 2.0,
     "timeout_sec": 10,
     "retry": 2,
-    "cluster_sim_threshold": 0.35,  # seuil Jaccard vrai (voir clusterer.py, refonte 2026-08-19)
+    "dossier_sim_threshold": 0.35,  # seuil Jaccard vrai (voir collection/dossiers.py, refonte 2026-08-19)
     "daily_article_limit": 10,
     "timezone": "Africa/Conakry",
     # Nombre d'articles generes EN PARALLELE pendant un cycle (2026-08-20,

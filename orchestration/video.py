@@ -123,14 +123,14 @@ def start_video_generation(fact_id: str, on_complete=None, narration_mode: str =
     if len(article_text.strip()) < MIN_ARTICLE_CHARS:
         return {"ok": False, "error": "article_trop_court_ou_absent"}
     # Image de couverture DEJA CHOISIE pour l'article (voir generation/
-    # illustrate.py, 2026-08-21 : image reelle d'une source du cluster, ou
+    # illustrate.py, 2026-08-21 : image reelle d'une source du dossier, ou
     # repli photo stock -- plus aucune generation IA specifique a la video).
     image_url = row.get("image", "") or champ.get("image", "")
     if not image_url:
         return {"ok": False, "error": "image_de_couverture_absente"}
     # Candidats multi-images (2026-08-24, demande explicite : "plusieurs
     # successions d'images, mais avec des effets de zoom") : TOUTES les
-    # images reelles du cluster (champion + contextes, jamais d'IA -- voir
+    # images reelles du dossier (champion + contextes, jamais d'IA -- voir
     # illustrate._candidate_images), dans l'ordre de fiabilite de source.
     # `image_url` reste le premier element par construction (illustrate.py
     # place deja le champion en tete) -- generation/video.py retombe seul

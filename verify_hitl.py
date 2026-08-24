@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import core.config as config
 from collection.normalizer import normalize, TZ
-from collection.clusterer import cluster, pick_champion
+from collection.dossiers import regrouper_dossiers, pick_champion
 from generation.writer import write_article
 from editorial.hitl_store import fact_id_of, get as hitl_get
 
@@ -41,11 +41,11 @@ raws = [
 src = wl.get_entry("mosaique")
 docs = [normalize(r, src, cs) for r in raws]
 pool = [d for d in docs if d["actual"]]
-clusters = cluster(pool, config.LIMITS["cluster_sim_threshold"])
+dossiers = regrouper_dossiers(pool, config.LIMITS["dossier_sim_threshold"])
 facts = []
-for c in clusters:
-    champ, ctx = pick_champion(c)
-    fact = {"champion": champ, "contexts": ctx, "n_sources": len(c)}
+for dossier in dossiers:
+    champ, ctx = pick_champion(dossier)
+    fact = {"champion": champ, "contexts": ctx, "n_sources": len(dossier)}
     w = write_article(fact)
     fact["article"] = w["article"]; fact["gen_model"] = w["model"]
     facts.append(fact)
