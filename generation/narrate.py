@@ -28,6 +28,8 @@ import asyncio
 import json
 import os
 import re
+import subprocess
+import tempfile
 import urllib.request
 import urllib.error
 
@@ -66,6 +68,24 @@ FISH_AUDIO_TEMPERATURE = float(os.environ.get("FISH_AUDIO_TEMPERATURE", "0.85"))
 FISH_AUDIO_TOP_P = float(os.environ.get("FISH_AUDIO_TOP_P", "0.7"))
 FISH_AUDIO_SPEED = float(os.environ.get("FISH_AUDIO_SPEED", "0.97"))
 
+# Voix du mode DIALOGUE (2026-08-24, demande explicite : narration façon
+# NotebookLM, deux voix qui discutent). Trois emplacements configurables --
+# jamais de nom de personne réelle en dur ici (demande explicite : "je ne
+# veux pas que tu notes... les noms des officiels"), uniquement des
+# identifiants techniques Fish Audio, choisis génériques par défaut.
+# Duo homme-femme : VOICE_MALE_1 + VOICE_FEMALE_1. Duo deux hommes :
+# VOICE_MALE_1 + VOICE_MALE_2. Surchargeables sans toucher au code -- la
+# sélection finale des voix reste une décision utilisateur, faite en dehors
+# de ce fichier (valeurs par défaut = candidates génériques déjà vérifiées
+# en conditions réelles, pas des personnalités publiques).
+FISH_AUDIO_VOICE_MALE_1 = os.environ.get("FISH_AUDIO_VOICE_MALE_1", "4f2a0684dd0247dda68f339738c780e6").strip()
+FISH_AUDIO_VOICE_MALE_2 = os.environ.get("FISH_AUDIO_VOICE_MALE_2", "9f0935a47689459480b820ed3f6d782d").strip()
+FISH_AUDIO_VOICE_FEMALE_1 = os.environ.get("FISH_AUDIO_VOICE_FEMALE_1", "5567200c7d8341738f0892bbacd3be3c").strip()
+# Pause de respiration entre deux répliques (secondes) -- un enchaînement
+# immédiat sans le moindre silence sonne mécanique, un vrai duo laisse
+# toujours un micro-blanc entre deux prises de parole.
+DIALOGUE_TURN_GAP_SEC = float(os.environ.get("KORA_DIALOGUE_TURN_GAP_SEC", "0.35"))
+
 # Voix francaises neuronales disponibles (verifie 2026-08-20, liste complete
 # via `python -m edge_tts --list-voices`). HenriNeural (homme) retenu par
 # defaut : ton neutre, adapte a une lecture d'actualite.
@@ -84,20 +104,26 @@ DEFAULT_VOICE = VOICES_FR["henri"]
 MAX_CHARS = 8000
 
 
-def _narrate_fish_audio(clean: str, out_path: str) -> dict:
+def _narrate_fish_audio(clean: str, out_path: str, voice_id: str = None) -> dict:
     """POST direct (urllib stdlib) -- pas de SDK tiers ajoute pour un simple
     appel HTTP. Renvoie {ok, path, error} comme narrate_to_file(). Schema
     verifie contre la doc officielle (docs.fish.audio/api-reference, 2026-
     08-22) : POST /v1/tts, auth Bearer, modele via l'EN-TETE "model" (pas le
-    corps JSON), reference_id optionnel (voix par defaut du modele si absent)."""
+    corps JSON), reference_id optionnel (voix par defaut du modele si absent).
+
+    voice_id (2026-08-24, mode dialogue) : surcharge FISH_AUDIO_VOICE_ID pour
+    une voix precise (une voix par intervenant du dialogue, voir
+    narrate_dialogue_to_file() plus bas) -- repli sur FISH_AUDIO_VOICE_ID
+    (mode solo, comportement inchange) si non fourni."""
     body = {
         "text": clean, "format": "mp3", "normalize": True,
         "temperature": FISH_AUDIO_TEMPERATURE, "top_p": FISH_AUDIO_TOP_P,
         "prosody": {"speed": FISH_AUDIO_SPEED, "volume": 0, "normalize_loudness": True},
         "condition_on_previous_chunks": True,
     }
-    if FISH_AUDIO_VOICE_ID:
-        body["reference_id"] = FISH_AUDIO_VOICE_ID
+    effective_voice = voice_id or FISH_AUDIO_VOICE_ID
+    if effective_voice:
+        body["reference_id"] = effective_voice
     req = urllib.request.Request(
         "https://api.fish.audio/v1/tts", data=json.dumps(body).encode("utf-8"),
         method="POST", headers={
@@ -203,6 +229,115 @@ _EDITO_SYSTEM_PROMPT = (
 )
 
 
+# Dialogue à deux voix (2026-08-24, demande explicite : "façon NotebookLM
+# ... un homme et une femme qui discutent entre eux ... je veux que l'échange
+# soit le plus vivant possible, le plus réaliste possible ... pas sous forme
+# de lecture, mais un dialogue ... la première doit commencer par une
+# salutation courtoise et professionnelle avec une présentation du sujet et
+# l'introduction. Ensuite, l'autre prend le relais ... interactif ...
+# percutant"). Distinct de _EDITO_SYSTEM_PROMPT (mode solo, un seul
+# présentateur) -- reprend les mêmes garde-fous (anti-hallucination,
+# anonymat IA, langue) mais restructuré pour deux voix qui se répondent
+# vraiment, pas deux monologues juxtaposés.
+_DIALOGUE_SYSTEM_PROMPT = (
+    "Tu es le DUO DE PRÉSENTATEURS RADIO de KORA, média d'information guinéen "
+    "(Conakry). On te donne un article DÉJÀ RÉDIGÉ (titre + texte, pour la "
+    "lecture des yeux). Ta mission : le transformer en un ÉCHANGE ORAL À DEUX "
+    "VOIX (A et B) qui dialoguent en studio sur ce sujet -- vivant, réaliste, "
+    "INTERACTIF, comme un vrai duo de présentateurs qui se répondent en "
+    "direct. JAMAIS deux lectures juxtaposées ni une simple alternance "
+    "mécanique de phrases : un vrai échange, avec réactions, relances, "
+    "transitions.\n\n"
+    "RÈGLES STRICTES :\n"
+    "1. ANTI-HALLUCINATION : tu ne dois RIEN ajouter comme fait, chiffre, "
+    "date, nom ou citation qui n'est pas déjà présent dans l'article fourni. "
+    "Tu reformules et restructures pour l'oral, tu n'inventes JAMAIS de "
+    "contenu nouveau, tu ne complètes JAMAIS une information manquante.\n"
+    "2. OUVERTURE (obligatoire) : la voix A commence TOUJOURS par une "
+    "salutation courtoise et professionnelle, puis présente clairement le "
+    "sujet et fait une brève introduction -- jamais 'Titre :', jamais de "
+    "symbole markdown, jamais de label.\n"
+    "3. RELAIS RÉEL : B prend ensuite le relais et RÉAGIT à ce que A vient de "
+    "dire (jamais une simple redite) -- apporte un angle complémentaire, "
+    "creuse un point, relance A par une question, ou souligne ce qui frappe "
+    "dans le sujet. Puis l'échange continue en alternance NATURELLE (pas "
+    "forcément une stricte réplique chacun -- une voix peut enchaîner deux "
+    "phrases si le naturel du dialogue l'exige), avec de vraies transitions "
+    "parlées ('Alors justement,', 'Ce qui est frappant, c'est que...', 'Tu "
+    "peux nous en dire plus sur...', 'Exactement, et en plus...').\n"
+    "4. TON : percutant et pertinent -- va à l'essentiel, ne dilue jamais, "
+    "chaleureux mais professionnel, factuel et neutre sur le fond -- "
+    "l'énergie vient du RYTHME et de l'interaction réelle entre les deux "
+    "voix, jamais d'un avis personnel absent de l'article source.\n"
+    "5. STYLE ORAL : phrases courtes et rythmées, AUCUN symbole markdown, "
+    "AUCUNE liste à puces, AUCUN intertitre, AUCUNE didascalie entre "
+    "parenthèses (pas de '(rires)', '(pause)' etc.) -- uniquement du texte "
+    "à dire à voix haute.\n"
+    "6. CLÔTURE : termine par un court échange de sortie naturel et oral "
+    "(l'une des deux voix conclut, l'autre peut ajouter un mot de clôture) -- "
+    "jamais 'Par La Rédaction' tel quel, c'est une signature écrite, pas une "
+    "formule orale.\n"
+    "7. ANONYMAT : ne mentionne jamais que ce texte ou ces voix sont générés "
+    "par une IA, un modèle, un assistant ou un robot -- l'auditeur doit "
+    "croire à un vrai duo de présentateurs humains.\n"
+    "8. LANGUE : français uniquement, aucun mot ni expression dans une autre "
+    "langue.\n"
+    "9. FORMAT DE SORTIE STRICT : une réplique par ligne, chaque ligne "
+    "commence EXACTEMENT par 'A : ' ou 'B : ' (lettre, espace, deux-points, "
+    "espace), rien avant. Aucune autre ligne, aucun commentaire, aucun "
+    "texte hors de ce format. Exemple de forme (contenu fictif) :\n"
+    "A : Bonsoir et bienvenue dans cette édition de KORA...\n"
+    "B : Merci Adja. Alors justement, ce qui frappe dans cette affaire...\n"
+)
+
+
+def build_dialogue_script(title: str, article_text: str) -> list:
+    """Équivalent de build_edito_script() pour le mode dialogue à deux voix.
+    Retourne une liste de tuples (speaker, texte) -- speaker vaut "A" ou "B".
+    Repli MÉCANIQUE si le LLM échoue ou renvoie un format inexploitable :
+    un dialogue à 2 lignes minimal (A introduit, B clôt), jamais un blocage
+    de la génération vidéo pour ça (même philosophie que build_edito_script)."""
+    clean_fallback = re.sub(r"^#\s.*\n+", "", article_text or "", count=1)
+    clean_fallback = re.sub(r"\n*Par La R[ée]daction\s*$", "", clean_fallback,
+                             flags=re.IGNORECASE).strip()
+    fallback = [("A", f"Bonsoir et bienvenue dans cette édition de KORA. Aujourd'hui, on revient sur : {title}."),
+                ("B", clean_fallback[:MAX_CHARS] if clean_fallback else "Voilà pour cette actualité."),
+                ("A", "Voilà pour cette édition, merci de nous avoir suivis.")]
+    try:
+        import generation.writer as writer
+    except Exception:
+        return fallback
+    user = f"TITRE : {title}\n\nARTICLE :\n{article_text}"
+    try:
+        out = writer.simple_completion(_DIALOGUE_SYSTEM_PROMPT, user, max_tokens=1800)
+    except Exception:
+        out = None
+    if not out:
+        return fallback
+    turns = _parse_dialogue(out)
+    # Repli si le parsing échoue totalement ou produit un dialogue
+    # anormalement court (LLM en échec silencieux, format non respecté).
+    if len(turns) < 2 or sum(len(t[1].split()) for t in turns) < 20:
+        return fallback
+    return turns
+
+
+def _parse_dialogue(raw: str) -> list:
+    """Parse le format strict 'A : ...' / 'B : ...' (une réplique par ligne,
+    voir règle 9 de _DIALOGUE_SYSTEM_PROMPT). Tolère une casse/espacement
+    légèrement différents (ex. 'a:' au lieu de 'A : '), ignore toute ligne
+    qui ne matche pas ce format plutôt que de planter dessus."""
+    turns = []
+    for line in (raw or "").splitlines():
+        m = re.match(r"^\s*([AB])\s*:\s*(.+?)\s*$", line, flags=re.IGNORECASE)
+        if m:
+            speaker = m.group(1).upper()
+            text = m.group(2).strip()
+            if text:
+                turns.append((speaker, text))
+    return turns
+
+
 def build_edito_script(title: str, article_text: str) -> str:
     """Transforme un article ÉCRIT (titre markdown + chapô + corps + signature)
     en un script destiné à être LU À HAUTE VOIX sous forme d'édito. Réutilise
@@ -260,4 +395,108 @@ def narrate_to_file(text: str, out_path: str, voice: str = None) -> dict:
         if not fallback["ok"]:
             fallback["error"] = f"fish_audio_echec({res['error']}) puis {fallback['error']}"
         return fallback
+    return _narrate_edge_tts(clean, out_path, voice)
+
+
+# ============================================================
+# MODE DIALOGUE (2026-08-24) : synthèse d'un script à deux voix
+# (build_dialogue_script() + _parse_dialogue() plus haut) -> un seul
+# fichier audio final, une voix par intervenant.
+# ============================================================
+
+# mode -> (fish_voice_A, fish_voice_B, edge_voice_A, edge_voice_B). edge-tts
+# sert de repli si Fish Audio est indisponible -- deux voix distinctes
+# existent nativement chez edge-tts (voir VOICES_FR), donc le repli reste
+# un vrai dialogue à deux timbres, pas deux répliques identiques.
+_DIALOGUE_VOICE_MODES = {
+    "duo_hf": (FISH_AUDIO_VOICE_MALE_1, FISH_AUDIO_VOICE_FEMALE_1, VOICES_FR["henri"], VOICES_FR["denise"]),
+    "duo_hh": (FISH_AUDIO_VOICE_MALE_1, FISH_AUDIO_VOICE_MALE_2, VOICES_FR["henri"], VOICES_FR["remy"]),
+}
+
+
+def _narrate_turn(text: str, out_path: str, fish_voice_id: str, edge_voice: str) -> dict:
+    """Synthétise UNE réplique avec une voix précise (cascade Fish Audio ->
+    edge-tts, même philosophie que narrate_to_file() mais paramétrée par
+    voix plutôt que par le seul FISH_AUDIO_VOICE_ID global -- indispensable
+    pour un dialogue où chaque intervenant doit garder son propre timbre."""
+    clean = (text or "").strip()
+    if not clean:
+        return {"ok": False, "path": None, "error": "texte_vide"}
+    if len(clean) > MAX_CHARS:
+        clean = clean[:MAX_CHARS]
+    if FISH_AUDIO_API_KEY:
+        res = _narrate_fish_audio(clean, out_path, voice_id=fish_voice_id)
+        if res["ok"]:
+            return res
+        fallback = _narrate_edge_tts(clean, out_path, edge_voice)
+        if not fallback["ok"]:
+            fallback["error"] = f"fish_audio_echec({res['error']}) puis {fallback['error']}"
+        return fallback
+    return _narrate_edge_tts(clean, out_path, edge_voice)
+
+
+def _silence_clip(path: str, duration_sec: float) -> bool:
+    """Génère un court silence mp3 (ffmpeg anullsrc) -- micro-pause entre
+    deux répliques pour un rendu naturel (voir DIALOGUE_TURN_GAP_SEC)."""
+    ffmpeg_bin = os.environ.get("KORA_FFMPEG_BIN", "ffmpeg")
+    cmd = [ffmpeg_bin, "-y", "-f", "lavfi", "-i", f"anullsrc=r=44100:cl=mono",
+           "-t", str(duration_sec), "-q:a", "9", path, "-loglevel", "error"]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        return r.returncode == 0 and os.path.exists(path)
+    except Exception:
+        return False
+
+
+def narrate_dialogue_to_file(turns: list, out_path: str, mode: str = "duo_hf") -> dict:
+    """Synthétise un dialogue à deux voix (turns = liste de tuples
+    (speaker, texte), voir build_dialogue_script()) en UN SEUL fichier audio
+    final (out_path, mp3) : une voix par intervenant (A/B), micro-pause
+    entre chaque réplique, concaténation via ffmpeg (concat demuxer -- pas
+    de perte de qualité, pas de ré-encodage superflu par segment).
+
+    Retourne {ok, path, error} comme narrate_to_file() -- ne lève jamais.
+    Repli : si mode inconnu, retombe sur "duo_hf"."""
+    fish_a, fish_b, edge_a, edge_b = _DIALOGUE_VOICE_MODES.get(mode, _DIALOGUE_VOICE_MODES["duo_hf"])
+    voices = {"A": (fish_a, edge_a), "B": (fish_b, edge_b)}
+    if not turns:
+        return {"ok": False, "path": None, "error": "dialogue_vide"}
+
+    work_dir = tempfile.mkdtemp(prefix="kora_dialogue_")
+    try:
+        clip_paths = []
+        for i, (speaker, text) in enumerate(turns):
+            fish_voice, edge_voice = voices.get(speaker, voices["A"])
+            clip_path = os.path.join(work_dir, f"turn_{i:03d}.mp3")
+            res = _narrate_turn(text, clip_path, fish_voice, edge_voice)
+            if not res["ok"]:
+                return {"ok": False, "path": None,
+                        "error": f"replique_{i}_({speaker})_echouee: {res['error']}"}
+            clip_paths.append(clip_path)
+            # Micro-pause après chaque réplique SAUF la dernière.
+            if i < len(turns) - 1 and DIALOGUE_TURN_GAP_SEC > 0:
+                gap_path = os.path.join(work_dir, f"gap_{i:03d}.mp3")
+                if _silence_clip(gap_path, DIALOGUE_TURN_GAP_SEC):
+                    clip_paths.append(gap_path)
+
+        # Concaténation ffmpeg (concat demuxer -- fichier liste, pas de
+        # ré-encodage par segment, juste le mux final vers out_path).
+        list_path = os.path.join(work_dir, "list.txt")
+        with open(list_path, "w", encoding="utf-8") as f:
+            for p in clip_paths:
+                escaped = p.replace("'", "'\\''")
+                f.write(f"file '{escaped}'\n")
+        ffmpeg_bin = os.environ.get("KORA_FFMPEG_BIN", "ffmpeg")
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        cmd = [ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", list_path,
+               "-c:a", "libmp3lame", "-q:a", "2", out_path, "-loglevel", "error"]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if r.returncode != 0:
+            return {"ok": False, "path": None, "error": f"ffmpeg_concat: {r.stderr[:400]}"}
+        if not os.path.exists(out_path) or os.path.getsize(out_path) < 1024:
+            return {"ok": False, "path": None, "error": "dialogue_final_vide_ou_absent"}
+        return {"ok": True, "path": out_path, "error": None}
+    finally:
+        import shutil
+        shutil.rmtree(work_dir, ignore_errors=True)
     return _narrate_edge_tts(clean, out_path, voice)
