@@ -68,7 +68,14 @@ function videoPlayerWrap(v) {
         <div class="video-preview-wrap">
           <video class="video-preview" preload="none" ${v.image ? `poster="${esc(v.image)}"` : ""} data-video-el="${esc(v.fact_id)}"></video>
         </div>
-        <div class="video-progress" data-video-progress="${esc(v.fact_id)}">
+        <!-- P1 (audit UX Vidéos, 2026-08-24) : <div onclick> sans tabindex/role/
+             gestion clavier -- totalement inopérable au clavier ou lecteur
+             d'écran (violation WCAG 2.1.1), seuls ±10s restaient accessibles
+             sans souris. role="slider" + valeurs (mises à jour en direct dans
+             syncIcon() plus bas) + flèches gauche/droite (±5s) et Origine/Fin
+             (Home/End) via le gestionnaire keydown câblé dans bindVideoPlayers(). -->
+        <div class="video-progress" data-video-progress="${esc(v.fact_id)}" role="slider" tabindex="0"
+             aria-label="Position de lecture" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="0:00 sur 0:00">
           <div class="video-progress-fill" data-video-progress-fill="${esc(v.fact_id)}"></div>
         </div>
         <div class="video-player-controls">
@@ -80,6 +87,12 @@ function videoPlayerWrap(v) {
           <button type="button" class="video-ctrl-btn" data-video-mute="${esc(v.fact_id)}" title="Muet" aria-label="Couper le son">${icon("i-volume")}</button>
           <button type="button" class="video-ctrl-btn" data-video-fullscreen="${esc(v.fact_id)}" title="Plein écran" aria-label="Plein écran">${icon("i-fullscreen")}</button>
         </div>
+        <!-- #3 (audit UX Vidéos, 2026-08-24) : le lecteur custom est la seule
+             interface, sans piste de sous-titres pour la narration -- aucune
+             alternative textuelle (WCAG 1.2.x). Le texte intégral de
+             l'article (source de la narration) est déjà disponible sur la
+             fiche -- lien direct plutôt que dupliquer le texte ici. -->
+        <button type="button" class="video-text-link" data-video-text="${esc(v.fact_id)}">${icon("i-facts")} Lire le texte de l'article</button>
       </div>`;
 }
 // Filtre par statut (2026-08-22, amélioration UX) : purement client, état
@@ -211,7 +224,18 @@ function bindVideoPlayers(videos) {
     const wrap = document.getElementById(`videoPlayer-${fid}`);
     const vidEl = wrap && wrap.querySelector("[data-video-el]");
     if (!vidEl) return;
-    if (vidEl.paused || vidEl.ended) vidEl.play(); else vidEl.pause();
+    // P2 (audit UX Vidéos, 2026-08-24) : play() renvoie une promesse qui se
+    // rejette si interrompue par un pause() rapproché (clic rapide, ou
+    // activation via lecteur d'écran) -- "The play() request was interrupted
+    // by a call to pause()" apparaissait en erreur console non gérée, sans
+    // conséquence visible ici mais un vrai bruit en production.
+    if (vidEl.paused || vidEl.ended) vidEl.play().catch(() => {}); else vidEl.pause();
+  });
+  // #3 (audit UX Vidéos, 2026-08-24) : alternative textuelle -- ouvre la
+  // fiche article (déjà utilisée partout ailleurs pour ce même contenu).
+  document.querySelectorAll("#view [data-video-text]").forEach(b => b.onclick = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    openFact(b.dataset.videoText);
   });
   document.querySelectorAll("#view [data-video-stop]").forEach(b => b.onclick = (e) => {
     e.preventDefault(); e.stopPropagation();
@@ -270,6 +294,20 @@ function bindVideoPlayers(videos) {
     const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
     vidEl.currentTime = ratio * vidEl.duration;
   });
+  // P1 (audit UX Vidéos, 2026-08-24) : gestion clavier de la barre de
+  // progression (role="slider", voir videoPlayerWrap()) -- flèches
+  // gauche/droite = ±5s (pas standard des lecteurs vidéo, plus fin que les
+  // boutons ±10s dédiés), Origine/Fin = début/fin de la vidéo.
+  document.querySelectorAll("#view [data-video-progress]").forEach(bar => bar.onkeydown = (e) => {
+    const fid = bar.dataset.videoProgress;
+    const wrap = document.getElementById(`videoPlayer-${fid}`);
+    const vidEl = wrap && wrap.querySelector("[data-video-el]");
+    if (!vidEl || !vidEl.duration) return;
+    if (e.key === "ArrowLeft") { e.preventDefault(); vidEl.currentTime = Math.max(0, vidEl.currentTime - 5); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); vidEl.currentTime = Math.min(vidEl.duration, vidEl.currentTime + 5); }
+    else if (e.key === "Home") { e.preventDefault(); vidEl.currentTime = 0; }
+    else if (e.key === "End") { e.preventDefault(); vidEl.currentTime = vidEl.duration; }
+  });
   const _fmtT = (sec) => { const s = Math.floor(sec || 0), m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, "0")}`; };
   // Icône Play<->Pause synchronisée sur l'état RÉEL de lecture (pas au clic) :
   // un seul jeu de listeners par <video>, posé une fois (data-bound évite de
@@ -290,8 +328,23 @@ function bindVideoPlayers(videos) {
       if (fill && vidEl.duration) fill.style.width = `${Math.min(100, (vidEl.currentTime / vidEl.duration) * 100)}%`;
       const t = document.querySelector(`[data-video-time="${fid}"]`);
       if (t) t.textContent = `${_fmtT(vidEl.currentTime)} / ${_fmtT(vidEl.duration)}`;
+      // P1 (audit UX Vidéos, 2026-08-24) : valeurs du role="slider" tenues à
+      // jour à chaque tick, comme la barre visuelle et le minuteur.
+      const bar = document.querySelector(`[data-video-progress="${fid}"]`);
+      if (bar && vidEl.duration) {
+        const pct = Math.min(100, Math.round((vidEl.currentTime / vidEl.duration) * 100));
+        bar.setAttribute("aria-valuenow", String(pct));
+        bar.setAttribute("aria-valuetext", `${_fmtT(vidEl.currentTime)} sur ${_fmtT(vidEl.duration)}`);
+      }
     };
-    ["play", "pause", "ended", "timeupdate", "loadedmetadata"].forEach(ev => vidEl.addEventListener(ev, syncIcon));
+    // "seeked" ajouté (audit UX Vidéos, 2026-08-24, vérification du
+    // correctif P1) : un currentTime posé par clavier/±10s ne déclenche pas
+    // forcément un "timeupdate" assez tôt pour rester perceptible -- sans
+    // "seeked", aria-valuenow/aria-valuetext (posés par ce même syncIcon)
+    // restaient visuellement/programmatique en retard d'un cran après un
+    // saut clavier, la barre visuelle elle-même se mettant à jour au
+    // prochain tick naturel seulement.
+    ["play", "pause", "ended", "timeupdate", "seeked", "loadedmetadata"].forEach(ev => vidEl.addEventListener(ev, syncIcon));
   });
 }
 function bindVideos() {

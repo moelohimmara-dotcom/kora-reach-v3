@@ -880,6 +880,15 @@ html.icons-ready .material-icons { visibility: visible; }
 .video-ctrl-btn .ic { width: 16px; height: 16px; }
 .video-player-controls { flex-wrap: wrap; }
 .video-ctrl-time { font-size: var(--t-label-sm); color: var(--text-secondary); font-variant-numeric: tabular-nums; margin-left: auto; }
+/* #3 (audit UX Vidéos, 2026-08-24) : alternative textuelle à la narration. */
+.video-text-link {
+  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+  background: none; border: none; color: var(--coral); font-size: var(--t-label-sm);
+  font-weight: 600; cursor: pointer; padding: 4px 2px;
+}
+.video-text-link .ic { width: 15px; height: 15px; }
+.video-text-link:hover { text-decoration: underline; }
+.video-text-link:focus-visible { outline: 2px solid var(--coral); outline-offset: 2px; border-radius: 4px; }
 /* Cibles tactiles ≥44px sur mobile (2026-08-22, revue ui-ux-pro-max :
    Touch/Target Size, sévérité High) -- 34px convient à la souris (desktop)
    mais reste sous le minimum tactile recommandé (44px iOS/48dp Android).
@@ -897,6 +906,9 @@ html.icons-ready .material-icons { visibility: visible; }
   height: 6px; border-radius: 999px; background: var(--glass-border-strong);
   cursor: pointer; position: relative; overflow: hidden;
 }
+/* P1 (audit UX Vidéos, 2026-08-24) : role="slider" désormais focusable au
+   clavier -- indicateur visuel dédié, même famille que .video-ctrl-btn. */
+.video-progress:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .video-progress-fill { height: 100%; width: 0%; background: var(--accent); border-radius: 999px; }
 /* Effet zoom (Ken Burns) sur l'image de couverture (2026-08-22, demande
    explicite) : anime DOUCEMENT tant que la video n'a pas demarre (le poster
