@@ -1086,11 +1086,20 @@ function bind() {
       const card = e.target.closest("[data-action^='nav-']");
       if (!card) return;
       const action = card.dataset.action;
+      // B1/B2 (audit UX Cockpit, 2026-08-24) : facts.js compare le filtre en
+      // minuscules à des clés fixes ("pending"/"rejected"/"drafts"/"trash"),
+      // pas aux valeurs de statut backend en MAJUSCULES ("PENDING_REVIEW",
+      // "EDITED"...) — passées ici jusqu'ici, elles ne matchaient jamais
+      // aucun onglet, la vue retombait silencieusement sur "Tous" sans
+      // qu'aucune tuile ne semble en tenir compte. "Publiés" en particulier
+      // ne peut structurellement plus vivre dans facts.js (les TRANSMITTED
+      // en sont exclus depuis ADR-0005) : la tuile route désormais vers la
+      // page dédiée "published" plutôt que vers "facts" avec un filtre mort.
       if (action === "nav-facts-all") { Store.setFactFilter("all"); navigate("facts"); }
-      else if (action === "nav-facts-approved") { Store.setFactFilter("TRANSMITTED"); navigate("facts"); }
-      else if (action === "nav-facts-rejected") { Store.setFactFilter("REJECTED"); navigate("facts"); }
-      else if (action === "nav-hitl") { Store.setFactFilter("PENDING_REVIEW"); navigate("facts"); }
-      else if (action === "nav-drafts") { Store.setFactFilter("EDITED"); navigate("facts"); }
+      else if (action === "nav-facts-approved") { navigate("published"); }
+      else if (action === "nav-facts-rejected") { Store.setFactFilter("rejected"); navigate("facts"); }
+      else if (action === "nav-hitl") { Store.setFactFilter("pending"); navigate("facts"); }
+      else if (action === "nav-drafts") { Store.setFactFilter("drafts"); navigate("facts"); }
       else if (action === "nav-trash") { navigate("trash"); }
       else if (action === "nav-deleted") { navigate("audit"); }
     });

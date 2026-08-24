@@ -234,8 +234,13 @@ function activityFeed(audit, limit = 6) {
   };
 
   const evRow = (ev) => {
+    // B3 (audit UX Cockpit, 2026-08-24) : ACTION_FR existait déjà mais
+    // n'était jamais consulté -- un ev.action déjà en français (ex.
+    // "SUPPRIME") ne matchait aucun mot-clé anglais de la heuristique
+    // ci-dessous et passait tel quel, brut, dans l'UI. On le teste d'abord.
+    const actionKey = (ev.action || "").trim().toUpperCase();
     const blob = ((ev.transition || "") + " " + (ev.detail || "") + " " + (ev.action || "")).toUpperCase();
-    let label = ev.action || "Activité";
+    let label = ACTION_FR[actionKey] || ev.action || "Activité";
     if (blob.includes("TRANSMITTED")) label = "Article transmis";
     else if (blob.includes("REJECTED")) label = "Article rejeté";
     else if (blob.includes("APPROVED")) label = "Article approuvé";
@@ -275,6 +280,10 @@ function auditSub(ev) {
   if (st) parts.push("statut : " + (statusFr[st.toUpperCase()] || st));
   if (pairs.facts) parts.push(pairs.facts + " fait(s)");
   if (pairs.clusters) parts.push(pairs.clusters + " groupe(s)");
+  // B3 (audit UX Cockpit, 2026-08-24) : "fact=fact_4aaf7583d126602d" ne
+  // matchait aucune clé reconnue ci-dessus et tombait tel quel (ID interne
+  // complet) dans le fallback brut plus bas. Repli court, lisible.
+  if (pairs.fact) parts.push("article " + pairs.fact.replace(/^fact_/, "").slice(0, 8));
   if (parts.length) return parts.join(" · ");
   const clean = d.replace(/\s+/g, " ").trim();
   return clean.length > 90 ? clean.slice(0, 87).replace(/\s+\S*$/, "") + "…" : clean;
