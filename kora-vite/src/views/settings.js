@@ -447,9 +447,17 @@ function bindSettings() {
     }
   };
   const logoutBtn = document.getElementById("setLogout");
-  if (logoutBtn) logoutBtn.onclick = async () => {
-    await Store.logout();
-    App.renderAuth("login", null, true);
+  if (logoutBtn) logoutBtn.onclick = () => {
+    confirmAction({
+      title: "Se déconnecter ?",
+      message: "Tu devras te reconnecter pour accéder à nouveau à KORA.",
+      confirmLabel: "Se déconnecter",
+      danger: false,
+      onConfirm: async () => {
+        await Store.logout();
+        App.renderAuth("login", null, true);
+      },
+    });
   };
   // Comptes : liste + invitation + suppression + changement de rôle (advanced+)
   const inviteBtn = document.getElementById("setInviteUser");
@@ -763,6 +771,26 @@ function bindSettings() {
     } catch (e) { body.innerHTML = '<p class="muted">Erreur de chargement.</p>'; }
   };
 
+  // Indice de défilement mobile (T8, audit UX Compte) : rien ne signalait
+  // qu'un tiroir Paramètres contenait plus de contenu sous le viewport
+  // (la carte 2FA semblait coupée net). Dégradé en bas du panneau, masqué
+  // dès qu'il n'y a plus rien à faire défiler ou une fois arrivé en bas.
+  // Générique à tous les tiroirs (pas seulement Compte) pour cohérence.
+  const _initScrollFade = (panelEl) => {
+    const body = panelEl && panelEl.querySelector(".drawer-body");
+    if (!body || body._scrollFadeBound) return;
+    body._scrollFadeBound = true;
+    const update = () => {
+      const noOverflow = body.scrollHeight - body.clientHeight <= 4;
+      const atBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 4;
+      panelEl.classList.toggle("no-more-scroll", noOverflow || atBottom);
+    };
+    body.addEventListener("scroll", update, { passive: true });
+    body._scrollFadeUpdate = update;
+    update();
+  };
+  view.querySelectorAll(".settings-panel").forEach(_initScrollFade);
+
   const scrim = document.getElementById("setDrawerScrim");
   const openDrawer = (id) => {
     Object.values(drawers).forEach(did => { const d = document.getElementById(did); if (d) d.hidden = true; });
@@ -774,6 +802,10 @@ function bindSettings() {
     // Mobile : masquer la FAB pour éviter qu'elle ne déborde sur le contenu du panneau.
     if (window.matchMedia("(max-width: 819px)").matches) { const fab = document.getElementById("fab"); if (fab) fab.hidden = true; }
     view.querySelectorAll(".settings-nav-item").forEach(n => n.classList.toggle("active", n.dataset.setnav === id));
+    // Le contenu (ex : 2FA, liste des comptes) peut changer de hauteur après
+    // ouverture (chargement async) : on recalcule une fois affiché.
+    const body = d.querySelector(".drawer-body");
+    if (body && body._scrollFadeUpdate) requestAnimationFrame(body._scrollFadeUpdate);
   };
   // Desktop/tablette : la 1re catégorie (Apparence) s'affiche par défaut en panneau détail.
   // Mobile : tout reste fermé pour laisser la bottomnav visible (aucun piège plein écran).

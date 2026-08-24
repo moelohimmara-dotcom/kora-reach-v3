@@ -1241,8 +1241,8 @@ html.icons-ready .material-icons { visibility: visible; }
 .text-input:focus { outline: none; border-color: var(--coral); box-shadow: 0 0 0 3px rgba(242,169,140,0.18); }
 /* ---- Bouton afficher/masquer le mot de passe ---- */
 .pw-wrap { position: relative; display: block; }
-.pw-wrap .text-input { padding-right: 44px; margin-top: 0; }
-.pw-toggle { position: absolute; top: 50%; right: 6px; transform: translateY(-50%); width: 34px; height: 34px; display: grid; place-items: center; background: none; border: none; cursor: pointer; color: var(--md-sys-color-on-surface-variant); border-radius: var(--radius-sm); transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+.pw-wrap .text-input { padding-right: 50px; margin-top: 0; }
+.pw-toggle { position: absolute; top: 50%; right: 2px; transform: translateY(-50%); width: 44px; height: 44px; display: grid; place-items: center; background: none; border: none; cursor: pointer; color: var(--md-sys-color-on-surface-variant); border-radius: var(--radius-sm); transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
 .pw-toggle:hover { background: var(--glass-bg-hover); color: var(--md-sys-color-on-surface); }
 .pw-toggle .ic { width: 19px; height: 19px; }
 /* dans .field, le wrapper est à l'intérieur d'un span label -> pas de margin-top */
@@ -1893,6 +1893,15 @@ html.icons-ready .material-icons { visibility: visible; }
     border-bottom: 1px solid var(--glass-border); padding: 10px 14px; gap: 10px;
   }
   .settings-panel .drawer-body { padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px)); overflow-y: auto; flex: 1; }
+  /* Indice de défilement (T8, audit UX Compte) : dégradé signalant qu'il y a
+     plus de contenu sous le viewport, masqué une fois le bas atteint ou s'il
+     n'y a rien à faire défiler (voir _initScrollFade dans settings.js). */
+  .settings-panel::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 36px;
+    background: linear-gradient(to bottom, transparent, var(--md-sys-color-surface));
+    pointer-events: none; opacity: 1; transition: opacity var(--dur-fast) var(--ease); z-index: 1;
+  }
+  .settings-panel.no-more-scroll::after { opacity: 0; }
   /* Quand un panneau Settings est ouvert sur mobile, la FAB ne doit PAS
      chevaucher le contenu (sinon elle déborde sur le formulaire). On la masque. */
   body:has(.settings-panel:not([hidden])) #fab,
