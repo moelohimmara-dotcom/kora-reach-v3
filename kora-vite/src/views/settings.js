@@ -389,6 +389,7 @@ function bindSettings() {
     const cur = document.getElementById("setCurPw")?.value || "";
     const n1 = document.getElementById("setNewPw")?.value || "";
     const n2 = document.getElementById("setNewPw2")?.value || "";
+    if (!cur) { snack("Renseigne ton mot de passe actuel"); return; }
     if (n1.length < 8) { snack("Le nouveau mot de passe doit faire au moins 8 caractères"); return; }
     if (n1 !== n2) { snack("Les mots de passe ne correspondent pas"); return; }
     try {
