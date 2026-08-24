@@ -89,7 +89,7 @@ FISH_AUDIO_SPEED = float(os.environ.get("FISH_AUDIO_SPEED", "0.97"))
 #   and informative... well-suited for news reporting or documentary
 #   narration" (voix distincte de MALE_1, pour le duo deux hommes).
 # - FEMALE_1 = voix identifiée "Mariano Closs Diálogos 2" dans la
-#   bibliothèque (d1e5c6c... -- nom d'upload non pertinent, PAS une
+#   bibliothèque (7366956b... -- nom d'upload non pertinent, PAS une
 #   personnalité utilisée ici, seule la description compte) :
 #   "clear and warm... professional yet gentle... measured and empathetic".
 # Aucune de ces 3 voix n'est un clone de personnalité publique.
@@ -198,9 +198,21 @@ def _apply_pronunciation_fixes(text: str) -> str:
     ne casse la phrase complète avant qu'elle soit traitée en bloc."""
     if not text:
         return text
+    # Bug corrigé (revue qualité, 2026-08-24) : re.sub() interprète le
+    # paramètre `repl` comme un GABARIT (\1, \g<name>...), pas du texte
+    # littéral -- une entrée ajoutée via KORA_PRONUNCIATION_FIXES_JSON
+    # contenant un backslash (ex. copié depuis un chemin Windows) levait
+    # une re.error NON rattrapée jusqu'à l'appelant (aucun des deux points
+    # d'appel de cette fonction n'est protégé), plantant la génération
+    # vidéo entière -- contraire à la philosophie "jamais de blocage sur
+    # une correction externe" affichée plus haut dans ce fichier. La
+    # lambda force `repl` en texte littéral (aucune interprétation de
+    # gabarit possible, quel que soit son contenu).
     for original in sorted(GUINEA_PRONUNCIATION_FIXES, key=len, reverse=True):
         replacement = GUINEA_PRONUNCIATION_FIXES[original]
-        text = re.sub(r"\b" + re.escape(original) + r"\b", replacement, text, flags=re.IGNORECASE)
+        if not isinstance(replacement, str):
+            continue  # entrée malformee (ex. JSON operateur avec une valeur non-texte) -> ignoree
+        text = re.sub(r"\b" + re.escape(original) + r"\b", lambda m: replacement, text, flags=re.IGNORECASE)
     return text
 
 
@@ -669,4 +681,3 @@ def narrate_dialogue_to_file(turns: list, out_path: str, mode: str = "duo_hh") -
     finally:
         import shutil
         shutil.rmtree(work_dir, ignore_errors=True)
-    return _narrate_edge_tts(clean, out_path, voice)
