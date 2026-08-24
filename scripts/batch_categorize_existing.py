@@ -26,9 +26,11 @@ def run(dry_run=False):
         # Mais pour le comptage, on fait une requête directe (plus rapide)
         ph = "%s" if mode == "postgres" else "?"
         cur.execute(f"SELECT COUNT(*) FROM hitl_facts WHERE suggested_category IS NULL OR suggested_category=''")
-        todo = cur.fetchone()[0]
+        r = cur.fetchone()
+        todo = list(r.values())[0] if isinstance(r, dict) else r[0]
         cur.execute(f"SELECT COUNT(*) FROM hitl_facts")
-        total = cur.fetchone()[0]
+        r = cur.fetchone()
+        total = list(r.values())[0] if isinstance(r, dict) else r[0]
         print(f"[batch] total={total} à_categoriser={todo} mode={mode} dry_run={dry_run}")
         if todo == 0:
             print("[batch] rien à faire")
