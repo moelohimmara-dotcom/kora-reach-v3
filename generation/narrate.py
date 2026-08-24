@@ -101,6 +101,38 @@ FISH_AUDIO_VOICE_FEMALE_1 = os.environ.get("FISH_AUDIO_VOICE_FEMALE_1", "7366956
 # toujours un micro-blanc entre deux prises de parole.
 DIALOGUE_TURN_GAP_SEC = float(os.environ.get("KORA_DIALOGUE_TURN_GAP_SEC", "0.35"))
 
+# Balises d'émotion/respiration (2026-08-24, demande explicite : "ajoute des
+# parts d'émotions selon le sujet, même de la respiration... un état de
+# sourire selon le cas"). VÉRIFIÉ en conditions réelles (2026-08-24) contre
+# l'API Fish Audio réelle (modèle s2.1-pro-free, celui utilisé en
+# production) : un texte contenant "[concerned] ... [break] ..." dure 4.49s
+# de synthèse contre 4.15s pour le même texte sans balise -- delta (+0.34s)
+# cohérent avec une PAUSE insérée, PAS avec les mots "concerned"/"break"
+# lus à voix haute (qui auraient ajouté 1 à 2s). Confirme que ces balises
+# sont interprétées par le moteur, pas prononcées littéralement.
+#
+# Liste OFFICIELLE Fish Audio (syntaxe crochets, modèles S2) : ~55 émotions,
+# 6 tons, 11 effets sonores, 4 effets spéciaux (docs.fish.audio/api-
+# reference/emotion-reference). Volontairement RESTREINTE ici à un sous-
+# ensemble adapté à un DUO D'ACTUALITÉ SÉRIEUX -- on exclut tout ce qui
+# sonnerait déplacé sur un sujet grave (screaming, crying loudly, yawning,
+# snoring, audience laughing...) : seules les nuances sobres et le sourire
+# ponctuel demandés par l'utilisateur sont autorisées. Toute balise HORS de
+# cette liste (halluc. LLM ou markers officiels jugés inappropriés ici) est
+# retirée par _sanitize_markers() avant synthèse -- défense en profondeur,
+# ne pas se fier uniquement à la consigne du prompt.
+DIALOGUE_ALLOWED_MARKERS = frozenset({
+    # émotions sobres, plausibles dans un journal sérieux
+    "concerned", "empathetic", "satisfied", "hopeful", "determined",
+    "curious", "surprised", "calm", "grateful", "moved",
+    # tons
+    "emphasis", "soft tone",
+    # sourire / respiration ponctuels (demande explicite utilisateur)
+    "chuckling", "sighing", "clear throat",
+    # pauses
+    "break", "long-break",
+})
+
 # Voix francaises neuronales disponibles (verifie 2026-08-20, liste complete
 # via `python -m edge_tts --list-voices`). HenriNeural (homme) retenu par
 # defaut : ton neutre, adapte a une lecture d'actualite.
@@ -307,7 +339,25 @@ _DIALOGUE_SYSTEM_PROMPT = (
     "croire à un vrai duo de présentateurs humains.\n"
     "8. LANGUE : français uniquement, aucun mot ni expression dans une autre "
     "langue.\n"
-    "9. FORMAT DE SORTIE STRICT : une réplique par ligne, chaque ligne "
+    "9. ÉMOTION ET RESPIRATION (balises) : le moteur vocal comprend des "
+    "balises entre crochets placées DANS le texte, qui ne sont jamais "
+    "prononcées à voix haute mais colorent la voix. Utilise-les avec "
+    "PARCIMONIE (au plus 1 par réplique, souvent aucune), UNIQUEMENT quand "
+    "le sujet le justifie vraiment -- jamais de façon systématique ni "
+    "décorative. Liste AUTORISÉE, aucune autre : "
+    "[concerned] [empathetic] [satisfied] [hopeful] [determined] [curious] "
+    "[surprised] [calm] [grateful] [moved] [emphasis] [soft tone] "
+    "[chuckling] [sighing] [clear throat] [break] [long-break]. "
+    "Place une émotion en DÉBUT de phrase (ex. '[concerned] Cette situation "
+    "inquiète particulièrement...'), un ton ou un effet n'importe où dans "
+    "la phrase, [break]/[long-break] au moment d'une vraie respiration ou "
+    "d'un silence de réflexion. Exemples d'usage juste : une mauvaise "
+    "nouvelle grave -> [concerned] ou [empathetic] ; une avancée positive "
+    "-> [satisfied] ou [hopeful] ; un moment de connivence légère entre les "
+    "deux voix -> [chuckling] (jamais sur un sujet grave) ; une pause avant "
+    "de reprendre son souffle sur une phrase longue -> [break]. N'utilise "
+    "JAMAIS de balise hors de cette liste, même si elle te semble adaptée.\n"
+    "10. FORMAT DE SORTIE STRICT : une réplique par ligne, chaque ligne "
     "commence EXACTEMENT par 'A : ' ou 'B : ' (lettre, espace, deux-points, "
     "espace), rien avant. Aucune autre ligne, aucun commentaire, aucun "
     "texte hors de ce format. Exemple de forme illustrant le mécanisme "
@@ -357,18 +407,45 @@ def build_dialogue_script(title: str, article_text: str) -> list:
 
 def _parse_dialogue(raw: str) -> list:
     """Parse le format strict 'A : ...' / 'B : ...' (une réplique par ligne,
-    voir règle 9 de _DIALOGUE_SYSTEM_PROMPT). Tolère une casse/espacement
+    voir règle 10 de _DIALOGUE_SYSTEM_PROMPT). Tolère une casse/espacement
     légèrement différents (ex. 'a:' au lieu de 'A : '), ignore toute ligne
-    qui ne matche pas ce format plutôt que de planter dessus."""
+    qui ne matche pas ce format plutôt que de planter dessus.
+
+    Chaque texte de réplique passe par _sanitize_markers() (défense en
+    profondeur, cf. DIALOGUE_ALLOWED_MARKERS) -- le LLM peut ignorer la
+    consigne du prompt ou halluciner une balise hors liste, jamais laissé
+    passer tel quel vers la synthèse vocale."""
     turns = []
     for line in (raw or "").splitlines():
         m = re.match(r"^\s*([AB])\s*:\s*(.+?)\s*$", line, flags=re.IGNORECASE)
         if m:
             speaker = m.group(1).upper()
-            text = m.group(2).strip()
+            text = _sanitize_markers(m.group(2).strip())
             if text:
                 turns.append((speaker, text))
     return turns
+
+
+_MARKER_RE = re.compile(r"\[\s*([a-z][a-z \-]{1,20}[a-z])\s*\]", flags=re.IGNORECASE)
+
+
+def _sanitize_markers(text: str) -> str:
+    """Retire toute balise entre crochets absente de DIALOGUE_ALLOWED_MARKERS
+    (casse insensible). Ne touche à rien d'autre dans le texte -- une
+    balise autorisée reste telle quelle, prête pour Fish Audio."""
+    def _keep_or_drop(m):
+        name = m.group(1).strip().lower()
+        return m.group(0) if name in DIALOGUE_ALLOWED_MARKERS else ""
+    cleaned = _MARKER_RE.sub(_keep_or_drop, text or "")
+    return re.sub(r"\s{2,}", " ", cleaned).strip()
+
+
+def _strip_all_markers(text: str) -> str:
+    """Retire TOUTES les balises entre crochets, y compris autorisées --
+    utilisé avant edge-tts (repli), qui ne comprend pas cette syntaxe et
+    lirait sinon '[concerned]' comme du texte littéral."""
+    cleaned = _MARKER_RE.sub("", text or "")
+    return re.sub(r"\s{2,}", " ", cleaned).strip()
 
 
 def build_edito_script(title: str, article_text: str) -> str:
@@ -461,11 +538,15 @@ def _narrate_turn(text: str, out_path: str, fish_voice_id: str, edge_voice: str)
         res = _narrate_fish_audio(clean, out_path, voice_id=fish_voice_id)
         if res["ok"]:
             return res
-        fallback = _narrate_edge_tts(clean, out_path, edge_voice)
+        # edge-tts ne comprend pas la syntaxe "[concerned]" etc. (voir
+        # DIALOGUE_ALLOWED_MARKERS) -- sans ce nettoyage, une voix de repli
+        # lirait la balise comme du texte littéral ("crochet concerned
+        # crochet"), pire qu'une simple absence d'émotion.
+        fallback = _narrate_edge_tts(_strip_all_markers(clean), out_path, edge_voice)
         if not fallback["ok"]:
             fallback["error"] = f"fish_audio_echec({res['error']}) puis {fallback['error']}"
         return fallback
-    return _narrate_edge_tts(clean, out_path, edge_voice)
+    return _narrate_edge_tts(_strip_all_markers(clean), out_path, edge_voice)
 
 
 def _silence_clip(path: str, duration_sec: float) -> bool:
@@ -481,7 +562,7 @@ def _silence_clip(path: str, duration_sec: float) -> bool:
         return False
 
 
-def narrate_dialogue_to_file(turns: list, out_path: str, mode: str = "duo_hf") -> dict:
+def narrate_dialogue_to_file(turns: list, out_path: str, mode: str = "duo_hh") -> dict:
     """Synthétise un dialogue à deux voix (turns = liste de tuples
     (speaker, texte), voir build_dialogue_script()) en UN SEUL fichier audio
     final (out_path, mp3) : une voix par intervenant (A/B), micro-pause
@@ -489,8 +570,9 @@ def narrate_dialogue_to_file(turns: list, out_path: str, mode: str = "duo_hf") -
     de perte de qualité, pas de ré-encodage superflu par segment).
 
     Retourne {ok, path, error} comme narrate_to_file() -- ne lève jamais.
-    Repli : si mode inconnu, retombe sur "duo_hf"."""
-    fish_a, fish_b, edge_a, edge_b = _DIALOGUE_VOICE_MODES.get(mode, _DIALOGUE_VOICE_MODES["duo_hf"])
+    Repli : si mode inconnu, retombe sur "duo_hh" (combo France 1 + France 2,
+    VALIDÉ par l'utilisateur le 2026-08-24 -- devient le défaut)."""
+    fish_a, fish_b, edge_a, edge_b = _DIALOGUE_VOICE_MODES.get(mode, _DIALOGUE_VOICE_MODES["duo_hh"])
     voices = {"A": (fish_a, edge_a), "B": (fish_b, edge_b)}
     if not turns:
         return {"ok": False, "path": None, "error": "dialogue_vide"}
