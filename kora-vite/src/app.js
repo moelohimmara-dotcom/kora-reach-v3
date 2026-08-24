@@ -751,6 +751,15 @@ function bind() {
     const sc = document.getElementById("railScrim");
     if (sc) sc.hidden = true;
   });
+  // Lien copiable (suggestion, audit UX Cockpit 2026-08-24) : l'URL reflète
+  // déjà le filtre actif grâce à F1 (?filtre=...) -- copier location.href
+  // suffit, pas besoin de reconstruire l'URL nous-mêmes.
+  const copyFilterBtn = document.getElementById("copyFilterLink");
+  if (copyFilterBtn) copyFilterBtn.onclick = () => {
+    navigator.clipboard?.writeText(location.href)
+      .then(() => snack("Lien copié"))
+      .catch(() => snack("Impossible de copier le lien"));
+  };
   // ---- Sélection multiple + actions en masse ----
   const enterSel = document.getElementById("enterSelect");
   if (enterSel) enterSel.onclick = () => Store.setSelectMode(!Store.state.selectMode);

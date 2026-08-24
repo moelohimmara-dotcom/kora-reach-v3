@@ -268,7 +268,9 @@ function viewFacts(s) {
     ["drafts", "Brouillons", counts.drafts], ["trash", "Corbeille", counts.trash],
   ];
   const filterBar = `<div class="filter-bar">${filters.map(([k, lab, n]) =>
-    `<button class="filter-pill ${f === k ? "active" : ""}" data-fact-filter="${k}">${lab} <span class="pill-n">${n}</span></button>`).join("")}${helpTip("fact-filters")}</div>
+    `<button class="filter-pill ${f === k ? "active" : ""}" data-fact-filter="${k}">${lab} <span class="pill-n">${n}</span></button>`).join("")}
+    <button class="icon-btn" id="copyFilterLink" type="button" title="Copier le lien de ce filtre" aria-label="Copier le lien de ce filtre">${icon("i-link")}</button>
+    ${helpTip("fact-filters")}</div>
     <p class="filter-note">Chaque article compte dans une seule catégorie — la somme des filtres égale le total (${counts.all}). Les articles déjà transmis sont dans « Publiés ».</p>
     <div class="toolbar-row">
       <button class="btn btn-tonal" id="enterSelect">${s.selectMode ? "Annuler la sélection" : "Sélectionner"}</button>

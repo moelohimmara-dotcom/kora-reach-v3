@@ -118,14 +118,28 @@ function viewCockpit(s) {
       ${heroFact(s, pending)}
 
       <!-- STATS discrètes (bandeau, pas le hero template) -->
+      <!-- Fraîcheur + erreur (suggestion d'ajout, audit UX Cockpit 2026-08-24) :
+           s.ui.lastRefresh/error existaient déjà (posés par loadAll(), appelé
+           toutes les 30s par startAutoRefresh) mais n'étaient jamais affichés
+           -- aucun signal si les chiffres dataient d'un moment ou si le
+           dernier rafraîchissement avait échoué. hasError propagé à chaque
+           tuile (flag "error" déjà prévu dans statCard() mais jamais
+           déclenché jusqu'ici). -->
+      ${(() => {
+          const hasError = !!s.ui?.error;
+          const ts = s.ui?.lastRefresh ? new Date(s.ui.lastRefresh).toLocaleTimeString("fr-FR") : null;
+          if (hasError) return `<p class="stats-freshness stats-freshness-error">${icon("i-close")} Dernier rafraîchissement échoué${ts ? " — dernières données connues : " + ts : ""}</p>`;
+          if (ts) return `<p class="stats-freshness">Mis à jour à ${ts}</p>`;
+          return "";
+        })()}
       <div class="cockpit-grid stats-row kora-stats">
-        ${statCard({ icon: "article", value: total, label: "Articles", variant: "primary", onClick: "nav-facts-all", loading: s.ui?.loading && total === 0 })}
-        ${statCard({ icon: "i-help", value: pending, label: "À décider", variant: "warning", onClick: "nav-hitl", loading: s.ui?.loading && pending === 0 })}
-        ${statCard({ icon: "fact_check", value: approved, label: "Publiés", variant: "success", onClick: "nav-facts-approved", loading: s.ui?.loading && approved === 0 })}
-        ${statCard({ icon: "edit", value: draft, label: "Brouillons", variant: "info", onClick: "nav-drafts", loading: s.ui?.loading && draft === 0 })}
-        ${statCard({ icon: "i-reject", value: rejected, label: "Rejetés", variant: "danger", onClick: "nav-facts-rejected", loading: s.ui?.loading && rejected === 0 })}
-        ${statCard({ icon: "i-trash", value: trash, label: "Corbeille", variant: "tertiary", onClick: "nav-trash", loading: s.ui?.loading && trash === 0 })}
-        ${statCard({ icon: "i-close", value: deleted, label: "Supprimés", variant: "primary", full: true, onClick: "nav-deleted", loading: s.ui?.loading && deleted === 0 })}
+        ${statCard({ icon: "article", value: total, label: "Articles", variant: "primary", onClick: "nav-facts-all", loading: s.ui?.loading && total === 0, error: !!s.ui?.error })}
+        ${statCard({ icon: "i-help", value: pending, label: "À décider", variant: "warning", onClick: "nav-hitl", loading: s.ui?.loading && pending === 0, error: !!s.ui?.error })}
+        ${statCard({ icon: "fact_check", value: approved, label: "Publiés", variant: "success", onClick: "nav-facts-approved", loading: s.ui?.loading && approved === 0, error: !!s.ui?.error })}
+        ${statCard({ icon: "edit", value: draft, label: "Brouillons", variant: "info", onClick: "nav-drafts", loading: s.ui?.loading && draft === 0, error: !!s.ui?.error })}
+        ${statCard({ icon: "i-reject", value: rejected, label: "Rejetés", variant: "danger", onClick: "nav-facts-rejected", loading: s.ui?.loading && rejected === 0, error: !!s.ui?.error })}
+        ${statCard({ icon: "i-trash", value: trash, label: "Corbeille", variant: "tertiary", onClick: "nav-trash", loading: s.ui?.loading && trash === 0, error: !!s.ui?.error })}
+        ${statCard({ icon: "i-close", value: deleted, label: "Supprimés", variant: "primary", full: true, onClick: "nav-deleted", loading: s.ui?.loading && deleted === 0, error: !!s.ui?.error })}
       </div>
 
       <!-- GRAPHIQUE D'ÉVOLUTION : activité + décisions par jour -->

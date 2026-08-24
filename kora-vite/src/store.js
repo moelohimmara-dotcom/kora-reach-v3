@@ -1068,18 +1068,34 @@ export const Store = (() => {
       const f = Array.isArray(_hitl) ? _hitl : (_hitl.facts || []);
       const s = sources.status === "fulfilled" ? sources.value : [];
       const st = stats.status === "fulfilled" ? stats.value : null;
-      
+
       // decisions map pour filtres (source unique de vérité)
       const decisions = Object.fromEntries((f || []).map(fact => [fact.fact_id, fact.status || "PENDING_REVIEW"]));
-      
-      setState({ 
-        health: h, 
-        audit: a, 
-        facts: f, 
-        decisions, 
+
+      // Suggestion "fraîcheur/erreur visible" (audit UX Cockpit, 2026-08-24) :
+      // Promise.allSettled() ne rejette JAMAIS -- avant ce correctif, un
+      // échec réseau sur une ou plusieurs requêtes retombait silencieusement
+      // sur une valeur par défaut (health:null, audit vide...) sans jamais
+      // poser ui.error, empêchant tout affichage d'erreur côté UI (même une
+      // fois l'indicateur ajouté au cockpit, il ne se déclenchait jamais).
+      // stats est la source des tuiles du dashboard -- son échec est le plus
+      // significatif ; on remonte aussi si health/audit échouent (moins
+      // visible mais réel). lastRefresh n'avance QUE si stats a réussi, pour
+      // que l'horodatage affiché reste celui des dernières données fiables.
+      const statsFailed = stats.status === "rejected";
+      const anyFailed = [health, audit, hitl, sources, stats].some(r => r.status === "rejected");
+      setState({
+        health: h,
+        audit: a,
+        facts: f,
+        decisions,
         sources: s,
-        stats: st,
-        ui: { ...state.ui, loading: false, lastRefresh: Date.now() } }
+        stats: st !== null ? st : state.stats,
+        ui: {
+          ...state.ui, loading: false,
+          error: anyFailed ? (statsFailed ? "stats_indisponibles" : "chargement_partiel") : null,
+          lastRefresh: statsFailed ? state.ui.lastRefresh : Date.now(),
+        } }
       );
     } catch (e) {
       setState({ ui: { ...state.ui, loading: false, error: e.message } });

@@ -1531,6 +1531,13 @@ html.icons-ready .material-icons { visibility: visible; }
 .stat-card.stat-full .stat-label { justify-content: center; }
 .stat-card.loading { opacity: 0.6; pointer-events: none; }
 .stat-card.error { border-color: var(--danger); }
+/* Fraîcheur des chiffres du tableau de bord (suggestion, audit UX Cockpit) */
+.stats-freshness {
+  margin: 4px 0 10px; font-size: var(--t-label-sm); color: var(--md-sys-color-on-surface-variant);
+  display: flex; align-items: center; gap: 6px;
+}
+.stats-freshness-error { color: var(--danger); }
+.stats-freshness-error .ic { width: 14px; height: 14px; }
 .stat-icon { width: 20px; height: 20px; color: var(--text-secondary); opacity: .7; margin-bottom: 16px; }
 .stat-value { font-family: var(--font-display); font-size: 30px; font-weight: 700; color: var(--text-primary); line-height: 1; font-variant-numeric: tabular-nums; margin-bottom: 4px; text-align: center; width: 100%; }
 /* Base générique (13.2) — auparavant scopée uniquement à .stat-value, donc
