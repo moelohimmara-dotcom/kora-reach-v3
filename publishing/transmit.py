@@ -55,6 +55,31 @@ WP_CATEGORY_MAP = {
 # CIBLES DE REPLI, choisies mécaniquement par _classify_category() quand
 # aucun thème ne correspond, voir plus bas.
 WP_FALLBACK_MAP = {"À la une": 41, "Alertes": 48}
+# Règle sémantique généralisable (2026-08-24, incident : 10 articles distincts
+# sur le même éboulement de Dar-es-Salam, jamais fusionnés à cause d'un bug de
+# clustering -- voir collection/clusterer.py -- resté chacun dans sa catégorie
+# thématique habituelle "Société"/"Justice"/etc. au lieu d'être mis en avant).
+# Contrairement à _fallback_category() ci-dessous (qui ne joue QUE si aucun
+# thème ne correspond), cette règle-ci PRIME sur le thème choisi : un fait
+# objectivement majeur (corroboré par un grand nombre de sources indépendantes)
+# doit être "À la une" même s'il correspond aussi à un thème classique -- un
+# drame reste "Société" par nature, mais son ampleur (mesurée, pas devinée)
+# justifie une mise en avant. Seuil volontairement plus haut que celui de
+# _fallback_category (n_sources>=2, qui ne sert qu'à trancher entre deux
+# catégories de repli quand RIEN d'autre n'a matché) : ici on écrase un choix
+# thématique déjà valide, ça doit rester rare et net. Déterministe, basé sur
+# n_sources (signal réel déjà calculé par la fusion de cluster), jamais laissé
+# à l'appréciation floue d'un LLM sur ce qui est "important" -- même
+# philosophie que _fallback_category. S'applique à N'IMPORTE QUEL sujet futur,
+# pas seulement celui de l'incident qui l'a motivée.
+MAJOR_STORY_SOURCE_THRESHOLD = 4
+
+
+def _is_major_story(n_sources) -> bool:
+    try:
+        return int(n_sources or 1) >= MAJOR_STORY_SOURCE_THRESHOLD
+    except (TypeError, ValueError):
+        return False
 # Règle algo du repli (2026-08-23) : hors-cadre thématique, un fait corroboré
 # par PLUSIEURS sources (n_sources >= 2, signal déjà calculé par le cluster
 # de fusion -- voir collection/whitelist.py et le pipeline de génération)
@@ -200,6 +225,23 @@ _CATEGORY_SYSTEM_PROMPT = (
 
 
 def _classify_category(title: str, text: str, n_sources=1) -> str:
+    """Classement automatique par catégorie éditoriale, PUIS règle sémantique
+    "fait majeur" (2026-08-24) appliquée en priorité sur le thème choisi --
+    voir MAJOR_STORY_SOURCE_THRESHOLD ci-dessus. Le thème reste calculé
+    normalement (utile pour les logs/l'explicabilité), mais un fait
+    objectivement majeur écrase le résultat vers "À la une" quel que soit
+    le thème. Généralisable : ne cible aucun sujet en particulier, seulement
+    le signal n_sources."""
+    category = _classify_category_raw(title, text, n_sources)
+    # Note : MAJOR_STORY_SOURCE_THRESHOLD (4) > le seuil de _fallback_category
+    # (2) -- category ne peut donc jamais valoir "Alertes" ici quand
+    # _is_major_story() est vrai (le repli aurait déjà donné "À la une").
+    if _is_major_story(n_sources):
+        return WP_FALLBACK_MAJOR
+    return category
+
+
+def _classify_category_raw(title: str, text: str, n_sources=1) -> str:
     """Classement automatique par catégorie éditoriale (2026-08-23, demande
     explicite : "ajoute la fonctionnalité de classement automatique par
     catégorie ... selon le cadre de catégorisation dans wordpress kakilambe.
@@ -214,7 +256,9 @@ def _classify_category(title: str, text: str, n_sources=1) -> str:
     dernier cas que _fallback_category() tranche entre "À la une"/"Alertes"
     par une règle mécanique (n_sources), jamais par le LLM lui-même (garde
     le choix explicable/reproductible, pas soumis à l'appréciation floue
-    d'un modèle sur ce qui est "important").
+    d'un modèle sur ce qui est "important"). La règle "fait majeur" (voir
+    _classify_category(), appelant de cette fonction) applique un second
+    passage déterministe par-dessus ce résultat.
 
     Import paresseux de generation.writer (même précaution que
     _derive_source_level ci-dessous : éviter tout couplage/coût au

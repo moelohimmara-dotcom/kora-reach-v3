@@ -27,22 +27,45 @@ _STOP = set("la le les un une des du de ce sa se au en à par pour sur dans avec
 # toujours présent dans ce corpus) suffise à fusionner deux faits distincts.
 _MIN_SHARED_ENTITIES = 2
 
+# Guillemets français : une citation entre « » ne porte quasiment jamais
+# l'identité du fait (les témoignages varient d'un article à l'autre sur le
+# MÊME événement), elle injecte seulement du bruit lexical ("c'est", "j'ai")
+# qui dilue le Jaccard via l'union -- voir _entities() ci-dessous.
+_QUOTE_RE = re.compile(r"«[^»]*»|\"[^\"]*\"")
+
+# Root cause confirmée le 2026-08-24 (incident : 10 articles distincts sur le
+# même éboulement de Dar-es-Salam, jamais fusionnés) : le même nom propre à
+# tiret est écrit différemment selon la source ("Dar-es-Salam" / "Dar-Es-Salam"
+# / "Dar Es Salam" / "Dar es-Salam") -- la regex de tokenisation capitalisée
+# ci-dessous coupe sur les tirets (majuscule suivante = nouveau token), donc
+# "Dar-es-Salam" -> {"dar-es","salam"} alors que "Dar Es Salam" -> {"dar","es",
+# "salam"} : AUCUNE entité en commun malgré le fait identique. Normalisation
+# tiret -> espace AVANT tokenisation : les 4 variantes produisent désormais le
+# même ensemble {"dar","es","salam"}.
+def _normalize_hyphens(text: str) -> str:
+    return re.sub(r"(?<=[A-Za-zÀ-ÖØ-öø-ÿ])-(?=[A-Za-zÀ-ÖØ-öø-ÿ])", " ", text)
+
+
 def _entities(text: str) -> set:
     """Extrait les tokens distinctifs : noms propres et entités Guinée.
     On EXCLUT les chiffres isolés (dates, compteurs) et les mots français courants
     qui polluent l'empreinte. Seuls les scores type '2-1' sont gardés."""
     toks = set()
-    # noms propres : Majuscule + minuscules (ex. Sylla, Conakry, Mali)
-    for m in re.findall(r"\b[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ'-]+\b", text):
-        # strip("-'") : "Mali-Guinée" fait matcher "Mali-" (tiret capturé en
-        # fin de token car autorisé dans la classe de caractères) -> sans ce
-        # nettoyage "mali-" != "mali" et le lien avec les autres items est perdu.
-        ml = m.lower().strip("-'")
-        if len(ml) > 1 and ml not in _STOP:
-            toks.add(ml)
-    # scores sportifs type 2-1 / 3-0
+    # scores sportifs type 2-1 / 3-0 : extraits AVANT normalisation des tirets
+    # (qui ne touche que les lettres, pas les chiffres -- sans effet ici, mais
+    # gardé en premier pour rester lisible/robuste si la regex évolue).
     for m in re.findall(r"\b\d-\d\b", text):
         toks.add("score-" + m)
+    # Citations entre guillemets retirées avant tokenisation des noms propres
+    # (voir _QUOTE_RE ci-dessus) -- seul le texte "de la rédaction" du titre
+    # porte l'identité du fait, pas les mots d'un témoignage.
+    clean = _QUOTE_RE.sub(" ", text)
+    clean = _normalize_hyphens(clean)
+    # noms propres : Majuscule + minuscules (ex. Sylla, Conakry, Mali)
+    for m in re.findall(r"\b[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ']+\b", clean):
+        ml = m.lower().strip("'")
+        if len(ml) > 1 and ml not in _STOP:
+            toks.add(ml)
     # entités Guinée explicites (insensible à la casse)
     low = text.lower()
     for e in ("guinée", "guinee", "conakry", "mali", "sénégal", "bcrg", "matd",
