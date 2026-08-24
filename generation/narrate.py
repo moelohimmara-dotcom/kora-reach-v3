@@ -150,6 +150,59 @@ DEFAULT_VOICE = VOICES_FR["henri"]
 # une narration de plusieurs dizaines de minutes par accident.
 MAX_CHARS = 8000
 
+# Corrections phonétiques (2026-08-24, demande explicite : "il faut tenir
+# compte de certains noms guinéens pour accentuer la prononciation... des
+# facteurs phonétiques, syntaxiques... pour bien prononcer certains termes")
+# -- ni Fish Audio ni edge-tts n'exposent d'API IPA/phonèmes : le seul
+# levier disponible est la RÉÉCRITURE DU TEXTE lui-même en une orthographe
+# qui, lue en français par le moteur, produit le bon son (technique standard
+# pour tout TTS sans support phonétique explicite). Appliqué en texte brut
+# -- fonctionne donc IDENTIQUEMENT sur Fish Audio ET edge-tts (contrairement
+# aux balises [emotion], propres à Fish Audio).
+#
+# Exemples fournis par l'utilisateur (2026-08-24) :
+# - "Gbessia" (commune de Conakry) : le "G" initial est muet à l'oral --
+#   lu tel quel par une voix de synthèse, il ressort en "Guébéssia" ou
+#   "Guhbécia". Réécrit "Béssia" pour forcer la prononciation réelle.
+# - "Ignace Deen" (hôpital de Conakry) : entendu "India's Deal/Den" par le
+#   moteur (le nom complet dérive vers un mot anglais proche). Réécrit
+#   "Ignace Dine" -- rime en "-ine" pour forcer le son attendu ("Deen").
+#   Best-effort : à confirmer à l'écoute, ajustable sans toucher au code
+#   (voir KORA_PRONUNCIATION_FIXES_JSON ci-dessous).
+#
+# Système extensible à dessein : la liste ci-dessous n'a pas vocation à
+# être exhaustive (impossible de deviner d'avance tous les noms propres
+# guinéens qui poseront problème) -- KORA_PRONUNCIATION_FIXES_JSON permet
+# d'ajouter/corriger des entrées (format JSON: {"Texte original": "Texte
+# à prononcer"}) sans modifier ce fichier, dès qu'un nouveau cas est
+# repéré à l'écoute d'une narration.
+GUINEA_PRONUNCIATION_FIXES = {
+    "Gbessia": "Béssia",
+    "Ignace Deen": "Ignace Dine",
+}
+try:
+    _extra_fixes = json.loads(os.environ.get("KORA_PRONUNCIATION_FIXES_JSON", "") or "{}")
+    if isinstance(_extra_fixes, dict):
+        GUINEA_PRONUNCIATION_FIXES.update(_extra_fixes)
+except Exception:
+    pass  # JSON invalide -> ignoré silencieusement, jamais un blocage de la narration
+
+
+def _apply_pronunciation_fixes(text: str) -> str:
+    """Remplace chaque terme de GUINEA_PRONUNCIATION_FIXES par sa graphie
+    phonétique, sur des frontières de mot (insensible à la casse, préserve
+    la casse de la REMPLAÇANTE telle que définie dans le dico -- pas celle
+    du texte source). Les entrées à plusieurs mots (ex. 'Ignace Deen')
+    sont traitées AVANT les entrées à un seul mot (triées par longueur
+    décroissante) pour éviter qu'un remplacement partiel ('Deen' seul)
+    ne casse la phrase complète avant qu'elle soit traitée en bloc."""
+    if not text:
+        return text
+    for original in sorted(GUINEA_PRONUNCIATION_FIXES, key=len, reverse=True):
+        replacement = GUINEA_PRONUNCIATION_FIXES[original]
+        text = re.sub(r"\b" + re.escape(original) + r"\b", replacement, text, flags=re.IGNORECASE)
+    return text
+
 
 def _narrate_fish_audio(clean: str, out_path: str, voice_id: str = None) -> dict:
     """POST direct (urllib stdlib) -- pas de SDK tiers ajoute pour un simple
@@ -494,6 +547,7 @@ def narrate_to_file(text: str, out_path: str, voice: str = None) -> dict:
         return {"ok": False, "path": None, "error": "texte_vide"}
     if len(clean) > MAX_CHARS:
         clean = clean[:MAX_CHARS]
+    clean = _apply_pronunciation_fixes(clean)
 
     if FISH_AUDIO_API_KEY:
         res = _narrate_fish_audio(clean, out_path)
@@ -534,6 +588,7 @@ def _narrate_turn(text: str, out_path: str, fish_voice_id: str, edge_voice: str)
         return {"ok": False, "path": None, "error": "texte_vide"}
     if len(clean) > MAX_CHARS:
         clean = clean[:MAX_CHARS]
+    clean = _apply_pronunciation_fixes(clean)
     if FISH_AUDIO_API_KEY:
         res = _narrate_fish_audio(clean, out_path, voice_id=fish_voice_id)
         if res["ok"]:
