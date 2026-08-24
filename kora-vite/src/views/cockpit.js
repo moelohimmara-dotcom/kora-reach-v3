@@ -139,8 +139,21 @@ function viewCockpit(s) {
            (voir root-console.html, panneau "Supervision", déjà complet et plus
            riche que ce qui était affiché ici). -->
       <div class="cockpit-grid system-row">
-        <section class="system-section sources-section" data-nav="sources" role="button" tabindex="0" aria-label="Voir la gouvernance des sources">
+        <section class="system-section sources-section">
           <h2 class="section-title">Sources</h2>
+          ${(() => {
+              // F2 (audit UX Cockpit, 2026-08-24) : quand aucun cycle n'a
+              // jamais tourné, chaque puce affiche un statut ⚪ (jamais
+              // interrogée) -- visuellement identique à "en échec silencieux",
+              // seule une infobulle au survol (absente au tactile) le
+              // distinguait. Message explicite ajouté au-dessus des puces
+              // dans ce cas précis, plutôt que de laisser un état ambigu.
+              const activeOnly = sources.filter(s => (s.status || "active") === "active");
+              const neverFetched = activeOnly.length > 0 && activeOnly.every(s => !s.last_fetch);
+              return neverFetched
+                ? `<p class="muted" style="margin:0 0 10px">Aucune collecte effectuée pour l'instant — lance un cycle pour interroger ces sources.</p>`
+                : "";
+            })()}
           <div class="source-chips">
             ${(() => {
               // Ce widget est un aperçu rapide des sources RÉELLEMENT utilisées
@@ -157,6 +170,15 @@ function viewCockpit(s) {
               return [...others, ...guinee7].map(src => sourceStatusChip(src)).join("");
             })()}
           </div>
+          <!-- F4 (audit UX Cockpit, 2026-08-24) : la carte entière était
+               cliquable (role="button" sur le conteneur, chips inclus) --
+               zone ambiguë, on ne savait pas si cliquer une puce précise
+               faisait autre chose que cliquer le titre. Remplacé par une
+               affordance explicite unique, seul déclencheur de navigation
+               désormais (les puces redeviennent de simples indicateurs de
+               statut, non interactifs) ; même pattern que "Voir tout
+               l'historique →" dans le flux d'activité. -->
+          <button class="activity-more" data-nav="sources">Voir toutes les sources →</button>
         </section>
         <section class="system-section cycle-section">
           <h2 class="section-title">Contrôle cycle</h2>

@@ -616,13 +616,21 @@ const ROUTE_SLUGS = {
 const SLUG_ROUTES = Object.fromEntries(
   Object.entries(ROUTE_SLUGS).filter(([, slug]) => slug).map(([route, slug]) => [slug, route])
 );
-function routeToPath(route) {
+// F1 (audit UX Cockpit, 2026-08-24) : les tuiles "À décider"/"Brouillons"/
+// "Rejetés" pointaient toutes vers la même URL /articles sans refléter le
+// filtre actif -- impossible de partager ou recharger un lien direct vers
+// "mes brouillons". Le filtre de la vue Articles est maintenant reflété en
+// query param (?filtre=pending), lu au chargement dans boot().
+function routeToPath(route, filter) {
   const slug = ROUTE_SLUGS[route];
-  return "/kora-v2/" + (slug !== undefined ? slug : route);
+  let path = "/kora-v2/" + (slug !== undefined ? slug : route);
+  if (route === "facts" && filter && filter !== "all") path += "?filtre=" + encodeURIComponent(filter);
+  return path;
 }
 function navigate(route, push = true) {
-  const path = routeToPath(route);
-  if (push && location.pathname !== path) {
+  const filter = route === "facts" ? Store.getFactFilter() : undefined;
+  const path = routeToPath(route, filter);
+  if (push && (location.pathname + location.search) !== path) {
     try { history.pushState({ route }, "", path); } catch (e) {}
   }
   Store.setRoute(route);
@@ -737,6 +745,9 @@ function bind() {
     const f = n.dataset.factFilter;
     if (f === "trash") { navigate("trash"); return; }
     Store.setFactFilter(f);
+    // F1 : la route ne change pas (on reste sur "facts"), mais l'URL doit
+    // refléter le nouveau filtre pour rester partageable/rechargeable.
+    try { history.replaceState({ route: "facts" }, "", routeToPath("facts", f)); } catch (e) {}
     const sc = document.getElementById("railScrim");
     if (sc) sc.hidden = true;
   });
@@ -796,6 +807,18 @@ function bind() {
   // ---- Identite du compte connecte (topbar) ----
   const topbarIdentity = document.getElementById("topbarIdentity");
   if (topbarIdentity) topbarIdentity.onclick = () => navigate("settings");
+
+  // F3 (audit UX Cockpit, 2026-08-24) : le focus ne suit pas toujours le
+  // hash automatiquement (comportement de fragment-focus incohérent selon
+  // navigateur/contexte pour une cible tabindex="-1") -- on le force
+  // explicitement plutôt que de compter dessus, pattern standard des liens
+  // d'évitement en production.
+  const skipLink = document.querySelector(".skip-link");
+  if (skipLink) skipLink.onclick = (e) => {
+    e.preventDefault();
+    const target = document.getElementById("bottomnav");
+    if (target) target.focus();
+  };
 
   // ---- Centre de notifications (10.2) ----
   renderNotifCenter();
@@ -1059,11 +1082,17 @@ function bind() {
   // Fermeture au clavier (Escape) en complément du clic-dehors
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && Store.state.sheet) Store.closeSheet(); });
   window.addEventListener("popstate", (e) => {
-    if (e.state && e.state.route) { Store.setRoute(e.state.route); return; }
-    // Pas d'état attaché (ex. retour vers une entrée d'historique posée avant
-    // ce correctif, ou navigation clavier/adresse directe) : reparse l'URL.
-    const seg = location.pathname.replace(/^\/kora-v2\/?/, "").split("/")[0];
-    Store.setRoute(seg ? (SLUG_ROUTES[seg] || "cockpit") : "cockpit");
+    // F1 : le filtre Articles suit lui aussi le bouton retour/avant du
+    // navigateur, pas seulement la route.
+    const route = (e.state && e.state.route) || (() => {
+      const seg = location.pathname.replace(/^\/kora-v2\/?/, "").split("/")[0];
+      return seg ? (SLUG_ROUTES[seg] || "cockpit") : "cockpit";
+    })();
+    if (route === "facts") {
+      const qf = new URLSearchParams(location.search).get("filtre");
+      Store.setFactFilter(qf || "all");
+    }
+    Store.setRoute(route);
   });
   // Amorce l'historique : attache un état à l'entrée d'historique courante
   // pour que le bouton "retour" du navigateur (mobile) puisse revenir en
@@ -1281,6 +1310,12 @@ function boot() {
   const legacyHash = (location.hash || "").replace(/^#/, "").trim();
   const r = legacyHash || (pathSeg0 ? (SLUG_ROUTES[pathSeg0] || "cockpit") : "cockpit");
   if (Store.state.route !== r) Store.state.route = r;
+  // F1 : filtre de la vue Articles lu depuis l'URL (?filtre=pending) au
+  // premier chargement -- lien direct partageable/rechargeable.
+  if (r === "facts") {
+    const qf = new URLSearchParams(location.search).get("filtre");
+    if (qf) Store.setFactFilter(qf);
+  }
   if (legacyHash) {
     try { history.replaceState({ route: r }, "", routeToPath(r)); } catch (e) {}
   }

@@ -456,6 +456,23 @@ html.icons-ready .material-icons { visibility: visible; }
 .material-icons.ic-l { font-size: 24px; }
 .bottomnav .navitem .material-icons { font-size: 24px; }
 
+/* Lien d'évitement (F3, audit UX Cockpit) : masqué hors focus clavier,
+   révélé au premier Tab de la page -- saute directement à la bottomnav
+   mobile sans traverser tout le contenu du tableau de bord. */
+.skip-link {
+  position: fixed; top: -100px; left: 8px; z-index: var(--z-snack, 50);
+  background: var(--coral); color: #fff; padding: 10px 16px; border-radius: var(--radius-md);
+  font-weight: 600; text-decoration: none; transition: top var(--dur-fast) var(--ease);
+}
+.skip-link:focus { top: 8px; }
+/* La bottomnav n'existe qu'en dessous de 768px (cf. règle "Tablette /
+   Desktop : bottom nav masquée" plus bas) -- un lien vers une cible
+   masquée n'a pas de sens : pointeur-events + visibilité neutralisés
+   au-delà, même au focus. */
+@media (min-width: 768px) {
+  .skip-link { display: none; }
+}
+
 #app { min-height: 100dvh; display: flex; flex-direction: column; }
 .topbar {
   position: sticky; top: 0; z-index: var(--z-topbar); display: flex; align-items: center; justify-content: space-between;

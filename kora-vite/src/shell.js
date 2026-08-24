@@ -2,6 +2,12 @@
 // plus de dépendance au timing de parsing du <body>).
 const ic = (id) => `<svg class="ic"><use href="#${id}"/></svg>`;
 export const SHELL = `
+  <!-- F3 (audit UX Cockpit, 2026-08-24) : sur mobile, la bottomnav est en
+       toute fin de DOM -- au clavier, l'atteindre depuis le haut de page
+       nécessite de traverser tout le contenu du tableau de bord. Lien
+       d'évitement classique : masqué visuellement, visible au focus
+       clavier (premier Tab de la page), saute directement à la nav. -->
+  <a class="skip-link" href="#bottomnav">Aller à la navigation</a>
   <header class="topbar">
     <div class="topbar-left">
       <div class="brand">
@@ -160,7 +166,7 @@ export const SHELL = `
 
   <main class="view" id="view"></main>
 
-  <nav class="bottomnav" id="bottomnav">
+  <nav class="bottomnav" id="bottomnav" tabindex="-1">
     <button class="navitem navitem-active" data-route="cockpit" aria-current="page">
       <div class="nav-ico">${ic("i-dashboard")}</div>
       <span>Tableau de bord</span>
