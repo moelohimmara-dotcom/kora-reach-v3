@@ -134,7 +134,7 @@ function viewCockpit(s) {
         })()}
       <div class="cockpit-grid stats-row kora-stats">
         ${statCard({ icon: "article", value: total, label: "Articles", variant: "primary", onClick: "nav-facts-all", loading: s.ui?.loading && total === 0, error: !!s.ui?.error })}
-        ${statCard({ icon: "i-help", value: pending, label: "À décider", variant: "warning", onClick: "nav-hitl", loading: s.ui?.loading && pending === 0, error: !!s.ui?.error })}
+        ${statCard({ icon: "i-help", value: pending, label: "Articles à approuver", variant: "warning", onClick: "nav-pending", loading: s.ui?.loading && pending === 0, error: !!s.ui?.error })}
         ${statCard({ icon: "fact_check", value: approved, label: "Publiés", variant: "success", onClick: "nav-facts-approved", loading: s.ui?.loading && approved === 0, error: !!s.ui?.error })}
         ${statCard({ icon: "edit", value: draft, label: "Brouillons", variant: "info", onClick: "nav-drafts", loading: s.ui?.loading && draft === 0, error: !!s.ui?.error })}
         ${statCard({ icon: "i-reject", value: rejected, label: "Rejetés", variant: "danger", onClick: "nav-facts-rejected", loading: s.ui?.loading && rejected === 0, error: !!s.ui?.error })}
@@ -322,7 +322,7 @@ function auditSub(ev) {
   if (/error|traceback|exception|attributeerror|keyerror|typeerror/i.test(d)) return "Erreur d'exécution (voir logs)";
   const pairs = {};
   (d.match(/(\w+)=([^\s]+)/g) || []).forEach(p => { const [k,v]=p.split("="); pairs[k]=v; });
-  const statusFr = { TRANSMITTED: "Transmis", APPROVED: "Approuvé", REJECTED: "Rejeté", EDITED: "Modifié", PENDING_REVIEW: "En attente" };
+  const statusFr = { TRANSMITTED: "Transmis", APPROVED: "Approuvé", REJECTED: "Rejeté", EDITED: "Modifié", PENDING_REVIEW: "À approuver" };
   const parts = [];
   if (pairs.src) parts.push("source : " + pairs.src);
   const st = pairs.status || pairs.decision;

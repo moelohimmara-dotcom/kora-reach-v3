@@ -108,8 +108,15 @@ function factMeta(f, status, compact) {
   const c = f.champion || {};
   const lvl = c.level || (c.guinee_filter ? 2 : 1);
   const st = status || f.status || "PENDING_REVIEW";
-  const stMap = { PENDING_REVIEW: "En attente", APPROVED: "Approuvé", REJECTED: "Rejeté", TRANSMITTED: "Transmis", EDITED: "Édité", TRANSMISSION_FAILED: "Échec d'envoi" };
-  const stLabel = stMap[st] || st || "En attente";
+  // Nommage métier unifié (2026-08-25, demande explicite utilisateur) :
+  // PENDING_REVIEW s'appelait "En attente" ICI mais "À décider" sur la
+  // carte KPI du tableau de bord (views/cockpit.js) -- deux libellés pour
+  // le même statut, incohérence jamais remarquée avant l'audit de
+  // nommage. Unifié sur "À approuver" (forme compacte) / "Articles à
+  // approuver" (forme longue, cockpit.js) -- vocabulaire commun à tout
+  // l'écran, voir STATUS_FR export plus bas pour la version longue.
+  const stMap = { PENDING_REVIEW: "À approuver", APPROVED: "Approuvé", REJECTED: "Rejeté", TRANSMITTED: "Transmis", EDITED: "Édité", TRANSMISSION_FAILED: "Échec d'envoi" };
+  const stLabel = stMap[st] || st || "À approuver";
   const lvlLabel = compact
     ? (lvl === 1 ? "Niveau 1" : "Niveau 2")
     : (lvl === 1 ? "Niveau 1 · Source guinéenne" : "Niveau 2 · International filtrée");
@@ -133,7 +140,7 @@ function factMeta(f, status, compact) {
 }
 function statusBadge(st) {
   const map = {
-    PENDING_REVIEW: ["badge-pending", "En attente"],
+    PENDING_REVIEW: ["badge-pending", "À approuver"],
     APPROVED: ["badge-approved", "Approuvé"],
     REJECTED: ["badge-rejected", "Rejeté"],
     TRANSMITTED: ["badge-transmitted", "Transmis"],

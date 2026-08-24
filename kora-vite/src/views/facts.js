@@ -277,7 +277,7 @@ function viewFacts(s) {
     trash: facts.filter(x => catOf(x) === "trash").length,
   };
   const filters = [
-    ["all", "Tous", counts.all], ["pending", "En attente", counts.pending],
+    ["all", "Tous", counts.all], ["pending", "À approuver", counts.pending],
     ["rejected", "Rejetés", counts.rejected],
     ["drafts", "Brouillons", counts.drafts], ["trash", "Corbeille", counts.trash],
   ];

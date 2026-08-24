@@ -49,7 +49,7 @@ function viewStyleGuide(s) {
 
     <h2 class="section-title">Carte KPI</h2>
     <div class="cockpit-grid stats-row sg-kpi">
-      ${statCard({ icon: "i-help", value: 12, label: "À décider", variant: "warning" })}
+      ${statCard({ icon: "i-help", value: 12, label: "Articles à approuver", variant: "warning" })}
     </div>
   </div>`;
 }

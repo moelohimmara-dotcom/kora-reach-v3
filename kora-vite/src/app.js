@@ -1136,7 +1136,11 @@ function bind() {
       if (action === "nav-facts-all") { Store.setFactFilter("all"); navigate("facts"); }
       else if (action === "nav-facts-approved") { navigate("published"); }
       else if (action === "nav-facts-rejected") { Store.setFactFilter("rejected"); navigate("facts"); }
-      else if (action === "nav-hitl") { Store.setFactFilter("pending"); navigate("facts"); }
+      // "nav-pending" (2026-08-25, audit de nommage : s'appelait "nav-hitl" --
+      // jargon dev "human-in-the-loop" qui avait fuité jusque dans une
+      // chaîne d'action, aucun rapport avec le métier) : ouvre la liste
+      // filtrée sur les articles à approuver.
+      else if (action === "nav-pending") { Store.setFactFilter("pending"); navigate("facts"); }
       else if (action === "nav-drafts") { Store.setFactFilter("drafts"); navigate("facts"); }
       else if (action === "nav-trash") { navigate("trash"); }
       else if (action === "nav-deleted") { navigate("audit"); }

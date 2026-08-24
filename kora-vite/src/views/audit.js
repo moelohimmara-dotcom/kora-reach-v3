@@ -44,7 +44,7 @@ function viewAudit(s) {
     if (/error|traceback|exception|attributeerror|keyerror|typeerror/i.test(d)) return "Erreur d'exécution (voir logs)";
     const pairs = {};
     (d.match(/(\w+)=([^\s]+)/g) || []).forEach(p => { const [k,v]=p.split("="); pairs[k]=v; });
-    const statusFr = { TRANSMITTED: "Transmis", APPROVED: "Approuvé", REJECTED: "Rejeté", EDITED: "Modifié", PENDING_REVIEW: "En attente", TRANSMISSION_FAILED: "Échec d'envoi" };
+    const statusFr = { TRANSMITTED: "Transmis", APPROVED: "Approuvé", REJECTED: "Rejeté", EDITED: "Modifié", PENDING_REVIEW: "À approuver", TRANSMISSION_FAILED: "Échec d'envoi" };
     const parts = [];
     if (pairs.src) parts.push("source : " + pairs.src);
     const st = pairs.status || pairs.decision;

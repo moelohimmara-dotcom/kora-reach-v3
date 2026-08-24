@@ -16,7 +16,7 @@ import { icon } from "./utils.js";
 // (bindée UNE fois) plutôt que rebindée à chaque render : marche pour tout
 // nouveau help-tip ajouté n'importe où dans l'app sans câblage supplémentaire.
 const HELP_TEXTS = {
-  "fact-filters": "En attente : article généré, pas encore décidé. Transmis : publié. Rejetés/Corbeille : retirés (récupérables 11 jours). Brouillons : en cours de correction.",
+  "fact-filters": "À approuver : article généré, pas encore décidé. Transmis : publié. Rejetés/Corbeille : retirés (récupérables 11 jours). Brouillons : en cours de correction.",
 };
 function helpTip(id) {
   return `<span class="help-tip"><button type="button" class="help-tip-btn" data-help="${id}" aria-label="Aide">${icon("i-help")}</button></span>`;
