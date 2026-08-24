@@ -616,11 +616,18 @@ html.icons-ready .material-icons { visibility: visible; }
 .group-title { font-family: var(--font-display); font-size: 1.05rem; font-weight: 800; letter-spacing: -.2px; }
 .group-count { margin-left: auto; font-size: var(--t-label-sm); font-weight: 800; color: var(--md-sys-color-on-surface-variant); background: var(--glass-bg); border: 1px solid var(--glass-border); padding: 3px 11px; border-radius: var(--radius-pill); }
 .fact-card {
+  /* B2 (audit UX Articles, 2026-08-24) : .fact-check (position:absolute)
+     n'avait aucun ancêtre positionné -- elle s'ancrait au conteneur
+     positionné le plus proche en amont (empilée hors écran), invisible sur
+     mobile en permanence (pas de :hover pour créer un contexte de
+     positionnement accidentel via transform, contrairement au desktop). */
+  position: relative;
   overflow: visible; cursor: pointer; border-radius: var(--radius-xl); background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur);
   border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow);
   transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
 }
 .fact-card:hover { transform: translateY(-5px); box-shadow: var(--glass-shadow), var(--glass-glow); border-color: rgba(242,169,140,0.35); }
+.fact-card:focus-visible { outline: 2px solid var(--coral); outline-offset: 2px; }
 .fact-img { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; background: var(--md-sys-color-surface-variant); border-top-left-radius: var(--radius-xl); border-top-right-radius: var(--radius-xl); }
 .fact-body { padding: var(--space-4); }
 .fact-title { font-family: var(--font-display); font-size: var(--t-title-lg); font-weight: 700; margin-bottom: var(--space-3); line-height: 1.28; letter-spacing: -.2px; }

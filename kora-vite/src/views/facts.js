@@ -39,9 +39,23 @@ function factCard(f, s, idx) {
   const check = locked
     ? (s.selectMode ? `<div class="fact-check fact-check-locked" title="Article déjà transmis : non sélectionnable">${icon("i-lock")}</div>` : "")
     : `<div class="fact-check ${sel ? "on" : ""}" data-check="${esc(fid)}" aria-label="Sélectionner">${sel ? icon("i-check") : ""}</div>`;
-  const click = (s.selectMode && !locked) ? `onclick="Store.toggleSelect('${esc(fid)}')"` : `onclick="App.openFact('${esc(fid)}')"`;
+  // B1 (audit UX Articles, 2026-08-24) : les 34 cartes n'avaient ni
+  // tabindex ni role -- totalement inaccessibles au clavier (impossible
+  // d'ouvrir un détail ou de sélectionner un article sans souris/tactile).
+  // Même action que le clic, déclenchée sur Entrée/Espace ; role et
+  // aria-label reflètent l'état réel (case à cocher en mode sélection,
+  // sinon bouton d'ouverture), verrouillé exclu du parcours clavier de
+  // sélection au même titre que du clic (voir `locked` ci-dessus).
+  const action = (s.selectMode && !locked) ? `Store.toggleSelect('${esc(fid)}')` : `App.openFact('${esc(fid)}')`;
+  const click = `onclick="${action}"`;
+  const keydown = `onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${action}}"`;
+  const cardRole = (s.selectMode && !locked) ? `role="checkbox" aria-checked="${sel}"` : `role="button"`;
+  const cardLabel = (s.selectMode && !locked)
+    ? `aria-label="${sel ? "Désélectionner" : "Sélectionner"} : ${esc(c.title || "article sans titre")}"`
+    : `aria-label="Ouvrir l'article : ${esc(c.title || "sans titre")}"`;
+  const cardTabindex = (s.selectMode && locked) ? `tabindex="-1"` : `tabindex="0"`;
   return `
-    <article class="fact-card ${s.selectMode ? "selectable" : ""} ${sel ? "selected" : ""} ${s.selectMode && locked ? "select-locked" : ""}" data-fact="${esc(fid)}" data-index="${idx}" ${click}>
+    <article class="fact-card ${s.selectMode ? "selectable" : ""} ${sel ? "selected" : ""} ${s.selectMode && locked ? "select-locked" : ""}" data-fact="${esc(fid)}" data-index="${idx}" ${click} ${keydown} ${cardRole} ${cardLabel} ${cardTabindex}>
       ${check}
       <img class="fact-img" src="${src}" alt="" loading="lazy" onerror="this.onerror=null; this.src='${esc(fallback)}'">
       <div class="fact-body">
