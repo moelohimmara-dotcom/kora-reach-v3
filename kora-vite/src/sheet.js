@@ -408,16 +408,20 @@ function videoActionBar(f, locked = false) {
 // ≥44px (voir CSS .mode-tab), rôle tablist/tab pour les lecteurs d'écran.
 function articleModeToggle(f, mode) {
   if (!(f.video_status === "done" && f.video_path)) return "";
+  // aria-controls/id (revue qualité, 2026-08-25) : relie explicitement
+  // chaque onglet à son panneau (pattern ARIA APG "Tabs") -- sans ça, un
+  // lecteur d'écran perçoit deux boutons et deux blocs de contenu séparés,
+  // pas la relation onglet <-> panneau affiché.
   return `<div class="mode-toggle" role="tablist" aria-label="Format de consultation">
-    <button type="button" class="mode-tab ${mode === "text" ? "active" : ""}" data-mode-tab="text" role="tab" aria-selected="${mode === "text"}">${icon("i-facts")}<span>Texte</span></button>
-    <button type="button" class="mode-tab ${mode === "video" ? "active" : ""}" data-mode-tab="video" role="tab" aria-selected="${mode === "video"}">${icon("i-play")}<span>Vidéo</span></button>
+    <button type="button" id="modeTabText" class="mode-tab ${mode === "text" ? "active" : ""}" data-mode-tab="text" role="tab" aria-selected="${mode === "text"}" aria-controls="modePanelText">${icon("i-facts")}<span>Texte</span></button>
+    <button type="button" id="modeTabVideo" class="mode-tab ${mode === "video" ? "active" : ""}" data-mode-tab="video" role="tab" aria-selected="${mode === "video"}" aria-controls="modePanelVideo">${icon("i-play")}<span>Vidéo</span></button>
   </div>`;
 }
 
 function videoPlayerPanel(f, locked, mode) {
   if (!(f.video_status === "done" && f.video_path)) return "";
   const dur = f.video_duration_sec ? `${Math.round(f.video_duration_sec / 60)} min` : "";
-  return `<div class="video-section video-panel" data-mode-panel="video" ${mode !== "video" ? "hidden" : ""}>
+  return `<div class="video-section video-panel" id="modePanelVideo" role="tabpanel" aria-labelledby="modeTabVideo" data-mode-panel="video" ${mode !== "video" ? "hidden" : ""}>
       <video class="video-preview" src="/kora-v2/media/${esc(f.video_path)}" controls preload="metadata"></video>
       <div class="video-actions">
         <span class="muted">${dur ? `Durée : ${dur}` : ""}${dur ? " · " : ""}${esc(NARRATION_MODE_LABELS[f.video_narration_mode] || NARRATION_MODE_LABELS.solo)}</span>
@@ -466,6 +470,25 @@ function renderSheet(s) {
   const f = sh.fact; const c = f.champion || {};
   const img = imgSrc(f);
   const ph = placeholderSvg(Store.getTheme());
+  // Bug corrigé (revue qualité, 2026-08-25) : renderSheet() est rappelé
+  // pour bien d'autres raisons que le clic sur l'onglet Texte/Vidéo (le
+  // sondage du bandeau vidéo global toutes les 8s pendant QU'IMPORTE
+  // QUELLE vidéo génère ailleurs dans l'appli, une régénération de texte,
+  // l'annulation de l'édition...) -- body.innerHTML = ... ci-dessous
+  // reconstruit TOUJOURS le <video>, quel que soit le mode, et une
+  // lecture en cours revenait silencieusement à 0 à chaque re-rendu.
+  // Capture l'état AVANT reconstruction, restauré juste après (voir plus
+  // bas) -- seulement si l'onglet Vidéo est actif ET que la vidéo affichée
+  // est bien celle de CE fait (currentSrc inchangé).
+  const _prevVideo = body.querySelector('[data-mode-panel="video"] video');
+  // `.src` (IDL, URL absolue résolue depuis l'attribut) plutôt que
+  // `.currentSrc` : ce dernier ne se stabilise qu'après l'algorithme de
+  // sélection de ressource du navigateur (asynchrone), pas forcément prêt
+  // juste après la reconstruction du DOM ci-dessous -- `.src` est fiable
+  // immédiatement, avant même que le chargement ait commencé.
+  const _prevVideoState = _prevVideo ? {
+    src: _prevVideo.src, time: _prevVideo.currentTime, playing: !_prevVideo.paused,
+  } : null;
   const text = (typeof f.article === "string" ? f.article
     : (f.article && (f.article.final_text || f.article.body)))
     || f.final_text || c.summary || "";
@@ -534,7 +557,7 @@ function renderSheet(s) {
         <button class="sheet-close" data-close="1" title="Fermer" aria-label="Fermer">${icon("i-close")}</button>
       </div>
       ${articleModeToggle(f, mode)}
-      <div data-mode-panel="text" ${mode !== "text" ? "hidden" : ""}>
+      <div ${videoReady ? 'id="modePanelText" role="tabpanel" aria-labelledby="modeTabText"' : ""} data-mode-panel="text" ${mode !== "text" ? "hidden" : ""}>
         <p class="sheet-standfirst">${mdToHtmlInline(standfirst)}</p>
         <div class="fact-chips" style="margin:6px 0 16px">${factMeta(f, status)}</div>
         <div class="sheet-textwrap"><div class="sheet-text">${mdToHtml(bodyText || text)}</div></div>
@@ -780,6 +803,25 @@ function renderSheet(s) {
     const sel = body.querySelector("#narrationModeRegen");
     startVideoFlow(videoRegenBtn, sel ? sel.value : (f.video_narration_mode || "solo"));
   };
+
+  // Restauration de la lecture vidéo (voir _prevVideoState plus haut) --
+  // uniquement si c'est bien la MÊME source (même fait, même fichier), pour
+  // ne jamais faire "sauter" une vidéo différente à une position issue
+  // d'une autre. Un play() programmatique ici n'est PAS un premier
+  // déclenchement : c'est la continuation d'une lecture déjà autorisée par
+  // un geste utilisateur plus tôt dans la session -- les navigateurs
+  // l'autorisent (contrairement à un autoplay initial).
+  if (_prevVideoState && _prevVideoState.playing) {
+    const newVideo = body.querySelector('[data-mode-panel="video"] video');
+    if (newVideo && newVideo.src === _prevVideoState.src) {
+      // currentTime ne peut être fixé de façon fiable qu'une fois les
+      // métadonnées chargées (readyState >= HAVE_METADATA) -- avant ça,
+      // certains navigateurs ignorent silencieusement l'affectation.
+      const _restore = () => { newVideo.currentTime = _prevVideoState.time; newVideo.play().catch(() => {}); };
+      if (newVideo.readyState >= 1) _restore();
+      else newVideo.addEventListener("loadedmetadata", _restore, { once: true });
+    }
+  }
 
   // ---- Onglet Texte/Vidéo (2026-08-25) : bascule locale, SANS re-rendu
   // complet de la fiche -- un renderSheet() ici rechargerait le <video>
