@@ -71,7 +71,17 @@ def _migrate_renamed_keys(con) -> None:
     """Renomme en base toute ligne kora_config encore sous une ANCIENNE clé
     (voir _RENAMED_KEYS) -- idempotent (ne fait rien si la ligne n'existe
     pas ou a déjà été migrée), jamais bloquant (échec silencieux : une
-    valeur par défaut reste toujours disponible via DEFAULTS)."""
+    valeur par défaut reste toujours disponible via DEFAULTS).
+
+    Bug corrigé (2026-08-25, revue qualité) : migrait INCONDITIONNELLEMENT
+    old_key -> new_key, y compris quand new_key avait DÉJÀ une valeur --
+    save_settings() écrit new_key puis appelle get_settings() (qui relance
+    cette migration) dans la MÊME requête : si l'ancienne ligne old_key
+    n'avait encore jamais été migrée par un GET précédent, cette migration
+    ÉCRASAIT silencieusement la valeur tout juste enregistrée par l'ancienne
+    valeur figée. Corrigé : ne migre que si new_key n'a PAS déjà de ligne
+    (une valeur déjà présente sous le nouveau nom est toujours prioritaire,
+    qu'elle vienne d'un save récent ou d'une migration précédente)."""
     try:
         cur = con.cursor()
         for old_key, new_key in _RENAMED_KEYS.items():
@@ -79,8 +89,14 @@ def _migrate_renamed_keys(con) -> None:
             row = cur.fetchone()
             if not row:
                 continue  # jamais personnalisée sous l'ancienne clé -> rien à migrer
+            cur.execute(f"SELECT 1 FROM kora_config WHERE key={_ph()}", (new_key,))
+            if cur.fetchone():
+                # new_key a déjà une valeur (save récent ou migration
+                # précédente) -- ne JAMAIS l'écraser, juste nettoyer
+                # l'ancienne ligne devenue inutile.
+                cur.execute(f"DELETE FROM kora_config WHERE key={_ph()}", (old_key,))
+                continue
             if db.is_postgres():
-                cur.execute(f"DELETE FROM kora_config WHERE key={_ph()}", (new_key,))
                 cur.execute(f"INSERT INTO kora_config(key,value) VALUES({_ph()},{_ph()})", (new_key, row["value"]))
             else:
                 cur.execute(f"INSERT OR REPLACE INTO kora_config(key,value) VALUES({_ph()},{_ph()})", (new_key, row["value"]))

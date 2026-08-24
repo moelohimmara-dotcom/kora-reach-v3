@@ -615,6 +615,20 @@ function render() {
 // utilise des chemins d'assets RELATIFS (base:"./", voir vite.config.js) --
 // une URL à deux segments de profondeur casserait le chargement des assets
 // (mauvaise résolution relative), une URL à un seul segment reste sûre.
+// _LEGACY_ROUTE_ALIASES (2026-08-25, revue qualité : bug réel trouvé après
+// un premier correctif incomplet) : mappe une ANCIENNE valeur de route
+// vers son nom actuel. Portée MODULE (pas locale à boot()) et consultée
+// depuis navigate() elle-même (pas seulement le parsing du #hash au
+// démarrage) -- une notification PERSISTÉE en base avant ce renommage
+// (table notifications, colonne route -- voir server.py) peut encore
+// contenir la valeur "cockpit" longtemps après le déploiement (tant
+// qu'elle reste non lue) ; notifications.js appelle navigate(n.route)
+// directement, sans jamais passer par le parsing du #hash de boot() --
+// le premier correctif (alias uniquement dans boot()) ne couvrait pas
+// ce chemin, laissant le même symptôme (route bloquée sur "cockpit",
+// compteurs du tableau de bord jamais rechargés) pour quiconque clique
+// une vieille notification non lue.
+const _LEGACY_ROUTE_ALIASES = { cockpit: "dashboard" };
 const ROUTE_SLUGS = {
   dashboard: "", facts: "articles", drafts: "brouillons", trash: "corbeille",
   sources: "sources", videos: "videos", audit: "historique", settings: "parametres", styleguide: "style-guide",
@@ -634,6 +648,12 @@ function routeToPath(route, filter) {
   return path;
 }
 function navigate(route, push = true) {
+  // Normalise toute ancienne valeur de route (voir _LEGACY_ROUTE_ALIASES) --
+  // couvre notamment les notifications persistées en base avant le
+  // renommage cockpit -> dashboard, dont data-route peut encore valoir
+  // "cockpit" tant qu'elles restent non lues (notifications.js appelle
+  // navigate(n.route) directement).
+  route = _LEGACY_ROUTE_ALIASES[route] || route;
   const filter = route === "facts" ? Store.getFactFilter() : undefined;
   const path = routeToPath(route, filter);
   if (push && (location.pathname + location.search) !== path) {
@@ -1335,20 +1355,13 @@ function boot() {
   // lien en #hash (deja marque-page par un utilisateur avant ce changement)
   // est encore reconnu une fois, puis migre silencieusement vers la nouvelle
   // URL (replaceState) pour que le prochain partage/marque-page soit a jour.
-  // _LEGACY_ROUTE_ALIASES (2026-08-25, bug réel trouvé lors de l'audit de
-  // nommage cockpit -> dashboard) : un ANCIEN lien/marque-page en #hash
-  // (ex. "#cockpit", datant d'avant le passage aux URLs par chemin du
-  // 2026-08-20) était utilisé ICI tel quel comme route, SANS passer par
-  // SLUG_ROUTES -- tant que la clé de route interne s'appelait "cockpit",
-  // ça marchait par coïncidence. Une fois renommée "dashboard", un vieux
-  // "#cockpit" devenait une route INCONNUE (jamais dans `map`, jamais
-  // "dashboard" pour le state.route) : la vue retombait visuellement sur
-  // le tableau de bord (repli générique `map[s.route] || viewDashboard`),
-  // mais state.route restait bloqué sur la chaîne "cockpit" -- aucun des
-  // chargements de données gatés sur `route === "dashboard"` ne se
-  // déclenchait plus, laissant les compteurs à zéro indéfiniment. Vérifié
-  // en conditions réelles (hasDashboard: false avant ce correctif).
-  const _LEGACY_ROUTE_ALIASES = { cockpit: "dashboard" };
+  // _LEGACY_ROUTE_ALIASES (voir déclaration en portée module plus haut,
+  // aussi consultée depuis navigate() -- un ANCIEN lien/marque-page en
+  // #hash, ex. "#cockpit", datant d'avant le passage aux URLs par chemin
+  // du 2026-08-20, était utilisé ICI tel quel comme route SANS passer par
+  // SLUG_ROUTES ; sans alias, une clé de route renommée casse tout lien
+  // legacy. Vérifié en conditions réelles (hasDashboard: false avant ce
+  // correctif, corrigé).
   const legacyHash = (location.hash || "").replace(/^#/, "").trim();
   const legacyHashResolved = _LEGACY_ROUTE_ALIASES[legacyHash] || legacyHash;
   const r = legacyHashResolved || (pathSeg0 ? (SLUG_ROUTES[pathSeg0] || "dashboard") : "dashboard");
