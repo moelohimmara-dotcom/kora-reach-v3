@@ -558,6 +558,26 @@ function render() {
       // Éviter que la FAB ne chevauche la bulle de sélection (tous breakpoints)
       const fab = document.getElementById("fab");
       if (fab) fab.hidden = !sb.hidden;
+      // Grise un bouton d'action déjà dans l'état visé (2026-08-25, retour
+      // utilisateur : "je mets un article en corbeille, je le rouvre, le
+      // bouton Corbeille reste actif alors qu'il n'y a plus rien à faire").
+      // Ne désactive que si TOUS les articles sélectionnés sont DÉJÀ dans
+      // l'état ciblé -- une sélection mixte (ex: 1 article en attente + 1
+      // déjà en corbeille) laisse le bouton actif, l'action reste utile pour
+      // le reste du lot (et redondante-sans-danger pour l'autre).
+      const selectedFacts = (Store.state.facts || []).filter(f => Store.state.selection[f.fact_id]);
+      // isTrashed() reprend EXACTEMENT le repli de catOf() (views/facts.js) --
+      // revue qualité 2026-08-25 : f.status seul ratait les faits dont
+      // trashed_at est posé sans que status soit encore passé à "TRASHED"
+      // (même classe de cas que catOf() gère déjà, voir son commentaire),
+      // laissant à tort le bouton Corbeille actif pour cette tranche de faits.
+      const isTrashed = (f) => f.status === "TRASHED" || !!(f.trashed_at && f.trashed_at !== "");
+      const matchesTarget = (f, key) => key === "TRASHED" ? isTrashed(f) : f.status === key;
+      const allAlready = (key) => selectedFacts.length > 0 && selectedFacts.every(f => matchesTarget(f, key));
+      const bulkTargets = { pending: "PENDING_REVIEW", trash: "TRASHED", draft: "EDITED", approve: "TRANSMITTED" };
+      sb.querySelectorAll("[data-bulk]").forEach(b => {
+        b.disabled = allAlready(bulkTargets[b.dataset.bulk]);
+      });
     }
     // Bouton "Sélectionner" est re-rendu à chaque render -> on le câble ici (pas dans bind())
     const enterSel = document.getElementById("enterSelect");

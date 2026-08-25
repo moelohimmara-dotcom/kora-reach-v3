@@ -668,6 +668,16 @@ html.icons-ready .material-icons { visibility: visible; }
   transition: filter var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
 }
 .btn:active { transform: scale(.97); }
+/* Bouton d'action déjà dans l'état visé (2026-08-25, retour utilisateur :
+   "Corbeille" restait actif sur un article déjà en corbeille) -- grisé et
+   non cliquable plutôt que de laisser une action redondante/trompeuse.
+   S'applique à tout .btn via l'attribut natif [disabled], pas une classe à
+   part : reste cohérent si un futur bouton utilise disabled pour une autre
+   raison. */
+.btn:disabled, .btn[disabled] {
+  opacity: .45; cursor: not-allowed; filter: none; box-shadow: none; transform: none;
+  pointer-events: none; /* neutralise aussi les règles :hover plus spécifiques (btn-tonal etc.) */
+}
 .btn-primary { background: linear-gradient(135deg, var(--coral), var(--bordeaux)); color: #20100B; }
 .btn-primary:hover { filter: brightness(1.04); }
 .btn-secondary { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
