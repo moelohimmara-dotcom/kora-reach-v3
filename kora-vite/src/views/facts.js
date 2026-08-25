@@ -233,7 +233,10 @@ function viewPublished(s) {
         ${metaLine ? `<span class="muted" style="flex:1">${esc(metaLine)}</span>` : `<span style="flex:1"></span>`}
         ${hasVideo ? videoListenButton(f) : ""}
         ${f.wp_url ? `<a class="btn btn-tonal btn-sm" href="${esc(f.wp_url)}" target="_blank" rel="noopener">${icon("i-eye")} Voir</a>` : ""}
-        <button class="btn btn-primary btn-sm" data-withdraw="${esc(f.fact_id)}" title="Retirer de WordPress">${icon("i-undo")} Retirer</button>
+        ${f.wp_post_id
+          ? `<button class="btn btn-primary btn-sm" data-withdraw="${esc(f.fact_id)}" title="Retirer de WordPress">${icon("i-undo")} Retirer</button>
+             <button class="btn btn-danger-ghost btn-sm" data-delete-wp="${esc(f.fact_id)}" title="Supprimer définitivement de WordPress">${icon("i-trash")} Supprimer de WordPress</button>`
+          : `<span class="muted" title="Article transmis avant l'ajout du suivi -- retrait/suppression automatique indisponible pour celui-ci">${icon("i-info")} Indisponible (article transmis avant ce suivi)</span>`}
       </div>`;
     return `<div class="draft-cell">${card}${actions}${hasVideo ? videoPlayerWrap(f) : ""}</div>`;
   }).join("");

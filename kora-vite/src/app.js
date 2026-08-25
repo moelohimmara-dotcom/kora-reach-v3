@@ -617,6 +617,26 @@ function render() {
         else snack("Article retiré de WordPress, redevenu modifiable.");
         Store.closeSheet();
       }).catch(e => snack(friendlyActionError(e)))));
+    // Suppression DÉFINITIVE côté WordPress (2026-08-25, demande explicite :
+    // "l'utilisateur ne doit presque rien faire côté... WordPress... tout
+    // se gère à partir de KORA") -- même délégation que data-withdraw
+    // ci-dessus, mais geste irréversible : confirmation appuyée via
+    // confirmAction() (même pattern que data-del, corbeille KORA), pas un
+    // simple window.confirm().
+    document.querySelectorAll("[data-delete-wp]").forEach(b => b.onclick = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const fid = b.dataset.deleteWp;
+      confirmAction({
+        title: "Supprimer définitivement de WordPress ?",
+        message: "Le post sera détruit sur WordPress, sans passer par sa corbeille -- aucun retour en arrière possible. L'article restera consultable dans la corbeille de KORA.",
+        confirmLabel: "Supprimer de WordPress",
+        onConfirm: () => guardClick(b, () =>
+          Store.deleteFromWordPress(fid).then(r => {
+            if (r?.warning) snack(`Supprimé de WordPress (${r.warning})`);
+            else snack("Article supprimé définitivement de WordPress.");
+          }).catch(e => snack(friendlyActionError(e)))),
+      });
+    });
   } catch (e) { console.error("trashBtns", e); }
   // Boutons afficher/masquer le mot de passe (login + settings)
   try { bindPasswordToggles(); } catch (e) { console.error("pwToggles", e); }

@@ -947,6 +947,53 @@ def retract_from_wordpress(wp_post_id: str) -> dict:
         return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
 
+def delete_from_wordpress(wp_post_id: str) -> dict:
+    """Suppression DÉFINITIVE et IRRÉVERSIBLE (2026-08-25, demande explicite :
+    "l'utilisateur ne doit presque rien faire côté... WordPress... tout se
+    gère à partir de KORA") -- DELETE avec ?force=true, CONTRAIREMENT à
+    retract_from_wordpress() ci-dessus qui met volontairement en corbeille
+    WordPress (récupérable). Ici, le post est détruit, sans filet de
+    sécurité WordPress -- l'appelant (server.py) doit exiger une
+    confirmation explicite côté utilisateur AVANT d'appeler cette fonction
+    (voir kora-vite/src/sheet.js::confirmAction, danger:true).
+
+    Retourne {"ok": bool, "error": str|None}. Ne lève jamais (même
+    philosophie défensive que retract_from_wordpress())."""
+    if not (WP_URL and WP_USER and WP_APP_PASS):
+        return {"ok": False, "error": "wordpress_non_configure"}
+    if not wp_post_id:
+        return {"ok": False, "error": "wp_post_id_absent"}
+    app_pass = (WP_APP_PASS or "").replace(" ", "")
+    req = urllib.request.Request(
+        WP_URL.rstrip("/") + f"/wp-json/wp/v2/posts/{wp_post_id}?force=true",
+        method="DELETE",
+        headers={"Authorization": "Basic " + _b64(WP_USER + ":" + app_pass)})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            d = json.loads(r.read().decode())
+            # force=true : WordPress renvoie {"deleted": true, "previous": {...}}
+            # (contrairement à retract_from_wordpress() qui reçoit le post
+            # lui-même avec status="trash") -- on vérifie ce champ précis.
+            if d.get("deleted"):
+                return {"ok": True, "error": None}
+            return {"ok": False, "error": f"reponse_wp_inattendue: {d}"}
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            # Déjà absent (supprimé manuellement, ou par un appel précédent
+            # qui a réussi côté WP mais échoué avant de mettre à jour KORA) --
+            # même philosophie que retract_from_wordpress() : succès quand
+            # même, avec avertissement, plutôt que de bloquer indéfiniment.
+            return {"ok": True, "error": "post_deja_absent_sur_wordpress"}
+        detail = ""
+        try:
+            detail = e.read().decode("utf-8", "ignore")[:200]
+        except Exception:
+            pass
+        return {"ok": False, "error": f"suppression WP échouée (HTTP {e.code}: {detail})"}
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+
 def _to_supabase(fact: dict, final_text: str) -> dict:
     payload = _build_supabase_payload(fact, final_text)
     src_url = payload.get("source_url", "")

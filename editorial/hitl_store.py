@@ -906,6 +906,54 @@ def mark_retracted(fact_id: str, by: str) -> dict:
     return {"ok": True, "fact_id": fact_id, "status": "EDITED"}
 
 
+def mark_wp_deleted(fact_id: str, by: str) -> dict:
+    """Suppression DÉFINITIVE côté WordPress (2026-08-25, demande explicite :
+    "l'utilisateur ne doit presque rien faire côté... WordPress... tout se
+    gère à partir de KORA") -- appelée APRÈS que
+    publishing/transmit.py::delete_from_wordpress() a confirmé le retrait
+    RÉEL et IRRÉVERSIBLE du post (force=true, pas la corbeille WordPress
+    contrairement à mark_retracted() ci-dessus). Fait passer le fait KORA
+    dans SA PROPRE corbeille (même cycle de vie que trash_facts() : 11
+    jours, restaurable côté KORA, purge RGPD ensuite) -- distinct de
+    mark_retracted() qui, elle, ramène à EDITED en GARDANT wp_post_id/
+    wp_url pour permettre une republication en place.
+
+    Ici au contraire, wp_post_id/wp_url/wp_status/wp_category_name sont
+    EFFACÉS : le post n'existe plus DU TOUT, les garder laisserait un lien
+    "Voir sur WordPress" mort et une republication EN PLACE impossible
+    (croirait à tort pouvoir réutiliser un post qui n'existe plus) --
+    republier après ceci crée nécessairement un nouveau post, comme toute
+    première transmission.
+
+    Aucune restriction de statut de départ (contrairement à
+    mark_retracted() qui exige TRANSMITTED) : le geste porte sur le POST
+    WORDPRESS identifié par wp_post_id, pas sur l'état KORA courant --
+    utilisable aussi après un simple "Retirer" (wp_post_id encore présent,
+    statut déjà EDITED, post encore en corbeille WordPress)."""
+    now = datetime.now(TZ).isoformat(timespec="seconds")
+    p = _ph()
+    con, _ = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(
+            f"""UPDATE hitl_facts SET status='TRASHED', trashed_at={p},
+               wp_post_id=NULL, wp_url=NULL, wp_status=NULL, wp_category_name=NULL
+               WHERE fact_id={p}""",
+            (now, fact_id))
+        cur.execute(
+            f"""INSERT INTO hitl_decisions (fact_id, status, decision, edited_text, final_text, decided_by, decided_at)
+               VALUES ({p},{p},{p},{p},{p},{p},{p})
+               ON CONFLICT(fact_id) DO UPDATE SET
+                 status=EXCLUDED.status, decision=EXCLUDED.decision, decided_by=EXCLUDED.decided_by, decided_at=EXCLUDED.decided_at""",
+            (fact_id, "TRASHED", "TRASHED", "", "", by, now))
+        con.commit()
+    finally:
+        con.close()
+    audit.log(None, "DELETE_WORDPRESS", f"fact={fact_id} by={by}", fact_id=fact_id,
+              action="SUPPRIME_WORDPRESS", editor=by)
+    return {"ok": True, "fact_id": fact_id, "status": "TRASHED"}
+
+
 def mark_transmission_failed(fact_id: str, provider: str, http_status: int) -> dict:
     p = _ph()
     con, _ = db.conn()

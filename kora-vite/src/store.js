@@ -818,6 +818,28 @@ export const Store = (() => {
       throw e;
     }
   }
+  // Suppression DÉFINITIVE côté WordPress (2026-08-25, demande explicite :
+  // "l'utilisateur ne doit presque rien faire côté... WordPress... tout se
+  // gère à partir de KORA") -- distinct de withdrawFromWordPress() ci-dessus
+  // (corbeille WordPress, récupérable) : celui-ci DÉTRUIT le post, sans
+  // filet de sécurité. Pas de window.confirm() ici (contrairement à
+  // withdrawFromWordPress) : la confirmation, plus appuyée pour un geste
+  // irréversible, est portée par confirmAction() côté appelant (app.js),
+  // même pattern que Store.deleteForever().
+  async function deleteFromWordPress(factId) {
+    setState({ ui: { ...state.ui, busy: true, overlay: "Suppression WordPress…" } });
+    try {
+      const r = await api("/api/hitl/delete-wordpress", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fact_id: factId }) });
+      if (r.error) throw new Error(r.error);
+      closeSheet();
+      await _refreshAfterMutation({ includeTrash: true });
+      setState({ ui: { ...state.ui, busy: false, overlay: null } });
+      return r;
+    } catch (e) {
+      setState({ ui: { ...state.ui, busy: false, overlay: null, error: e.message } });
+      throw e;
+    }
+  }
   function setRoute(r) { setState({ route: r }); }
   // F8 (audit UX Sources, 2026-08-24) : à la fermeture d'un panneau (Échap,
   // clic sur l'overlay, bouton "Fermer"), le focus retombait sur <body>
@@ -1304,7 +1326,7 @@ export const Store = (() => {
     state, setState, subscribe, api,
     loadHealth, loadLast, loadHITL, loadAudit, loadSources, loadVideos, addSource, updateSource, loadSettings, applySettings,
     loadNotifications, markNotificationRead, markAllNotificationsRead,
-    startCycle, resumeCycleWatch, cancelCycle, decide, retract, withdrawFromWordPress, setRoute, openSheet, closeSheet, getSheetGen, wait,
+    startCycle, resumeCycleWatch, cancelCycle, decide, retract, withdrawFromWordPress, deleteFromWordPress, setRoute, openSheet, closeSheet, getSheetGen, wait,
     startVideoGeneration, getVideoStatus, startVideoJob, resumeVideoWatch,
     formatEta: _formatEta,
     wasCycleActiveBeforeLoad,

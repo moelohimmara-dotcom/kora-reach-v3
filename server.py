@@ -26,7 +26,7 @@ import identity.root_auth as root_auth
 import identity.permissions as permissions
 from editorial.hitl_store import (
     fact_id_of, decide, get as hitl_get, list_all,
-    mark_transmitted, mark_transmission_failed, retract, mark_retracted,
+    mark_transmitted, mark_transmission_failed, retract, mark_retracted, mark_wp_deleted,
     upsert_fact, list_facts, get_fact, get_fact_detail,
     trash_facts, restore_fact, delete_facts, list_trashed, purge_trashed,
     count_published, count_rejected, count_deleted, get_dashboard_stats,
@@ -1078,6 +1078,38 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"error": "retrait_wordpress_echoue", "detail": wp_res.get("error")})
             res = mark_retracted(fid, EDITOR_NAME)
             log(fid, "WITHDRAW", f"by={EDITOR_NAME} detail={wp_res.get('error') or 'ok'}", "wordpress")
+            if wp_res.get("error"):  # post déjà absent côté WP -- succès quand même, avec avertissement
+                res["warning"] = wp_res["error"]
+            return self._send(200, res)
+        if p.path == "/api/hitl/delete-wordpress":
+            # Suppression DÉFINITIVE côté WordPress (2026-08-25, demande
+            # explicite : "l'utilisateur ne doit presque rien faire côté...
+            # WordPress... tout se gère à partir de KORA") -- distinct de
+            # /api/hitl/withdraw ci-dessus (qui met en corbeille WORDPRESS,
+            # récupérable ~30 jours) : celui-ci DÉTRUIT le post
+            # (?force=true, voir transmit.delete_from_wordpress), sans
+            # filet de sécurité WordPress. Même droit que withdraw (au
+            # moins aussi sensible), et même principe : n'écrit RIEN côté
+            # KORA tant que WordPress n'a pas confirmé la suppression.
+            if not self._can_publish_wp():
+                return self._send(403, {"error": "droit_wordpress_requis"})
+            fid = payload.get("fact_id")
+            fact = get_fact(fid)
+            if not fact:
+                return self._send(404, {"error": "introuvable"})
+            wp_post_id = fact.get("wp_post_id")
+            if not wp_post_id:
+                # Contrairement à withdraw, PAS de contrainte sur le statut
+                # KORA courant (voir hitl_store.mark_wp_deleted docstring) --
+                # seul wp_post_id compte : y'a-t-il vraiment un post à
+                # supprimer ?
+                return self._send(200, {"error": "aucun_post_wordpress"})
+            wp_res = transmit.delete_from_wordpress(wp_post_id)
+            if not wp_res.get("ok"):
+                log(fid, "DELETE_WORDPRESS_FAILED", f"error={wp_res.get('error')}", "wordpress")
+                return self._send(200, {"error": "suppression_wordpress_echouee", "detail": wp_res.get("error")})
+            res = mark_wp_deleted(fid, EDITOR_NAME)
+            log(fid, "DELETE_WORDPRESS", f"by={EDITOR_NAME} detail={wp_res.get('error') or 'ok'}", "wordpress")
             if wp_res.get("error"):  # post déjà absent côté WP -- succès quand même, avec avertissement
                 res["warning"] = wp_res["error"]
             return self._send(200, res)

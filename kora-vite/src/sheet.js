@@ -582,7 +582,8 @@ function renderSheet(s) {
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
             ${f.wp_url ? `<a class="btn btn-tonal btn-sm" href="${esc(f.wp_url)}" target="_blank" rel="noopener">${icon("i-eye")} Voir sur WordPress</a>` : ""}
             ${f.wp_post_id
-              ? `<button class="btn btn-primary btn-sm" data-withdraw="${esc(f.fact_id)}" title="Retirer de WordPress">${icon("i-undo")} Retirer</button>`
+              ? `<button class="btn btn-primary btn-sm" data-withdraw="${esc(f.fact_id)}" title="Retirer de WordPress">${icon("i-undo")} Retirer</button>
+                 <button class="btn btn-danger-ghost btn-sm" data-delete-wp="${esc(f.fact_id)}" title="Supprimer définitivement de WordPress">${icon("i-trash")} Supprimer de WordPress</button>`
               : `<span class="muted" title="Article transmis avant l'ajout du suivi -- retrait automatique indisponible pour celui-ci">${icon("i-info")} Retrait indisponible (article transmis avant ce suivi)</span>`}
           </div>
         </div>
@@ -624,6 +625,38 @@ function renderSheet(s) {
   const rb = body.querySelector("[data-retract]");
   if (rb) rb.onclick = () => guardClick(rb, () =>
     Store.retract(f.fact_id).then(r => { if (!r?.cancelled) Store.closeSheet(); }).catch(e => snack(friendlyActionError(e))));
+  // Bug corrigé (2026-08-25, trouvé en testant en conditions réelles le
+  // nouveau bouton "Supprimer de WordPress") : [data-withdraw] et
+  // [data-delete-wp] (bloc TRANSMITTED ci-dessus) n'étaient liés QUE dans
+  // app.js::render() (rebind générique après CHAQUE render du Store) --
+  // mais renderSheet() est aussi appelée DIRECTEMENT (openFact(), et
+  // plusieurs endroits dans ce fichier même : reject-confirm, edit, decide)
+  // SANS jamais repasser par render(). Chaque appel direct reconstruit le
+  // DOM du tiroir via body.innerHTML, produisant des boutons FLAMBANT
+  // NEUFS sans aucun gestionnaire de clic tant qu'un prochain passage par
+  // render() (ex: le poll 30s) ne les relie pas -- le clic ne faisait
+  // simplement rien pendant cette fenêtre. Liés ICI directement, même
+  // pattern que closeBtn/rb/ed ci-dessus (auto-suffisant, jamais tributaire
+  // d'un rebind externe).
+  const wb = body.querySelector("[data-withdraw]");
+  if (wb) wb.onclick = () => guardClick(wb, () =>
+    Store.withdrawFromWordPress(f.fact_id).then(r => {
+      if (r?.cancelled) return;
+      if (r?.warning) snack(`Article retiré (${r.warning})`);
+      else snack("Article retiré de WordPress, redevenu modifiable.");
+      Store.closeSheet();
+    }).catch(e => snack(friendlyActionError(e))));
+  const dwb = body.querySelector("[data-delete-wp]");
+  if (dwb) dwb.onclick = () => confirmAction({
+    title: "Supprimer définitivement de WordPress ?",
+    message: "Le post sera détruit sur WordPress, sans passer par sa corbeille -- aucun retour en arrière possible. L'article restera consultable dans la corbeille de KORA.",
+    confirmLabel: "Supprimer de WordPress",
+    onConfirm: () => guardClick(dwb, () =>
+      Store.deleteFromWordPress(f.fact_id).then(r => {
+        if (r?.warning) snack(`Supprimé de WordPress (${r.warning})`);
+        else snack("Article supprimé définitivement de WordPress.");
+      }).catch(e => snack(friendlyActionError(e)))),
+  });
   const ed = body.querySelector("[data-edit]");
   if (ed) ed.onclick = () => {
     body.innerHTML = `
