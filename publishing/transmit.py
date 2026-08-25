@@ -7,6 +7,7 @@ Aucune credential dans le code. Absente -> dry_run forcé.
 import os
 import re
 import json
+import time
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -564,14 +565,37 @@ def _upload_media(image_url: str, fallback_url: str = "", image_provider: str = 
         if not url:
             continue
         # Lire les bytes: fichier local si existe, sinon URL
+        # Retry (2026-08-25, audit de fiabilité) : entre la génération de
+        # l'article et sa publication WordPress, il peut s'écouler des
+        # heures -- une URL LoremFlickr/Picsum valide au moment de la
+        # génération peut retomber sur une erreur 403/500 TRANSITOIRE côté
+        # service au moment précis de cette re-lecture. Sans retry, ça
+        # publiait l'article SANS AUCUNE image (media_id=0), silencieusement
+        # (le champ image_error existe mais rien ne le pousse activement).
         try:
             if os.path.exists(url):
                 with open(url, "rb") as f:
                     data = f.read()
             else:
-                req_img = urllib.request.Request(url, headers={"User-Agent": "KORA/1.0"})
-                with urllib.request.urlopen(req_img, timeout=40) as r:
-                    data = r.read()
+                data = None
+                last_dl_err = None
+                for attempt in range(3):
+                    try:
+                        req_img = urllib.request.Request(url, headers={"User-Agent": "KORA/1.0"})
+                        with urllib.request.urlopen(req_img, timeout=40) as r:
+                            data = r.read()
+                        break
+                    # TimeoutError inclus (revue fable-advisor, 2026-08-25) :
+                    # un timeout urlopen() est un OSError, pas une HTTPError
+                    # -- sans ça il échappait au retry alors que c'est
+                    # justement l'un des cas les plus susceptibles d'être
+                    # transitoire (même correctif que _call_loremflickr).
+                    except (urllib.error.HTTPError, TimeoutError) as e:
+                        last_dl_err = e
+                        if attempt < 2:
+                            time.sleep(2)
+                if data is None:
+                    raise last_dl_err
         except Exception as e:
             reasons.append(f"{url[:60]}: téléchargement échoué ({e})")
             continue

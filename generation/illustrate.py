@@ -109,32 +109,68 @@ def _build_search_text(champion: dict, contexts: list, title: str = "") -> str:
     return " ".join(p for p in parts if p)
 
 
+def _fetch_loremflickr_once(url: str):
+    """Une seule tentative brute -- retourne True si l'image a bien été servie,
+    lève sinon (HTTPError/URLError/autre). Factorisé (2026-08-25, audit de
+    fiabilité : "erreurs 403/500 intermittentes constatées en usage réel")
+    pour que _call_loremflickr puisse réessayer CE MÊME combo de mots-clés
+    avant de passer au suivant -- une erreur transitoire (surcharge
+    momentanée du service) n'a pas à coûter le meilleur combo de mots-clés
+    juste parce qu'elle est tombée sur la première tentative."""
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 KORA/1.0"})
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        ctype = r.headers.get("Content-Type", "")
+        if "image" not in ctype:
+            raise ValueError(f"LoremFlickr a répondu {ctype}")
+    return True
+
+
 def _call_loremflickr(title: str, salt: str = "", lock_override: int = None):
     """Génère une image via LoremFlickr (photos Flickr réelles par mot-clé, gratuit, sans clé).
     `salt` (fact_id) dérive un `lock` déterministe. `lock_override` force un lock précis
     (utilisé pour garantir l'unicité entre articles d'un même cycle).
-    Retourne (url, provider) ou lève si image par défaut / échec."""
+    Retourne (url, provider) ou lève si image par défaut / échec.
+
+    Retry (2026-08-25, audit de fiabilité) : jusqu'à 2 tentatives par combo de
+    mots-clés, avec une courte pause, avant de passer au combo suivant --
+    absorbe une erreur 403/500 transitoire côté LoremFlickr (constatée en
+    usage réel, non systématique) sans dégrader inutilement vers un combo de
+    mots-clés moins pertinent, ni vers Picsum (photo sans rapport avec le
+    sujet, dernier recours)."""
     import hashlib
+    import time
     if lock_override is not None:
         lock = int(lock_override) % 100000
     else:
         lock = int(hashlib.sha256((salt or title).encode()).hexdigest()[:8], 16) % 100000
     kws = _extract_keywords(title)
+    last_err = None
     for combo in [kws, kws[:2] if len(kws) > 1 else kws, ["guinea", "conakry"]]:
         tag = ",".join(combo)
         url = f"https://loremflickr.com/800/450/{urllib.parse.quote(tag)}/all?lock={lock}"
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 KORA/1.0"})
-            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-                ctype = r.headers.get("Content-Type", "")
-                if "image" not in ctype:
-                    raise ValueError(f"LoremFlickr a répondu {ctype}")
-                # On accepte l'image (meme defaultImage de LoremFlickr) : c'est une
-                # photo reelle, bien preferable au placeholder vide cote frontend.
+        for attempt in range(2):
+            try:
+                _fetch_loremflickr_once(url)
                 return url, "loremflickr"
-        except urllib.error.HTTPError:
-            continue
-    raise RuntimeError("LoremFlickr: aucun match (toujours image par défaut)")
+            # Bug corrigé (revue fable-advisor, 2026-08-25) : un TIMEOUT
+            # (socket.timeout/TimeoutError, levé par urlopen(timeout=...))
+            # n'est PAS une urllib.error.HTTPError -- c'est un OSError, donc
+            # il tombait dans le except Exception générique ci-dessous et
+            # SAUTAIT le retry, alors qu'un timeout sous charge momentanée
+            # est justement l'un des cas les PLUS susceptibles d'être
+            # transitoire (exactement ce que ce correctif visait à couvrir).
+            except (urllib.error.HTTPError, TimeoutError) as e:
+                last_err = e
+                if attempt == 0:
+                    time.sleep(1.5)  # laisse une chance à une erreur transitoire (403/500/timeout) de passer
+                continue
+            except Exception as e:
+                # Reste (URLError DNS/connexion refusée/etc.) : pas la peine
+                # de réessayer CE combo, passe directement au suivant -- une
+                # erreur réseau locale a peu de chances de se résoudre en 1.5s.
+                last_err = e
+                break
+    raise RuntimeError(f"LoremFlickr: aucun match après retry (dernière erreur : {last_err})")
 
 
 def _candidate_images(champion: dict, contexts: list) -> list:
