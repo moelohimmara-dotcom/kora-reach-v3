@@ -841,16 +841,29 @@ export const Store = (() => {
     return null;
   };
   let _sheetTriggerSelector = null;
+  // Compteur de génération (2026-08-25, correctif chargement à la demande de
+  // openFact() dans app.js) : incrémenté à CHAQUE ouverture/fermeture de
+  // tiroir. openFact() capture cette valeur avant de lancer son fetch
+  // GET /api/hitl/fact (détail complet, chargé à la demande depuis le
+  // correctif de poids de /api/hitl) -- si la génération a changé quand le
+  // fetch revient (tiroir fermé entretemps, ou un AUTRE article ouvert), le
+  // résultat est jeté silencieusement plutôt que de rouvrir un tiroir que
+  // l'utilisateur a fermé ou d'écraser l'article qu'il regarde désormais
+  // (race condition trouvée en revue fable-advisor, pas par test direct).
+  let _sheetGen = 0;
   function openSheet(s) {
+    _sheetGen++;
     _sheetTriggerSelector = _elementSelector(document.activeElement);
     setState({ sheet: s });
   }
   function closeSheet() {
+    _sheetGen++;
     const sel = _sheetTriggerSelector;
     setState({ sheet: null });
     if (sel) { try { document.querySelector(sel)?.focus(); } catch (e) {} }
     _sheetTriggerSelector = null;
   }
+  function getSheetGen() { return _sheetGen; }
 
   // Centre de notifications (10.2) : DÉLIBÉRÉMENT PAS dans le Store réactif.
   // Voir app.js (_notifications, addNotif) — un setState ici déclencherait un
@@ -1291,7 +1304,7 @@ export const Store = (() => {
     state, setState, subscribe, api,
     loadHealth, loadLast, loadHITL, loadAudit, loadSources, loadVideos, addSource, updateSource, loadSettings, applySettings,
     loadNotifications, markNotificationRead, markAllNotificationsRead,
-    startCycle, resumeCycleWatch, cancelCycle, decide, retract, withdrawFromWordPress, setRoute, openSheet, closeSheet, wait,
+    startCycle, resumeCycleWatch, cancelCycle, decide, retract, withdrawFromWordPress, setRoute, openSheet, closeSheet, getSheetGen, wait,
     startVideoGeneration, getVideoStatus, startVideoJob, resumeVideoWatch,
     formatEta: _formatEta,
     wasCycleActiveBeforeLoad,

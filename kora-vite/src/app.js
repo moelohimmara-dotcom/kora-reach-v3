@@ -690,14 +690,52 @@ function navigate(route, push = true) {
   else if (route === "dashboard") { Store.loadLast(); Store.loadHITL(); }
   render();
 }
-function openFact(id) {
+async function openFact(id) {
   const facts = Store.state.facts || [];
   let f = facts.find(x => x.fact_id === id);
   if (!f && (id || "").startsWith("idx")) {
     const i = parseInt(id.slice(3), 10);
     f = facts[i];
   }
-  if (f) { Store.openSheet({ type: "fact", fact: f }); renderSheet(Store.state); }
+  if (!f) return;
+  // Chargement à la demande (2026-08-25, correctif poids de charge /api/hitl) :
+  // la liste est désormais allégée (sans le texte complet de chaque article,
+  // voir hitl_store.py::list_facts(light=True)) -- f.article est alors absent
+  // (clé OMISE, pas juste vide : voir _shape_fact_row) et sert de signal
+  // fiable "détail pas encore chargé". On va le chercher UNE SEULE fois par
+  // fait : Object.assign mute l'objet déjà présent dans Store.state.facts,
+  // donc les ouvertures suivantes du même article sont instantanées (aucun
+  // second appel réseau). Le tiroir n'ouvre qu'UNE FOIS le détail arrivé
+  // (plutôt qu'ouvrir vide puis "sauter" au contenu) : renderSheet() (très
+  // dense, des dizaines de correctifs déjà) n'a besoin d'AUCUN changement.
+  if (f.article === undefined) {
+    // Anti-obsolescence (2026-08-25, revue fable-advisor) : capture la
+    // génération AVANT le fetch -- si le tiroir a été fermé ou qu'un AUTRE
+    // article a été ouvert entretemps (Store.getSheetGen() a changé), le
+    // résultat est jeté silencieusement au retour : n'ouvre PAS un tiroir
+    // que l'utilisateur a fermé, n'écrase PAS l'article qu'il regarde
+    // désormais avec une réponse plus ancienne arrivée en retard.
+    const gen = Store.getSheetGen();
+    const card = document.querySelector(`[data-fact="${CSS.escape(f.fact_id)}"]`);
+    if (card) card.classList.add("opening");
+    try {
+      const r = await Store.api("/api/hitl/fact?id=" + encodeURIComponent(f.fact_id));
+      if (Store.getSheetGen() !== gen) return;
+      if (!r || !r.ok || !r.fact) {
+        snack("Impossible de charger l'article, réessaie.");
+        return;
+      }
+      Object.assign(f, r.fact);
+    } catch (e) {
+      if (Store.getSheetGen() !== gen) return;
+      snack(e.message || "Impossible de charger l'article, réessaie.");
+      return;
+    } finally {
+      if (card) card.classList.remove("opening");
+    }
+  }
+  Store.openSheet({ type: "fact", fact: f });
+  renderSheet(Store.state);
 }
 
 function bind() {
@@ -743,14 +781,10 @@ function bind() {
       // En mode sélection, le clic sur la carte (ou sa case) ne doit PAS ouvrir le tiroir.
       if (Store.state.selectMode) { e.stopPropagation(); return; }
       e.stopPropagation();
-      const facts = Store.state.facts || [];
-      let f = facts.find(x => x.fact_id === card.dataset.fact);
-      if (!f && (card.dataset.fact || "").startsWith("idx")) {
-        const i = parseInt(card.dataset.fact.slice(3), 10);
-        f = facts[i];
-      }
-      if (!f && card.dataset.index) f = facts[parseInt(card.dataset.index, 10)];
-      if (f) { Store.openSheet({ type: "fact", fact: f }); renderSheet(Store.state); }
+      // Résolution + chargement à la demande centralisés dans openFact()
+      // (2026-08-25, correctif poids de charge -- voir sa doc) : gère déjà
+      // le repli "idxN" (fact_id absent) que ce listener dupliquait ici.
+      openFact(card.dataset.fact);
     });
   }
   // ---- Appui long mobile (500ms) : entre en sélection + toggle, avec vibration ----

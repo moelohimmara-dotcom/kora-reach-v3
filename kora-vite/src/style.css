@@ -634,6 +634,13 @@ html.icons-ready .material-icons { visibility: visible; }
 }
 .fact-card:hover { transform: translateY(-5px); box-shadow: var(--glass-shadow), var(--glass-glow); border-color: rgba(242,169,140,0.35); }
 .fact-card:focus-visible { outline: 2px solid var(--coral); outline-offset: 2px; }
+/* Chargement à la demande du détail complet (2026-08-25, correctif poids de
+   charge /api/hitl) : bref indicateur pendant l'aller-retour réseau au 1er
+   clic sur un article (mise en cache ensuite -> plus jamais revu sur ce
+   fait). Anime l'opacité plutôt qu'un spinner superposé : évite un saut de
+   layout, cohérent avec la brièveté attendue de l'attente. */
+.fact-card.opening { pointer-events: none; animation: kora-card-opening 1s ease-in-out infinite; }
+@keyframes kora-card-opening { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
 .fact-img { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; background: var(--md-sys-color-surface-variant); border-top-left-radius: var(--radius-xl); border-top-right-radius: var(--radius-xl); }
 .fact-body { padding: var(--space-4); }
 .fact-title { font-family: var(--font-display); font-size: var(--t-title-lg); font-weight: 700; margin-bottom: var(--space-3); line-height: 1.28; letter-spacing: -.2px; }

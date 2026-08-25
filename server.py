@@ -27,7 +27,7 @@ import identity.permissions as permissions
 from editorial.hitl_store import (
     fact_id_of, decide, get as hitl_get, list_all,
     mark_transmitted, mark_transmission_failed, retract, mark_retracted,
-    upsert_fact, list_facts, get_fact,
+    upsert_fact, list_facts, get_fact, get_fact_detail,
     trash_facts, restore_fact, delete_facts, list_trashed, purge_trashed,
     count_published, count_rejected, count_deleted, get_dashboard_stats,
 )
@@ -662,12 +662,33 @@ class Handler(BaseHTTPRequestHandler):
             # orpheline, ex. donnee historique/migration) n'a aucune raison de
             # re-scanner toute la table a cette frequence. Deplacee vers un rythme
             # raisonnable : une fois par cycle (reach_agent.py), plus jamais ici.
-            out = list_facts()
+            # light=True (2026-08-25, correctif poids de charge -- audit
+            # perf) : omet le texte complet de chaque article (~6 Ko/fait,
+            # jamais affiche dans la vue liste, deja a l'origine du bug
+            # "bandeau d'erreur" ci-dessus a plus petite echelle). Le
+            # frontend charge le detail complet a la demande via
+            # /api/hitl/fact (voir get_fact_detail() ci-dessous et
+            # kora-vite/src/app.js::openFact()).
+            out = list_facts(light=True)
             published = count_published()
             rejected = count_rejected()
             deleted = count_deleted()
             return self._send(200, {"facts": out, "published_count": published,
                                      "rejected_count": rejected, "deleted_count": deleted})
+        if path == "/api/hitl/fact":
+            # Détail complet (article inclus) d'UN fait, chargé à la demande
+            # par le frontend à l'ouverture d'une fiche (voir list_facts()
+            # light=True ci-dessus, qui omet ce texte de la liste).
+            if not self._require_auth():
+                return
+            _qs = urllib.parse.parse_qs(p.query)
+            fid = (_qs.get("id") or [""])[0]
+            if not fid:
+                return self._send(400, {"error": "id_requis"})
+            fact = get_fact_detail(fid)
+            if not fact:
+                return self._send(404, {"error": "fact_introuvable"})
+            return self._send(200, {"ok": True, "fact": fact})
         if path == "/api/stats":
             # SSOT : tous les compteurs du dashboard en UN seul objet certifie.
             if not self._require_auth():

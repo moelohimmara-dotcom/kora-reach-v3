@@ -399,23 +399,23 @@ def upsert_fact(f: dict) -> str:
     return fid
 
 
-def list_facts() -> list:
-    _init()
-    con, mode = db.conn()
-    try:
-        cur = con.cursor()
-        cur.execute(
-            """SELECT f.*, d.status AS d_status, d.decided_by, d.decided_at, d.final_text, d.provider
-               FROM hitl_facts f
-               LEFT JOIN hitl_decisions d ON d.fact_id = f.fact_id
-               ORDER BY f.created_at DESC""")
-        rows = cur.fetchall()
-    finally:
-        con.close()
-    out = []
-    for r in rows:
-        d = dict(r)
-        champ = json.loads(d["article_retenu"]) if d["article_retenu"] else {}
+def _shape_fact_row(d: dict, include_article: bool = True) -> dict:
+    """Met en forme UNE ligne brute (hitl_facts JOIN hitl_decisions) vers le
+    dict exposé à l'API/au frontend -- extrait de list_facts() (2026-08-25,
+    correctif poids de charge /api/hitl) pour être partagé par list_facts()
+    ET get_fact_detail() (nouvelle fonction, lecture d'UN seul fait) sans
+    dupliquer cette logique de mise en forme (risque de divergence sinon).
+
+    include_article=False (utilisé par list_facts(light=True)) omet les
+    champs `article`/`final_text` (texte complet de l'article, potentiellement
+    plusieurs Ko chacun) : le frontend n'en a besoin QUE pour afficher la
+    fiche détail d'UN article précis (ouverte via GET /api/hitl/fact),
+    jamais pour la simple carte de liste (titre/statut/image/source). Voir
+    kora-vite/src/app.js::openFact() pour le chargement à la demande côté
+    client -- `article` absent du dict (clé OMISE, pas juste vide) est le
+    signal que le frontend utilise pour savoir qu'il doit aller chercher le
+    détail complet."""
+    champ = json.loads(d["article_retenu"]) if d["article_retenu"] else {}
         # Prevention (2026-08-19, demande explicite apres le correctif de
         # lenteur de /api/hitl) : raw_content (texte source COMPLET scrape,
         # potentiellement plusieurs Ko par source) n'est utilise QUE cote
@@ -425,11 +425,66 @@ def list_facts() -> list:
         # il n'est jamais affiche. Retire ici -> pur gain de poids sans
         # aucun changement cote client. Article deja redige (le texte
         # REELLEMENT affiche) reste inclus, lui, sans changement.
-        champ.pop("raw_content", None)
-        ctx = json.loads(d["sources_secondaires"]) if d["sources_secondaires"] else []
-        for c in ctx:
-            if isinstance(c, dict):
-                c.pop("raw_content", None)
+    champ.pop("raw_content", None)
+    ctx = json.loads(d["sources_secondaires"]) if d["sources_secondaires"] else []
+    for c in ctx:
+        if isinstance(c, dict):
+            c.pop("raw_content", None)
+    img_meta = json.loads(d["image_meta"]) if d["image_meta"] else {}
+    if not img_meta.get("image") and d["image"] and d["image"].startswith("http"):
+        img_meta = {"image": d["image"], "provider": "loremflickr", "generated": True}
+    # B+C backend : hitl_facts.status prime sur la décision HITL pour la
+    # corbeille (priorité absolue). Un fact à la corbeille (status='TRASHED'
+    # en base) doit rester "Corbeille" côté frontend, même si hitl_decisions
+    # porte une autre décision (ex: remis en attente). Sinon on utilise la
+    # décision HITL (d_status) pour refléter APPROVED/REJECTED/EDITED/TRANSMITTED.
+    # B+C backend : hitl_facts.status EST la source de vérité (mirroré par decide()
+    # et mark_transmitted()). On l'utilise directement — sauf si c'est PENDING_REVIEW
+    # et qu'une décision HITL le précise (cas d'un fact décidé mais non mirroiré).
+    # Exclusion "RETRACTED" (2026-08-19, bug corrigé) : retract() garde
+    # volontairement hitl_decisions.status='RETRACTED' pour la traçabilité
+    # (même convention que REJECTED, voir decide()), mais hitl_facts.status
+    # est désormais mirroré à 'PENDING_REVIEW' par retract() lui-même -- sans
+    # cette exclusion, ce repli écrasait ce mirroring correct en réaffichant
+    # "RETRACTED", un statut que le frontend ne reconnaît même pas.
+    _raw_status = d.get("status") or "PENDING_REVIEW"
+    if _raw_status == "TRASHED":
+        _eff_status = "TRASHED"
+    elif _raw_status == "PENDING_REVIEW" and d.get("d_status") and d.get("d_status") != "RETRACTED":
+        _eff_status = d["d_status"]
+    else:
+        _eff_status = _raw_status
+    out = {
+        "fact_id": d["fact_id"], "article_retenu": champ, "sources_secondaires": ctx,
+        "image": d["image"], "image_meta": img_meta, "gen_model": d["gen_model"],
+        "n_sources": d["n_sources"], "status": _eff_status,
+        "decided_by": d["decided_by"], "decided_at": d["decided_at"],
+        "provider": d["provider"],
+        "created_at": d["created_at"],
+        # d_status + rejected : pour que le frontend classe correctement
+        # les articles rejetes (corbeille + decision HITL REJECTED) dans "Rejetes".
+        "d_status": d.get("d_status"),
+        "rejected": (_raw_status == "TRASHED" and (d.get("d_status") == "REJECTED" or d.get("decision") == "REJECTED")),
+        # Traçabilité WordPress (2026-08-23, voir mark_transmitted()) : le
+        # frontend s'en sert pour verrouiller les actions d'un article déjà
+        # transmis et afficher un lien direct vers le post réel.
+        "wp_post_id": d.get("wp_post_id"),
+        "wp_url": d.get("wp_url"),
+        "wp_status": d.get("wp_status"),
+        "wp_category_name": d.get("wp_category_name"),
+        "suggested_category": d.get("suggested_category"),
+        # video_status/video_path/video_duration_sec (2026-08-23, bug
+        # trouvé en implémentant l'affordance vidéo de la page Publiés :
+        # list_facts() -- source de s.facts, donc de viewFacts() ET
+        # viewPublished() côté frontend -- n'exposait jamais ces
+        # colonnes, contrairement à _fact_by_id()/get_fact(). Un article
+        # transmis avec vidéo narrée serait apparu SANS son lecteur sur
+        # la page Publiés, aucune info video_status pour le détecter.
+        "video_status": d.get("video_status"),
+        "video_path": d.get("video_path"),
+        "video_duration_sec": d.get("video_duration_sec"),
+    }
+    if include_article:
         # B1 fix : article stocké en JSON string ("{}" = vide) -> traiter comme ""
         art_raw = d["article"]
         if art_raw and (art_raw.startswith("{") or art_raw.startswith("[")):
@@ -444,61 +499,58 @@ def list_facts() -> list:
                 art = art_raw
         else:
             art = art_raw or ""
-        img_meta = json.loads(d["image_meta"]) if d["image_meta"] else {}
-        if not img_meta.get("image") and d["image"] and d["image"].startswith("http"):
-            img_meta = {"image": d["image"], "provider": "loremflickr", "generated": True}
-        # B+C backend : hitl_facts.status prime sur la décision HITL pour la
-        # corbeille (priorité absolue). Un fact à la corbeille (status='TRASHED'
-        # en base) doit rester "Corbeille" côté frontend, même si hitl_decisions
-        # porte une autre décision (ex: remis en attente). Sinon on utilise la
-        # décision HITL (d_status) pour refléter APPROVED/REJECTED/EDITED/TRANSMITTED.
-        # B+C backend : hitl_facts.status EST la source de vérité (mirroré par decide()
-        # et mark_transmitted()). On l'utilise directement — sauf si c'est PENDING_REVIEW
-        # et qu'une décision HITL le précise (cas d'un fact décidé mais non mirroiré).
-        # Exclusion "RETRACTED" (2026-08-19, bug corrigé) : retract() garde
-        # volontairement hitl_decisions.status='RETRACTED' pour la traçabilité
-        # (même convention que REJECTED, voir decide()), mais hitl_facts.status
-        # est désormais mirroré à 'PENDING_REVIEW' par retract() lui-même -- sans
-        # cette exclusion, ce repli écrasait ce mirroring correct en réaffichant
-        # "RETRACTED", un statut que le frontend ne reconnaît même pas.
-        _raw_status = d.get("status") or "PENDING_REVIEW"
-        if _raw_status == "TRASHED":
-            _eff_status = "TRASHED"
-        elif _raw_status == "PENDING_REVIEW" and d.get("d_status") and d.get("d_status") != "RETRACTED":
-            _eff_status = d["d_status"]
-        else:
-            _eff_status = _raw_status
-        out.append({
-            "fact_id": d["fact_id"], "article_retenu": champ, "sources_secondaires": ctx, "article": art,
-            "image": d["image"], "image_meta": img_meta, "gen_model": d["gen_model"],
-            "n_sources": d["n_sources"], "status": _eff_status,
-            "decided_by": d["decided_by"], "decided_at": d["decided_at"],
-            "final_text": d["final_text"], "provider": d["provider"],
-            "created_at": d["created_at"],
-            # d_status + rejected : pour que le frontend classe correctement
-            # les articles rejetes (corbeille + decision HITL REJECTED) dans "Rejetes".
-            "d_status": d.get("d_status"),
-            "rejected": (_raw_status == "TRASHED" and (d.get("d_status") == "REJECTED" or d.get("decision") == "REJECTED")),
-            # Traçabilité WordPress (2026-08-23, voir mark_transmitted()) : le
-            # frontend s'en sert pour verrouiller les actions d'un article déjà
-            # transmis et afficher un lien direct vers le post réel.
-            "wp_post_id": d.get("wp_post_id"),
-            "wp_url": d.get("wp_url"),
-            "wp_status": d.get("wp_status"),
-            "wp_category_name": d.get("wp_category_name"),
-            "suggested_category": d.get("suggested_category"),
-            # video_status/video_path/video_duration_sec (2026-08-23, bug
-            # trouvé en implémentant l'affordance vidéo de la page Publiés :
-            # list_facts() -- source de s.facts, donc de viewFacts() ET
-            # viewPublished() côté frontend -- n'exposait jamais ces
-            # colonnes, contrairement à _fact_by_id()/get_fact(). Un article
-            # transmis avec vidéo narrée serait apparu SANS son lecteur sur
-            # la page Publiés, aucune info video_status pour le détecter.
-            "video_status": d.get("video_status"),
-            "video_path": d.get("video_path"),
-            "video_duration_sec": d.get("video_duration_sec"),
-        })
+        out["article"] = art
+        out["final_text"] = d["final_text"]
     return out
+
+
+def list_facts(light: bool = False) -> list:
+    """light=True (2026-08-25, correctif poids de charge /api/hitl) : omet
+    `article`/`final_text` de chaque fait -- utilisé par /api/hitl (GET), le
+    endpoint interrogé toutes les 30s par le frontend (auto-refresh), dont
+    la réponse grossit sinon indéfiniment avec l'historique (mesuré : ~6 Ko/
+    fait rien que pour le texte complet, jamais affiché dans la vue liste,
+    déjà à l'origine d'un vrai incident de lenteur le 2026-08-19). Défaut
+    light=False INCHANGÉ pour tous les autres appelants existants (scripts
+    de maintenance, etc.) -- voir get_fact_detail() pour charger le détail
+    complet d'UN fait à la demande (kora-vite/src/app.js::openFact())."""
+    _init()
+    con, mode = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(
+            """SELECT f.*, d.status AS d_status, d.decided_by, d.decided_at, d.final_text, d.provider
+               FROM hitl_facts f
+               LEFT JOIN hitl_decisions d ON d.fact_id = f.fact_id
+               ORDER BY f.created_at DESC""")
+        rows = cur.fetchall()
+    finally:
+        con.close()
+    return [_shape_fact_row(dict(r), include_article=not light) for r in rows]
+
+
+def get_fact_detail(fid: str) -> dict | None:
+    """Détail COMPLET (article inclus) d'UN SEUL fait, même mise en forme que
+    list_facts() -- chargé à la demande par le frontend quand une liste
+    allégée (list_facts(light=True)) a été utilisée pour peupler s.facts
+    (voir kora-vite/src/app.js::openFact(), /api/hitl/fact côté server.py).
+    Retourne None si le fait n'existe pas."""
+    _init()
+    con, mode = db.conn()
+    try:
+        cur = con.cursor()
+        ph = _ph()
+        cur.execute(
+            f"""SELECT f.*, d.status AS d_status, d.decided_by, d.decided_at, d.final_text, d.provider
+               FROM hitl_facts f
+               LEFT JOIN hitl_decisions d ON d.fact_id = f.fact_id
+               WHERE f.fact_id={ph}""", (fid,))
+        row = cur.fetchone()
+    finally:
+        con.close()
+    if not row:
+        return None
+    return _shape_fact_row(dict(row), include_article=True)
 
 
 def get_fact(fid: str) -> dict | None:
