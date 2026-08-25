@@ -45,7 +45,7 @@ dossiers = regrouper_dossiers(pool, config.LIMITS["dossier_sim_threshold"])
 facts = []
 for dossier in dossiers:
     champ, ctx = pick_champion(dossier)
-    fact = {"champion": champ, "contexts": ctx, "n_sources": len(dossier)}
+    fact = {"champion": champ, "sources_secondaires": ctx, "n_sources": len(dossier)}
     w = write_article(fact)
     fact["article"] = w["article"]; fact["gen_model"] = w["model"]
     facts.append(fact)

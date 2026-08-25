@@ -162,7 +162,7 @@ def compute_length_target(fact: Dict) -> Dict:
     Retourne {target, score, reasons[]}. Plage 879-1400 mots.
     """
     champ = fact.get("champion", {})
-    ctx = fact.get("contexts", []) or fact.get("contextes", []) or []
+    ctx = fact.get("sources_secondaires", []) or fact.get("contexts", []) or []
     score = 0
     reasons = []
 
@@ -237,7 +237,7 @@ def compute_length_target(fact: Dict) -> Dict:
 
 def _build_messages(fact: Dict) -> List[Dict]:
     champ = fact.get("champion", {}) or {}
-    ctx = fact.get("contexts", [])
+    ctx = fact.get("sources_secondaires", []) or fact.get("contexts", [])
     lt = compute_length_target(fact)
     # Régénération : ajustement de la cible de longueur selon la suggestion
     sug = fact.get("_regen_suggestion")
@@ -290,7 +290,7 @@ def _illustrate_fact(fact: Dict) -> Dict:
     du dossier en priorité, plus aucune génération IA -- voir generation/
     illustrate.py). Retourne dict image/métadonnées."""
     champ = fact.get("champion", {}) or {}
-    contexts = fact.get("contexts", []) or []
+    contexts = fact.get("sources_secondaires", []) or fact.get("contexts", []) or []
     res = illustrate.illustrate(champ, contexts, champ.get("title", ""),
                                 fact_id=fact.get("fact_id", ""))
     return res
@@ -498,7 +498,7 @@ def validate_article(raw: str, fact: Dict) -> Dict:
         return any(d in ul for d in IMG_DOMAINS)
     flags = []
     src_domains = set()
-    for c in ([fact.get("champion", {})] + list(fact.get("contexts", []) or [])):
+    for c in ([fact.get("champion", {})] + list(fact.get("sources_secondaires", []) or fact.get("contexts", []) or [])):
         u = c.get("url", "") or ""
         m = _re.search(r"https?://([^/]+)/?", u)
         if m:
@@ -1008,7 +1008,7 @@ def simple_completion(system_prompt: str, user_prompt: str, max_tokens: int = 12
 # ---------------------------------------------------------------------------
 # Suggestions d'angle proposées à l'utilisateur. Chaque suggestion apporte une
 # CONSIGNE D'ANGLE uniquement : elle oriente la rédaction SANS jamais modifier
-# les faits (le champion/contexts source reste la source unique de vérité).
+# les faits (le champion/sources_secondaires source reste la source unique de vérité).
 REGEN_SUGGESTIONS = [
     {"id": "economique", "label": "Angle économique",
      "hint": "Accentue les impacts économiques, coûts, secteurs concernés, enjeux financiers."},

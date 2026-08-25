@@ -14,7 +14,7 @@ fact = {
         "url": "https://mosaiqueguinee.com/koukoutamba-bad-2026",
         "source": "mosaiqueguinee.com",
     },
-    "contexts": [{"source": "guineenews.org"}, {"source": "guinee360.com"}],
+    "sources_secondaires": [{"source": "guineenews.org"}, {"source": "guinee360.com"}],
     "n_sources": 3,
     "article": "La Banque africaine de développement (BAD) finance le barrage "
                "de Koukoutamba en Guinée. Plusieurs sources nationales convergent.",

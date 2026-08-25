@@ -44,7 +44,7 @@ def main():
     try:
         fid = hitl_store.upsert_fact({
             "champion": {"title": "Sujet video test", "source": "test", "url": "http://x/1"},
-            "contexts": [], "article": "Ceci est un article de test suffisamment long pour "
+            "sources_secondaires": [], "article": "Ceci est un article de test suffisamment long pour "
                 "depasser le seuil minimal de caracteres requis pour declencher une "
                 "generation video complete, avec plusieurs phrases distinctes.",
             "image": "http://x/couverture.jpg", "image_meta": {"provider": "source"},
@@ -99,7 +99,7 @@ def main():
         # verrou d'exclusivite video des que le thread se termine.
         fid2 = hitl_store.upsert_fact({
             "champion": {"title": "Sujet on_complete", "source": "test", "url": "http://x/3"},
-            "contexts": [], "article": "Article suffisamment long pour depasser le seuil "
+            "sources_secondaires": [], "article": "Article suffisamment long pour depasser le seuil "
                 "minimal de caracteres requis, plusieurs phrases distinctes ici.",
             "image": "http://x/couverture2.jpg", "image_meta": {"provider": "source"},
             "gen_model": "test", "n_sources": 1,
@@ -130,7 +130,7 @@ def main():
         # tenter une generation video sans image.
         fid_sans_image = hitl_store.upsert_fact({
             "champion": {"title": "Sujet sans image", "source": "test", "url": "http://x/2"},
-            "contexts": [], "article": "Article suffisamment long pour depasser le seuil "
+            "sources_secondaires": [], "article": "Article suffisamment long pour depasser le seuil "
                 "minimal de caracteres requis pour la generation video, plusieurs phrases.",
             "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
         })
@@ -147,7 +147,7 @@ def main():
         # pour toujours (verrou acquis AVANT cet appel).
         fid_corrompu = hitl_store.upsert_fact({
             "champion": {"title": "Sera corrompu", "source": "test", "url": "http://x/4"},
-            "contexts": [], "article": "Article suffisamment long pour depasser le seuil "
+            "sources_secondaires": [], "article": "Article suffisamment long pour depasser le seuil "
                 "minimal de caracteres requis, plusieurs phrases distinctes bien presentes ici.",
             "image": "http://x/couverture4.jpg", "image_meta": {"provider": "source"},
             "gen_model": "test", "n_sources": 1,

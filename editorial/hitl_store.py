@@ -146,7 +146,7 @@ def _init_locked():
                 transmitted_at TEXT, provider TEXT, http_status INTEGER,
                 override_by TEXT, override_at TEXT)""")
             cur.execute("""CREATE TABLE IF NOT EXISTS hitl_facts (
-                fact_id TEXT PRIMARY KEY, champion TEXT NOT NULL, contexts TEXT,
+                fact_id TEXT PRIMARY KEY, champion TEXT NOT NULL, sources_secondaires TEXT,
                 article TEXT, image TEXT, image_meta TEXT, gen_model TEXT,
                 n_sources INTEGER DEFAULT 1, status TEXT DEFAULT 'PENDING_REVIEW',
                 created_at TEXT, cycle_id TEXT)""")
@@ -159,7 +159,7 @@ def _init_locked():
                 transmitted_at TEXT, provider TEXT, http_status INTEGER,
                 override_by TEXT, override_at TEXT)""")
             cur.execute("""CREATE TABLE IF NOT EXISTS hitl_facts (
-                fact_id TEXT PRIMARY KEY, champion TEXT NOT NULL, contexts TEXT,
+                fact_id TEXT PRIMARY KEY, champion TEXT NOT NULL, sources_secondaires TEXT,
                 article TEXT, image TEXT, image_meta TEXT, gen_model TEXT,
                 n_sources INTEGER DEFAULT 1, status TEXT DEFAULT 'PENDING_REVIEW',
                 created_at TEXT, cycle_id TEXT)""")
@@ -191,6 +191,39 @@ def _init_locked():
         else:
             try:
                 cur.execute("ALTER TABLE hitl_facts ADD COLUMN trashed_at TEXT")
+            except Exception:
+                pass
+        con.commit()
+    except Exception:
+        pass
+    finally:
+        try: con.close()
+        except Exception: pass
+    # Renommage 'contexts' -> 'sources_secondaires' (2026-08-25, Temps 2 du
+    # chantier glossaire metier, suite de cluster -> dossier) : "contexts"
+    # etait du jargon technique interne (terme LLM) sans sens clair pour un
+    # editeur humain -- "sources_secondaires" designe explicitement les
+    # articles-sources additionnels au meme sujet que le champion (source
+    # principale), utilises pour enrichir la synthese. Idempotent : la
+    # colonne CREATE TABLE ci-dessus cree deja `sources_secondaires` pour une
+    # base neuve (RENAME est alors un no-op silencieux, capture) ; sur la
+    # base de prod existante (colonne encore nommee `contexts`), ce bloc la
+    # renomme une seule fois au demarrage, avant tout appel a upsert_fact/
+    # list_facts -- aucune fenetre ou l'ancien et le nouveau code coexistent
+    # (redemarrage systemd atomique, pas de deploiement progressif).
+    try:
+        con, mode = db.conn()
+        cur = con.cursor()
+        if mode == "postgres":
+            cur.execute("""DO $$ BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.columns
+                           WHERE table_name='hitl_facts' AND column_name='contexts') THEN
+                    ALTER TABLE hitl_facts RENAME COLUMN contexts TO sources_secondaires;
+                END IF;
+            END $$;""")
+        else:
+            try:
+                cur.execute("ALTER TABLE hitl_facts RENAME COLUMN contexts TO sources_secondaires")
             except Exception:
                 pass
         con.commit()
@@ -304,7 +337,7 @@ def fact_id_of(champion: dict) -> str:
 def upsert_fact(f: dict) -> str:
     fid = fact_id_of(f.get("champion", {}))
     champ = json.dumps(f.get("champion", {}), ensure_ascii=False)
-    ctx = json.dumps(f.get("contexts", []), ensure_ascii=False)
+    ctx = json.dumps(f.get("sources_secondaires", []), ensure_ascii=False)
     art = json.dumps(f.get("article", ""), ensure_ascii=False) if isinstance(f.get("article"), (dict, list)) else (f.get("article") or "")
     img = f.get("image", "") or (f.get("champion", {}).get("image", ""))
     img_meta = json.dumps(f.get("image_meta", {}), ensure_ascii=False)
@@ -315,19 +348,19 @@ def upsert_fact(f: dict) -> str:
         cur = con.cursor()
         if mode == "postgres":
             cur.execute(
-                f"""INSERT INTO hitl_facts (fact_id, champion, contexts, article, image, image_meta, gen_model, n_sources, created_at, cycle_id)
+                f"""INSERT INTO hitl_facts (fact_id, champion, sources_secondaires, article, image, image_meta, gen_model, n_sources, created_at, cycle_id)
                    VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p},{p})
                    ON CONFLICT(fact_id) DO UPDATE SET
-                     champion=EXCLUDED.champion, contexts=EXCLUDED.contexts, article=EXCLUDED.article,
+                     champion=EXCLUDED.champion, sources_secondaires=EXCLUDED.sources_secondaires, article=EXCLUDED.article,
                      image=EXCLUDED.image, image_meta=EXCLUDED.image_meta, gen_model=EXCLUDED.gen_model,
                      n_sources=EXCLUDED.n_sources, cycle_id=EXCLUDED.cycle_id""",
                 (fid, champ, ctx, art, img, img_meta, f.get("gen_model", ""), f.get("n_sources", 1), now, f.get("cycle_id", "")))
         else:
             cur.execute(
-                f"""INSERT INTO hitl_facts (fact_id, champion, contexts, article, image, image_meta, gen_model, n_sources, created_at, cycle_id)
+                f"""INSERT INTO hitl_facts (fact_id, champion, sources_secondaires, article, image, image_meta, gen_model, n_sources, created_at, cycle_id)
                    VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p},{p})
                    ON CONFLICT(fact_id) DO UPDATE SET
-                     champion=excluded.champion, contexts=excluded.contexts, article=excluded.article,
+                     champion=excluded.champion, sources_secondaires=excluded.sources_secondaires, article=excluded.article,
                      image=excluded.image, image_meta=excluded.image_meta, gen_model=excluded.gen_model,
                      n_sources=excluded.n_sources, cycle_id=excluded.cycle_id""",
                 (fid, champ, ctx, art, img, img_meta, f.get("gen_model", ""), f.get("n_sources", 1), now, f.get("cycle_id", "")))
@@ -364,7 +397,7 @@ def list_facts() -> list:
         # aucun changement cote client. Article deja redige (le texte
         # REELLEMENT affiche) reste inclus, lui, sans changement.
         champ.pop("raw_content", None)
-        ctx = json.loads(d["contexts"]) if d["contexts"] else []
+        ctx = json.loads(d["sources_secondaires"]) if d["sources_secondaires"] else []
         for c in ctx:
             if isinstance(c, dict):
                 c.pop("raw_content", None)
@@ -407,7 +440,7 @@ def list_facts() -> list:
         else:
             _eff_status = _raw_status
         out.append({
-            "fact_id": d["fact_id"], "champion": champ, "contexts": ctx, "article": art,
+            "fact_id": d["fact_id"], "champion": champ, "sources_secondaires": ctx, "article": art,
             "image": d["image"], "image_meta": img_meta, "gen_model": d["gen_model"],
             "n_sources": d["n_sources"], "status": _eff_status,
             "decided_by": d["decided_by"], "decided_at": d["decided_at"],
@@ -880,7 +913,7 @@ def _fact_rows(where: str, params: tuple) -> list:
     try:
         cur = con.cursor()
         cur.execute(
-            f"SELECT fact_id, champion, contexts, article, image, image_meta, gen_model, "
+            f"SELECT fact_id, champion, sources_secondaires, article, image, image_meta, gen_model, "
             f"n_sources, status, created_at, trashed_at FROM hitl_facts WHERE {where}",
             params)
         if mode == "sqlite":
@@ -894,16 +927,16 @@ def _fact_rows(where: str, params: tuple) -> list:
             out = [dict(r) for r in rows]
     finally:
         con.close()
-    # Normalise les champs JSON (champion/contexts/article/image_meta) comme list_facts()
+    # Normalise les champs JSON (champion/sources_secondaires/article/image_meta) comme list_facts()
     for d in out:
         try:
             d["champion"] = json.loads(d["champion"]) if d["champion"] else {}
         except Exception:
             d["champion"] = {}
         try:
-            d["contexts"] = json.loads(d["contexts"]) if d["contexts"] else []
+            d["sources_secondaires"] = json.loads(d["sources_secondaires"]) if d["sources_secondaires"] else []
         except Exception:
-            d["contexts"] = []
+            d["sources_secondaires"] = []
         try:
             a = d["article"]
             d["article"] = json.loads(a) if (a and a.startswith("{")) else a
@@ -925,7 +958,7 @@ def list_trashed() -> list:
     try:
         cur = con.cursor()
         cur.execute(
-            f"SELECT f.fact_id, f.champion, f.contexts, f.article, f.image, f.image_meta, "
+            f"SELECT f.fact_id, f.champion, f.sources_secondaires, f.article, f.image, f.image_meta, "
             f"f.gen_model, f.n_sources, f.status, f.created_at, f.trashed_at, "
             f"d.status AS d_status, d.decision "
             f"FROM hitl_facts f LEFT JOIN hitl_decisions d ON d.fact_id = f.fact_id "
@@ -941,9 +974,9 @@ def list_trashed() -> list:
             # Meme prevention que list_facts() : raw_content jamais affiche cote frontend.
             if isinstance(d["champion"], dict):
                 d["champion"].pop("raw_content", None)
-            try: d["contexts"] = json.loads(d["contexts"]) if d["contexts"] else []
-            except Exception: d["contexts"] = []
-            for c in d["contexts"]:
+            try: d["sources_secondaires"] = json.loads(d["sources_secondaires"]) if d["sources_secondaires"] else []
+            except Exception: d["sources_secondaires"] = []
+            for c in d["sources_secondaires"]:
                 if isinstance(c, dict):
                     c.pop("raw_content", None)
             try:

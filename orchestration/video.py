@@ -136,7 +136,7 @@ def start_video_generation(fact_id: str, on_complete=None, narration_mode: str =
     # place deja le champion en tete) -- generation/video.py retombe seul
     # sur le mono-image si moins de 2 sont effectivement telechargeables.
     try:
-        contexts = row["contexts"] if isinstance(row.get("contexts"), list) else json.loads(row.get("contexts") or "[]")
+        contexts = row["sources_secondaires"] if isinstance(row.get("sources_secondaires"), list) else json.loads(row.get("sources_secondaires") or "[]")
     except Exception:
         contexts = []
     try:
@@ -174,7 +174,7 @@ def list_videos() -> list:
     de creation du fait decroissante (plus recent d'abord).
 
     Bug corrige (revue de code, 2e version) : passait par hitl_store.
-    list_facts(), qui JOINT hitl_decisions et JSON-parse l'article/contexts
+    list_facts(), qui JOINT hitl_decisions et JSON-parse l'article/sources_secondaires
     COMPLETS de CHAQUE fait -- pour n'en garder que la poignee ayant une
     video. Requete SQL directe ici (filtre "video_status IS NOT NULL" cote
     base), ne lit/parse que le strict necessaire (titre du champion,

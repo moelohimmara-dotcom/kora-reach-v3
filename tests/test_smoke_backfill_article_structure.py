@@ -69,11 +69,11 @@ def main():
 
         fid_bon = hitl_store.upsert_fact({
             "champion": {"title": "Article deja bon", "source": "test", "url": "http://x/1"},
-            "contexts": [], "article": BIEN, "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
+            "sources_secondaires": [], "article": BIEN, "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
         })
         fid_mal = hitl_store.upsert_fact({
             "champion": {"title": "Article mal structure", "source": "test", "url": "http://x/2"},
-            "contexts": [], "article": MAL, "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
+            "sources_secondaires": [], "article": MAL, "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
         })
         # Marque le mauvais comme EDITED -- doit rester eligible (aucune
         # retouche manuelle reelle n'existe ici : final_text/edited_text
@@ -146,7 +146,7 @@ def main():
         # la cascade "réparait" un fait vide en un article fabriqué).
         fid_vide = hitl_store.upsert_fact({
             "champion": {"title": "Fait sans article", "source": "test", "url": "http://x/vide"},
-            "contexts": [], "article": "", "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
+            "sources_secondaires": [], "article": "", "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
         })
         cur.execute(f"UPDATE hitl_facts SET article='{{}}' WHERE fact_id={ph}", (fid_vide,))
         con.commit()
@@ -162,7 +162,7 @@ def main():
         mal_tres_court = "# Titre\n\n" + " ".join([f"Phrase {i}." for i in range(1, 5)]) + "\n\nPar La Rédaction"
         fid_court = hitl_store.upsert_fact({
             "champion": {"title": "Article tres court", "source": "test", "url": "http://x/court"},
-            "contexts": [], "article": mal_tres_court, "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
+            "sources_secondaires": [], "article": mal_tres_court, "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
         })
         con.close()
         buf4 = io.StringIO()
@@ -189,7 +189,7 @@ def main():
         mal39 = ("# Titre sleep\n\n" + " ".join([f"Phrase numero {i} test contenu reel." for i in range(1, 40)]) + "\n\nPar La Rédaction")
         hitl_store.upsert_fact({
             "champion": {"title": "Test sleep", "source": "test", "url": "http://x/sleep"},
-            "contexts": [], "article": mal39, "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
+            "sources_secondaires": [], "article": mal39, "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
         })
         sleep_calls = {"n": 0}
         _orig_sleep = backfill.time.sleep
@@ -214,7 +214,7 @@ def main():
         mal39b = ("# Titre circuit\n\n" + " ".join([f"Phrase numero {i} test contenu reel." for i in range(1, 40)]) + "\n\nPar La Rédaction")
         hitl_store.upsert_fact({
             "champion": {"title": "Test circuit ouvert", "source": "test", "url": "http://x/circuit"},
-            "contexts": [], "article": mal39b, "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
+            "sources_secondaires": [], "article": mal39b, "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
         })
         sleep_calls2 = {"n": 0}
         backfill.time.sleep = lambda s: sleep_calls2.__setitem__("n", sleep_calls2["n"] + 1)

@@ -105,8 +105,8 @@ def main():
 
     # ---- 8. illustrate_all() : garantie d'unicite inter-articles ----
     facts = [
-        {"fact_id": "f1", "champion": {"title": "A", "image": "https://x.example/meme.jpg"}, "contexts": []},
-        {"fact_id": "f2", "champion": {"title": "B", "image": "https://x.example/meme.jpg"}, "contexts": [
+        {"fact_id": "f1", "champion": {"title": "A", "image": "https://x.example/meme.jpg"}, "sources_secondaires": []},
+        {"fact_id": "f2", "champion": {"title": "B", "image": "https://x.example/meme.jpg"}, "sources_secondaires": [
             {"image": "https://x.example/autre.jpg", "source_level": 1}]},
     ]
     illustrate.illustrate_all(facts)

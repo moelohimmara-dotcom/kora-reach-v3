@@ -546,7 +546,7 @@ class ReachAgent:
                 # tag "Hors fenêtre 48h" -- un cycle forcé peut très bien
                 # mélanger des faits frais normaux et des faits bypassés.
                 fact_forced_stale = champ.get("date_status") == "STALE"
-                fact = {"champion": champ, "contexts": ctx, "n_sources": len(dossier), "forced_stale": fact_forced_stale, "cycle_id": cid}
+                fact = {"champion": champ, "sources_secondaires": ctx, "n_sources": len(dossier), "forced_stale": fact_forced_stale, "cycle_id": cid}
                 _t0 = datetime.now(TZ).timestamp()
                 # Bug corrige 2026-08-19 (rapporte : "Interrompre" restait
                 # sans effet plusieurs minutes) : should_cancel est revérifié
@@ -655,8 +655,9 @@ agent = ReachAgent()
 
 def regenerate(fact_id: str, suggestion: str = None, dry_run: bool = None) -> dict:
     """Régénère UN article à partir des INFOS DÉJÀ ACQUISES (table hitl_facts).
-    AUCUN re-scraping, AUCUNE requête vers les sources : le champion/contexts
-    source est relu depuis la base et reste la source unique de vérité.
+    AUCUN re-scraping, AUCUNE requête vers les sources : le champion/
+    sources_secondaires source est relu depuis la base et reste la source
+    unique de vérité.
     La 'suggestion' oriente l'angle de rédaction (jamais les faits).
     Retourne le fact mis à jour (avec le nouvel article) + suggestion appliquée.
 
@@ -673,10 +674,10 @@ def regenerate(fact_id: str, suggestion: str = None, dry_run: bool = None) -> di
         return {"error": "fact_introuvable", "fact_id": fact_id}
     # Reconstituer le fact depuis la base (infos sécurisées)
     champ = row["champion"] if isinstance(row["champion"], dict) else json.loads(row["champion"] or "{}")
-    ctx = row["contexts"] if isinstance(row["contexts"], list) else json.loads(row["contexts"] or "[]")
+    ctx = row["sources_secondaires"] if isinstance(row["sources_secondaires"], list) else json.loads(row["sources_secondaires"] or "[]")
     fact = {
         "champion": champ,
-        "contexts": ctx,
+        "sources_secondaires": ctx,
         "image": row.get("image", "") or champ.get("image", ""),
         "image_meta": (row["image_meta"] if isinstance(row["image_meta"], dict)
                        else json.loads(row["image_meta"] or "{}")),

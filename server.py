@@ -876,7 +876,7 @@ class Handler(BaseHTTPRequestHandler):
                 if _vb:
                     return self._send(429, _vb)
             # Régénère UN article depuis les INFOS DÉJÀ ACQUISES (hitl_facts).
-            # AUCUN re-scraping : le champion/contexts source est relu depuis la base.
+            # AUCUN re-scraping : le champion/sources_secondaires source est relu depuis la base.
             fid = payload.get("fact_id")
             suggestion = payload.get("suggestion")  # id parmi les suggestions, ou None
             if not fid:
@@ -1596,7 +1596,7 @@ def _fact_by_id(fid):
         return None
     import json as _json
     champ = _json.loads(row["champion"]) if row["champion"] else {}
-    ctx = _json.loads(row["contexts"]) if row["contexts"] else []
+    ctx = _json.loads(row["sources_secondaires"]) if row["sources_secondaires"] else []
     # B1 fix : article stocké en JSON string ("{}" = vide) -> traiter comme ""
     # Ne parser que si c'est un objet/array JSON non-vide (démarre par { ou [)
     art_raw = row["article"]
@@ -1614,7 +1614,7 @@ def _fact_by_id(fid):
         art = art_raw or ""
     img_meta = _json.loads(row["image_meta"]) if row["image_meta"] else {}
     return {
-        "fact_id": row["fact_id"], "champion": champ, "contexts": ctx,
+        "fact_id": row["fact_id"], "champion": champ, "sources_secondaires": ctx,
         "article": art, "image": row["image"], "image_meta": img_meta,
         "gen_model": row["gen_model"], "n_sources": row["n_sources"],
         # video_status/video_path (2026-08-22, demande explicite : "l'article

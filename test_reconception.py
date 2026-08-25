@@ -64,7 +64,7 @@ champ, ctx = pick_champion(big)
 assert len(ctx) >= 1, "Champion doit avoir >=1 contexte (fusion)"
 
 # Writer
-fact = {"champion": champ, "contexts": ctx, "n_sources": len(dossiers[0])}
+fact = {"champion": champ, "sources_secondaires": ctx, "n_sources": len(dossiers[0])}
 written = write_article(fact)
 assert written["article"], "Article vide"
 

@@ -52,3 +52,10 @@ Stratégie de migration DB retenue (déjà rodée au Temps 1) : ajouter la nouve
 `fact_id` est **retiré du périmètre du Temps 2**. Risque le plus élevé (clé primaire de 3+ tables, quasi tout le contrat API) pour un gain de clarté jugé insuffisant — "fact_id" n'est pas du jargon confus comme "champion" ou "hitl". Reste tel quel.
 
 Périmètre définitif du Temps 2 : `cluster` → `dossier`, `contexts` → `sources_secondaires`, `champion` → `article_retenu`, `hitl_facts` → `dossiers_editoriaux`, dans cet ordre. Démarré par `cluster` → `dossier` (le moins risqué, galop d'essai de la méthode).
+
+## Suivi
+
+- ✅ `cluster` → `dossier` : terminé, déployé, testé, committé (2026-08-25).
+- ✅ `contexts` → `sources_secondaires` : terminé (2026-08-25). Sauvegarde `pg_dump` avant migration. Colonne `hitl_facts.contexts` renommée en base via `ALTER TABLE ... RENAME COLUMN` (idempotent, `editorial/hitl_store.py::_init_locked`, données préservées, pas de perte). Tous les points de lecture/écriture SQL et dict (`hitl_store.py`, `server.py`, `generation/writer.py`, `generation/illustrate.py`, `orchestration/reach_agent.py`, `orchestration/video.py`) mis à jour, avec repli défensif `fact.get("sources_secondaires") or fact.get("contexts")` côté lecteurs pour couvrir d'éventuels objets `fact` déjà en mémoire au moment du redémarrage. Vérifié en conditions réelles sur le VPS (colonne + données intactes, `get_fact()`/`list_facts()` renvoient la nouvelle clé, `regenerate(dry_run=True)` sans erreur, smoke test Playwright complet). Revue fable-advisor : propre, aucun oubli.
+- ⬜ `champion` → `article_retenu` : prochain terme, colonne DB + contrat JSON plus large (pipeline de génération complet, y compris frontend).
+- ⬜ `hitl_facts` → `dossiers_editoriaux` : renommage de table, en dernier de ce périmètre.

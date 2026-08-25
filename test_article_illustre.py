@@ -25,7 +25,7 @@ print(f"✅ Cycle OK | sources_ok={res['sources_ok']} items={res['total_items']}
 
 # Génère le 1er article de synthèse illustré
 f = facts[0]
-art = synth_template(f["champion"], f["contexts"])
+art = synth_template(f["champion"], f["sources_secondaires"])
 print("=== ARTICLE DE SYNTHÈSE (illustré) ===")
 print(art[:700])
 print("\n=== IMAGE ASSOCIÉE ===")
