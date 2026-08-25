@@ -701,41 +701,58 @@ function openFact(id) {
 }
 
 function bind() {
-  document.addEventListener("click", (e) => {
-    // Coche visible au survol (desktop) : clic sur la case = sélection même hors mode
-    const checkEl = e.target.closest(".fact-check");
-    if (checkEl && !checkEl.classList.contains("fact-check-locked")) {
-      const fid = checkEl.dataset.check;
-      if (fid) {
-        e.preventDefault(); e.stopPropagation();
-        if (window.__koraIgnoreNextClick) return;
-        if (!Store.state.selectMode) Store.setSelectMode(true);
-        Store.toggleSelect(fid);
-        if (navigator.vibrate) navigator.vibrate(20);
+  // Bug corrigé (2026-08-25, audit mobile réel -- sélection multiple
+  // imprévisible sur mobile, cf. #selectBar) : bind() est rappelée à CHAQUE
+  // render() (y compris les polls périodiques toutes les 30s), et ce
+  // listener document N'AVAIT PAS le garde-fou déjà appliqué plus bas pour
+  // le clic-dehors des notifications (__notifOutsideBound) -- il s'empilait
+  // donc indéfiniment, un seul tap réel déclenchant autant d'appels à
+  // Store.toggleSelect() que de renders écoulés depuis l'ouverture de la
+  // page (18 appels mesurés après quelques minutes d'ouverture), rendant la
+  // sélection totalement aléatoire (un nombre pair d'appels accumulés
+  // annule le tap). Même garde-fou que __notifOutsideBound/
+  // __koraLongPressBound juste en dessous : safe à enregistrer une seule
+  // fois pour toute la session, ce listener délègue entièrement via
+  // e.target.closest() au moment du clic, sans jamais fermer sur un élément
+  // ou un état figé au moment du bind().
+  if (!window.__koraCardClickBound) {
+    window.__koraCardClickBound = true;
+    document.addEventListener("click", (e) => {
+      // Coche visible au survol (desktop) : clic sur la case = sélection même hors mode
+      const checkEl = e.target.closest(".fact-check");
+      if (checkEl && !checkEl.classList.contains("fact-check-locked")) {
+        const fid = checkEl.dataset.check;
+        if (fid) {
+          e.preventDefault(); e.stopPropagation();
+          if (window.__koraIgnoreNextClick) return;
+          if (!Store.state.selectMode) Store.setSelectMode(true);
+          Store.toggleSelect(fid);
+          if (navigator.vibrate) navigator.vibrate(20);
+        }
+        return;
       }
-      return;
-    }
-    if (window.__koraIgnoreNextClick) { e.preventDefault(); e.stopPropagation(); window.__koraIgnoreNextClick = false; return; }
-    // Ne pas ouvrir le tiroir detail si le clic vient d'un bouton d'action
-    // (Restaurer / Supprimer / Selection) ou d'une carte de la corbeille :
-    // dans la corbeille, les seules actions valides sont Restaurer/Supprimer,
-    // jamais "ouvrir l'article en entier" (evite le bug ou un Supprimer ouvrait la fiche).
-    if (e.target.closest("button, a, input, [data-restore], [data-del]")) return;
-    const card = e.target.closest(".fact-card");
-    if (!card) return;
-    if (card.classList.contains("trash-card")) return; // corbeille : pas d'ouverture de fiche
-    // En mode sélection, le clic sur la carte (ou sa case) ne doit PAS ouvrir le tiroir.
-    if (Store.state.selectMode) { e.stopPropagation(); return; }
-    e.stopPropagation();
-    const facts = Store.state.facts || [];
-    let f = facts.find(x => x.fact_id === card.dataset.fact);
-    if (!f && (card.dataset.fact || "").startsWith("idx")) {
-      const i = parseInt(card.dataset.fact.slice(3), 10);
-      f = facts[i];
-    }
-    if (!f && card.dataset.index) f = facts[parseInt(card.dataset.index, 10)];
-    if (f) { Store.openSheet({ type: "fact", fact: f }); renderSheet(Store.state); }
-  });
+      if (window.__koraIgnoreNextClick) { e.preventDefault(); e.stopPropagation(); window.__koraIgnoreNextClick = false; return; }
+      // Ne pas ouvrir le tiroir detail si le clic vient d'un bouton d'action
+      // (Restaurer / Supprimer / Selection) ou d'une carte de la corbeille :
+      // dans la corbeille, les seules actions valides sont Restaurer/Supprimer,
+      // jamais "ouvrir l'article en entier" (evite le bug ou un Supprimer ouvrait la fiche).
+      if (e.target.closest("button, a, input, [data-restore], [data-del]")) return;
+      const card = e.target.closest(".fact-card");
+      if (!card) return;
+      if (card.classList.contains("trash-card")) return; // corbeille : pas d'ouverture de fiche
+      // En mode sélection, le clic sur la carte (ou sa case) ne doit PAS ouvrir le tiroir.
+      if (Store.state.selectMode) { e.stopPropagation(); return; }
+      e.stopPropagation();
+      const facts = Store.state.facts || [];
+      let f = facts.find(x => x.fact_id === card.dataset.fact);
+      if (!f && (card.dataset.fact || "").startsWith("idx")) {
+        const i = parseInt(card.dataset.fact.slice(3), 10);
+        f = facts[i];
+      }
+      if (!f && card.dataset.index) f = facts[parseInt(card.dataset.index, 10)];
+      if (f) { Store.openSheet({ type: "fact", fact: f }); renderSheet(Store.state); }
+    });
+  }
   // ---- Appui long mobile (500ms) : entre en sélection + toggle, avec vibration ----
   if (!window.__koraLongPressBound) {
     window.__koraLongPressBound = true;
@@ -941,7 +958,14 @@ function bind() {
   if (leftDrawerScrim) leftDrawerScrim.onclick = closeLeftDrawer;
 
   // Swipe dismiss for left drawer (right-to-left swipe)
-  if (leftDrawer) {
+  // Bug corrigé (2026-08-25, revue fable-advisor du correctif audit mobile
+  // -- même classe de bug que __koraOverflowMenuBound trois blocs plus
+  // haut, manqué lors de la première passe) : leftDrawer est un nœud du
+  // shell stable (jamais reconstruit par render(), voir app.innerHTML =
+  // SHELL dans main.js) -- ces deux addEventListener s'empilaient donc eux
+  // aussi à chaque render().
+  if (leftDrawer && !window.__koraLeftDrawerSwipeBound) {
+    window.__koraLeftDrawerSwipeBound = true;
     leftDrawer.addEventListener("touchstart", (e) => {
       leftDrawerTouchStartX = e.touches[0].clientX;
       leftDrawerTouchStartTime = Date.now();
@@ -1081,37 +1105,53 @@ function bind() {
   const closeOverflow = () => { if (overflowMenu) { overflowMenu.classList.remove("open"); overflowMenu.hidden = true; } if (navScrim) navScrim.hidden = true; };
   if (overflowMenu) overflowMenu.querySelectorAll(".overflow-item").forEach(it => it.onclick = () => { navigate(it.dataset.route); closeOverflow(); });
 
-  // Ouverture du menu Plus (mobile) — délégation document CAPTURE (shell injecté apres init)
-  document.addEventListener("click", (e) => {
-    const plus = e.target.closest && e.target.closest("#navPlus");
-    if (plus) {
-      e.preventDefault(); e.stopPropagation();
-      if (!overflowMenu) return;
-      overflowMenu.hidden = false;              // retire l'attribut hidden (sinon display:none UA)
-      overflowMenu.classList.add("open");   // idempotent : reste ouvert malgre events multiples d'un meme tap
-      if (navScrim) navScrim.hidden = false;
-    }
-  }, true);
-  if (navScrim) navScrim.addEventListener("click", () => { overflowMenu.classList.remove("open"); navScrim.hidden = true; });
+  // Bug corrigé (2026-08-25, audit mobile réel -- même classe de bug que
+  // __koraCardClickBound plus haut) : ces listeners document/window et ce
+  // navScrim.addEventListener (sur un nœud stable du shell, jamais
+  // reconstruit -- voir app.innerHTML = SHELL dans main.js, exécuté UNE
+  // FOIS) s'empilaient tous à chaque render(). Un seul flag couvre tout ce
+  // bloc "menu Plus mobile" : les valeurs fermées (overflowMenu, navScrim)
+  // restent celles du premier bind(), ce qui est correct puisque ce sont
+  // des nœuds stables du shell, jamais remplacés par un innerHTML.
+  if (!window.__koraOverflowMenuBound) {
+    window.__koraOverflowMenuBound = true;
+    // Ouverture du menu Plus (mobile) — délégation document CAPTURE (shell injecté apres init)
+    document.addEventListener("click", (e) => {
+      const plus = e.target.closest && e.target.closest("#navPlus");
+      if (plus) {
+        e.preventDefault(); e.stopPropagation();
+        if (!overflowMenu) return;
+        overflowMenu.hidden = false;              // retire l'attribut hidden (sinon display:none UA)
+        overflowMenu.classList.add("open");   // idempotent : reste ouvert malgre events multiples d'un meme tap
+        if (navScrim) navScrim.hidden = false;
+      }
+    }, true);
+    if (navScrim) navScrim.addEventListener("click", () => { overflowMenu.classList.remove("open"); navScrim.hidden = true; });
 
-  // Swipe dismiss for overflow menu (downward swipe)
-  if (overflowMenu) {
-    overflowMenu.addEventListener("touchstart", (e) => {
-      overflowTouchStartY = e.touches[0].clientY;
-      overflowTouchStartTime = Date.now();
-    }, { passive: true });
-    overflowMenu.addEventListener("touchend", (e) => {
-      const dy = e.changedTouches[0].clientY - overflowTouchStartY;
-      const dt = Date.now() - overflowTouchStartTime;
-      if (dy > 60 && dt < 300) closeOverflow();
-    }, { passive: true });
+    // Swipe dismiss for overflow menu (downward swipe)
+    if (overflowMenu) {
+      overflowMenu.addEventListener("touchstart", (e) => {
+        overflowTouchStartY = e.touches[0].clientY;
+        overflowTouchStartTime = Date.now();
+      }, { passive: true });
+      overflowMenu.addEventListener("touchend", (e) => {
+        const dy = e.changedTouches[0].clientY - overflowTouchStartY;
+        const dt = Date.now() - overflowTouchStartTime;
+        if (dy > 60 && dt < 300) closeOverflow();
+      }, { passive: true });
+    }
   }
 
   // Sélecteur de thème — délégation (rail, bottomnav, et vue Paramètres rendue dynamiquement)
-  document.addEventListener("click", (e) => {
-    const tb = e.target.closest("[data-theme-btn]");
-    if (tb) { Store.setTheme(tb.dataset.themeBtn); return; }
-  });
+  // Même correctif (2026-08-25) : delegation pure via closest(), safe à
+  // n'enregistrer qu'une fois pour toute la session.
+  if (!window.__koraThemeClickBound) {
+    window.__koraThemeClickBound = true;
+    document.addEventListener("click", (e) => {
+      const tb = e.target.closest("[data-theme-btn]");
+      if (tb) { Store.setTheme(tb.dataset.themeBtn); return; }
+    });
+  }
   const tcyc = document.querySelector("[data-theme-cycle]");
   if (tcyc) tcyc.onclick = () => {
     const order = ["dark", "light", "cacao"];
@@ -1127,28 +1167,38 @@ function bind() {
     if (a.dataset.act === "cycle") { navigate("dashboard"); Store.startCycle(); }
   });
   const sc = $("#sheetScrim"); if (sc) sc.onclick = () => Store.closeSheet();
-  // Clic-dehors (point 2) : clic dans N'IMPORTE QUEL périmètre HORS du conteneur interne ferme.
-  // Capture phase pour s'exécuter avant les handlers de boutons ; on exclut tout clic DANS #sheet.
-  document.addEventListener("click", (e) => {
-    if (!Store.state.sheet) return;
-    if (e.target.closest && e.target.closest("#sheet")) return; // clic dans le conteneur -> ne ferme pas
-    Store.closeSheet();
-  }, true);
-  // Fermeture au clavier (Escape) en complément du clic-dehors
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && Store.state.sheet) Store.closeSheet(); });
-  window.addEventListener("popstate", (e) => {
-    // F1 : le filtre Articles suit lui aussi le bouton retour/avant du
-    // navigateur, pas seulement la route.
-    const route = (e.state && e.state.route) || (() => {
-      const seg = location.pathname.replace(/^\/kora-v2\/?/, "").split("/")[0];
-      return seg ? (SLUG_ROUTES[seg] || "dashboard") : "dashboard";
-    })();
-    if (route === "facts") {
-      const qf = new URLSearchParams(location.search).get("filtre");
-      Store.setFactFilter(qf || "all");
-    }
-    Store.setRoute(route);
-  });
+  // Bug corrigé (2026-08-25, audit mobile réel -- même classe de bug) : ces
+  // trois listeners (clic-dehors, Escape, popstate) n'avaient pas de
+  // garde-fou et s'empilaient à chaque render() -- popstate en particulier
+  // aurait rejoué Store.setRoute()/setFactFilter() une fois PAR RENDER
+  // écoulé pour un seul retour navigateur (redondant mais surtout un
+  // gaspillage de rechargements ; risque de comportement erratique si l'un
+  // de ces appels devient un jour non-idempotent).
+  if (!window.__koraSheetGlobalBound) {
+    window.__koraSheetGlobalBound = true;
+    // Clic-dehors (point 2) : clic dans N'IMPORTE QUEL périmètre HORS du conteneur interne ferme.
+    // Capture phase pour s'exécuter avant les handlers de boutons ; on exclut tout clic DANS #sheet.
+    document.addEventListener("click", (e) => {
+      if (!Store.state.sheet) return;
+      if (e.target.closest && e.target.closest("#sheet")) return; // clic dans le conteneur -> ne ferme pas
+      Store.closeSheet();
+    }, true);
+    // Fermeture au clavier (Escape) en complément du clic-dehors
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && Store.state.sheet) Store.closeSheet(); });
+    window.addEventListener("popstate", (e) => {
+      // F1 : le filtre Articles suit lui aussi le bouton retour/avant du
+      // navigateur, pas seulement la route.
+      const route = (e.state && e.state.route) || (() => {
+        const seg = location.pathname.replace(/^\/kora-v2\/?/, "").split("/")[0];
+        return seg ? (SLUG_ROUTES[seg] || "dashboard") : "dashboard";
+      })();
+      if (route === "facts") {
+        const qf = new URLSearchParams(location.search).get("filtre");
+        Store.setFactFilter(qf || "all");
+      }
+      Store.setRoute(route);
+    });
+  }
   // Amorce l'historique : attache un état à l'entrée d'historique courante
   // pour que le bouton "retour" du navigateur (mobile) puisse revenir en
   // arrière. IMPORTANT (2026-08-20, bug corrigé) : bind() s'exécute AVANT
@@ -1270,8 +1320,17 @@ function bind() {
     });
   }
 
-  // Call dashboard binding
-  bindDashboardEvents();
+  // Call dashboard binding. Bug corrigé (2026-08-25, audit mobile réel --
+  // même classe de bug) : bindDashboardEvents() enregistre 8 listeners
+  // document (click x6, mouseover, mouseout), tous en délégation pure
+  // (e.target.closest / getElementById au moment de l'événement, aucune
+  // fermeture sur un élément propre à ce render) -- s'empilaient eux aussi
+  // à chaque render(), même hors de la page Dashboard (bind() ne filtre
+  // pas par route).
+  if (!window.__koraDashboardEventsBound) {
+    window.__koraDashboardEventsBound = true;
+    bindDashboardEvents();
+  }
 
   // NOTE: tout le chargement initial (settings, health, auth, routing, auto-refresh)
   // est fait UNE FOIS dans boot() (appelé par main.js), PAS ici. Sinon bind()

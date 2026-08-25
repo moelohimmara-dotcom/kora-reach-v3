@@ -46,8 +46,32 @@ function factCard(f, s, idx) {
   // aria-label reflètent l'état réel (case à cocher en mode sélection,
   // sinon bouton d'ouverture), verrouillé exclu du parcours clavier de
   // sélection au même titre que du clic (voir `locked` ci-dessus).
+  //
+  // Bug corrigé (2026-08-25, audit mobile réel, DEUX passages) : ce onclick
+  // en ligne (posé sur TOUTE la carte) et le listener délégué document
+  // (voir bind() dans app.js) géraient CHACUN le même clic, en double :
+  //  1) .fact-check (case à cocher) : les deux appelaient
+  //     Store.toggleSelect() pour le même tap -> s'annulent (toggle-toggle
+  //     = aucun changement visible), symptôme "je coche, ça ne fait rien"
+  //     remonté par l'audit. Le listener document reste seul responsable
+  //     de .fact-check (c'est lui qui gère aussi l'entrée en mode
+  //     sélection, absente de ce onclick) -- exclu ci-dessous via
+  //     event.target.closest('.fact-check').
+  //  2) Carte hors mode sélection (ouverture de fiche) : le listener
+  //     document délégué (bind(), app.js) gère DÉJÀ entièrement ce cas
+  //     (résolution du fait + Store.openSheet + renderSheet), avec en plus
+  //     les exclusions bouton/lien/corbeille que CE onclick en ligne ne
+  //     connaît pas -- le garder en doublon déclenchait deux
+  //     openSheet()/renderSheet() pour un seul clic (trouvé en revue
+  //     fable-advisor, pas par test direct). Retiré entièrement ici (pas
+  //     de onclick posé du tout hors mode sélection) : le clic reste
+  //     entièrement pris en charge par le listener document, SEUL le
+  //     clavier (onkeydown, event.target = la carte, jamais .fact-check)
+  //     a encore besoin de déclencher App.openFact() lui-même.
   const action = (s.selectMode && !locked) ? `Store.toggleSelect('${esc(fid)}')` : `App.openFact('${esc(fid)}')`;
-  const click = `onclick="${action}"`;
+  const click = (s.selectMode && !locked)
+    ? `onclick="if(!(event.target.closest&&event.target.closest('.fact-check'))){${action}}"`
+    : "";
   const keydown = `onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${action}}"`;
   const cardRole = (s.selectMode && !locked) ? `role="checkbox" aria-checked="${sel}"` : `role="button"`;
   const cardLabel = (s.selectMode && !locked)

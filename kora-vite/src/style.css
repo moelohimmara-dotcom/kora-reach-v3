@@ -1523,6 +1523,19 @@ html.icons-ready .material-icons { visibility: visible; }
   .topbar-status { padding: 8px 11px; font-size: var(--t-label-xs); }
   .brand-sub { display: none; }
 }
+/* Bug corrigé (2026-08-25, audit mobile réel) : mesuré en conditions
+   réelles à 320px (petit Android bas de gamme) -- .topbar-right (avatar +
+   statut + cloche + CTA cycle) débordait de son propre conteneur de ~19px
+   malgré les réductions ci-dessus, coupant visuellement l'icône du bouton
+   "Lancer un cycle" sur le bord droit. Le libellé texte du statut
+   ("prêt"/"actif"...) est la seule information encore redondante avec le
+   point coloré (dot-ready/dot-busy) juste à côté -- même logique que
+   .topbar-cta-label/.topbar-identity-text ci-dessus : on retire le texte,
+   jamais l'indicateur visuel lui-même. */
+@media (max-width: 360px) {
+  .topbar-status #agentMode { display: none; }
+  .topbar-status { padding: 8px 9px; gap: 0; }
+}
 
 .pulse-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
 .pulse-eyebrow { font-size: var(--t-label-xs); text-transform: uppercase; letter-spacing: 1.4px; color: var(--coral-text); font-weight: 800; }
