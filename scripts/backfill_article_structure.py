@@ -111,13 +111,13 @@ def fetch_candidates(con):
     par list_facts() -- pire que le problème d'origine. Reproduit ici
     EXACTEMENT la même détection."""
     cur = con.cursor()
-    cur.execute("SELECT fact_id, article, champion, status FROM hitl_facts WHERE article IS NOT NULL AND length(article) > 0")
+    cur.execute("SELECT fact_id, article, article_retenu, status FROM hitl_facts WHERE article IS NOT NULL AND length(article) > 0")
     rows = cur.fetchall()
     candidates = []
     for row in rows:
         fid = _val(row, "fact_id", 0)
         art = _val(row, "article", 1)
-        champ_raw = _val(row, "champion", 2)
+        champ_raw = _val(row, "article_retenu", 2)
         status = _val(row, "status", 3)
         if not art or not isinstance(art, str):
             continue

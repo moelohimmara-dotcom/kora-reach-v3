@@ -9,7 +9,7 @@ import collection.whitelist as wl
 from collection.normalizer import normalize, TZ
 from collection.guinea_filter import filter_guinea
 from collection.dedup import url_hash, is_dup
-from collection.dossiers import regrouper_dossiers, pick_champion
+from collection.dossiers import regrouper_dossiers, pick_article_retenu
 from generation.writer import write_article
 from editorial.audit import log, get_events
 import os
@@ -60,11 +60,11 @@ assert len(dossiers) == 2, f"Attendu 2 dossiers (1 fusion + 1 Bissau), eu {len(d
 # Le plus gros dossier = fusion attendue
 big = max(dossiers, key=len)
 assert len(big) == 3, f"Fusion 3->1 attendue, eu {len(big)} membres"
-champ, ctx = pick_champion(big)
+champ, ctx = pick_article_retenu(big)
 assert len(ctx) >= 1, "Champion doit avoir >=1 contexte (fusion)"
 
 # Writer
-fact = {"champion": champ, "sources_secondaires": ctx, "n_sources": len(dossiers[0])}
+fact = {"article_retenu": champ, "sources_secondaires": ctx, "n_sources": len(dossiers[0])}
 written = write_article(fact)
 assert written["article"], "Article vide"
 

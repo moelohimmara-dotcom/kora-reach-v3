@@ -255,7 +255,7 @@ function renderRejectConfirm(s) {
   const sheet = document.getElementById("sheet");
   const scrim = document.getElementById("sheetScrim");
   const f = sh.fact;
-  const c = f.champion || {};
+  const c = f.article_retenu || {};
   body.innerHTML = `
     <div class="reject-confirm">
       <div class="reject-confirm-head">
@@ -467,7 +467,7 @@ function renderSheet(s) {
   if (sh.type === "source-detail") return renderSourceDetail(s);
   if (sh.type === "add-source") return renderAddSourceSheet(s);
   if (sh.type === "edit-source") return renderEditSourceSheet(s);
-  const f = sh.fact; const c = f.champion || {};
+  const f = sh.fact; const c = f.article_retenu || {};
   const img = imgSrc(f);
   const ph = placeholderSvg(Store.getTheme());
   // Bug corrigé (revue qualité, 2026-08-25) : renderSheet() est rappelé
@@ -548,7 +548,7 @@ function renderSheet(s) {
           <div class="sheet-meta-line">
             <span>${esc(c.source || "—")}</span>
             <span class="dot-sep">·</span>
-            <span>${esc((f.champion && f.champion.level === 1) ? "Niveau 1 · Source guinéenne" : "Niveau 2 · International")}</span>
+            <span>${esc((f.article_retenu && f.article_retenu.level === 1) ? "Niveau 1 · Source guinéenne" : "Niveau 2 · International")}</span>
             <span class="dot-sep">·</span>
             <span>Fusion ${esc(f.n_sources || 1)} source(s)</span>
             ${f.forced_stale ? '<span class="tag tag-warn" style="margin-left:6px" title="Généré via Forcer (hors 24h) : cette information dépassait la fenêtre de fraîcheur normale de 24h.">Hors fenêtre 24h — forcé</span>' : ''}

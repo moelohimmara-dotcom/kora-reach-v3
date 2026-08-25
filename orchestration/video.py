@@ -109,13 +109,13 @@ def start_video_generation(fact_id: str, on_complete=None, narration_mode: str =
     if row.get("video_status") == "generating":
         return {"ok": False, "error": "generation_deja_en_cours"}
     # Bug corrige 2026-08-21 (revue de code) : ce json.loads() n'etait pas
-    # protege -- un champion corrompu/legacy levait une exception NON
+    # protege -- un article_retenu corrompu/legacy levait une exception NON
     # rattrapee jusqu'a l'appelant HTTP (server.py), qui a DEJA pose le
     # verrou d'exclusivite video a ce moment-la (_try_acquire_video_lock,
     # avant cet appel) sans aucun try/finally pour le liberer -> le verrou
     # restait pris pour toujours, bloquant aussi /api/cycle et /api/regenerate.
     try:
-        champ = row["champion"] if isinstance(row.get("champion"), dict) else json.loads(row.get("champion") or "{}")
+        champ = row["article_retenu"] if isinstance(row.get("article_retenu"), dict) else json.loads(row.get("article_retenu") or "{}")
     except Exception:
         champ = {}
     title = champ.get("title", "")
@@ -130,10 +130,10 @@ def start_video_generation(fact_id: str, on_complete=None, narration_mode: str =
         return {"ok": False, "error": "image_de_couverture_absente"}
     # Candidats multi-images (2026-08-24, demande explicite : "plusieurs
     # successions d'images, mais avec des effets de zoom") : TOUTES les
-    # images reelles du dossier (champion + contextes, jamais d'IA -- voir
+    # images reelles du dossier (article_retenu + contextes, jamais d'IA -- voir
     # illustrate._candidate_images), dans l'ordre de fiabilite de source.
     # `image_url` reste le premier element par construction (illustrate.py
-    # place deja le champion en tete) -- generation/video.py retombe seul
+    # place deja l'article_retenu en tete) -- generation/video.py retombe seul
     # sur le mono-image si moins de 2 sont effectivement telechargeables.
     try:
         contexts = row["sources_secondaires"] if isinstance(row.get("sources_secondaires"), list) else json.loads(row.get("sources_secondaires") or "[]")
@@ -177,14 +177,14 @@ def list_videos() -> list:
     list_facts(), qui JOINT hitl_decisions et JSON-parse l'article/sources_secondaires
     COMPLETS de CHAQUE fait -- pour n'en garder que la poignee ayant une
     video. Requete SQL directe ici (filtre "video_status IS NOT NULL" cote
-    base), ne lit/parse que le strict necessaire (titre du champion,
+    base), ne lit/parse que le strict necessaire (titre de l'article_retenu,
     colonnes video_*)."""
     import core.db as db
     con, mode = db.conn()
     try:
         cur = con.cursor()
         cur.execute(
-            """SELECT fact_id, champion, status, video_status, video_stage,
+            """SELECT fact_id, article_retenu, status, video_status, video_stage,
                       video_path, video_duration_sec, video_error, created_at, image,
                       video_narration_mode
                FROM hitl_facts
@@ -197,12 +197,12 @@ def list_videos() -> list:
     for r in rows:
         d = dict(r)
         try:
-            champ = json.loads(d["champion"]) if d["champion"] else {}
+            champ = json.loads(d["article_retenu"]) if d["article_retenu"] else {}
         except Exception:
             champ = {}
         # image (2026-08-22, poster du lecteur page Videos) : priorite a
         # l'image reelle deja choisie pour l'article (colonne dediee), repli
-        # sur celle du champion si jamais absente (bases anciennes).
+        # sur celle de l'article_retenu si jamais absente (bases anciennes).
         img = d.get("image") or (champ or {}).get("image", "")
         out.append({
             "fact_id": d["fact_id"],

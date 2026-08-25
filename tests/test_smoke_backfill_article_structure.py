@@ -68,11 +68,11 @@ def main():
         backfill.LLM_CALL_SPACING_SEC = 0
 
         fid_bon = hitl_store.upsert_fact({
-            "champion": {"title": "Article deja bon", "source": "test", "url": "http://x/1"},
+            "article_retenu": {"title": "Article deja bon", "source": "test", "url": "http://x/1"},
             "sources_secondaires": [], "article": BIEN, "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
         })
         fid_mal = hitl_store.upsert_fact({
-            "champion": {"title": "Article mal structure", "source": "test", "url": "http://x/2"},
+            "article_retenu": {"title": "Article mal structure", "source": "test", "url": "http://x/2"},
             "sources_secondaires": [], "article": MAL, "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
         })
         # Marque le mauvais comme EDITED -- doit rester eligible (aucune
@@ -145,7 +145,7 @@ def main():
         # (list_facts() le traite comme "pas d'article" -- sans ce filtre,
         # la cascade "réparait" un fait vide en un article fabriqué).
         fid_vide = hitl_store.upsert_fact({
-            "champion": {"title": "Fait sans article", "source": "test", "url": "http://x/vide"},
+            "article_retenu": {"title": "Fait sans article", "source": "test", "url": "http://x/vide"},
             "sources_secondaires": [], "article": "", "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
         })
         cur.execute(f"UPDATE hitl_facts SET article='{{}}' WHERE fact_id={ph}", (fid_vide,))
@@ -161,7 +161,7 @@ def main():
         # résout rien.
         mal_tres_court = "# Titre\n\n" + " ".join([f"Phrase {i}." for i in range(1, 5)]) + "\n\nPar La Rédaction"
         fid_court = hitl_store.upsert_fact({
-            "champion": {"title": "Article tres court", "source": "test", "url": "http://x/court"},
+            "article_retenu": {"title": "Article tres court", "source": "test", "url": "http://x/court"},
             "sources_secondaires": [], "article": mal_tres_court, "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
         })
         con.close()
@@ -188,7 +188,7 @@ def main():
             os.environ.pop(k, None)
         mal39 = ("# Titre sleep\n\n" + " ".join([f"Phrase numero {i} test contenu reel." for i in range(1, 40)]) + "\n\nPar La Rédaction")
         hitl_store.upsert_fact({
-            "champion": {"title": "Test sleep", "source": "test", "url": "http://x/sleep"},
+            "article_retenu": {"title": "Test sleep", "source": "test", "url": "http://x/sleep"},
             "sources_secondaires": [], "article": mal39, "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
         })
         sleep_calls = {"n": 0}
@@ -213,7 +213,7 @@ def main():
         writer._LLM_CB["failures"] = 3
         mal39b = ("# Titre circuit\n\n" + " ".join([f"Phrase numero {i} test contenu reel." for i in range(1, 40)]) + "\n\nPar La Rédaction")
         hitl_store.upsert_fact({
-            "champion": {"title": "Test circuit ouvert", "source": "test", "url": "http://x/circuit"},
+            "article_retenu": {"title": "Test circuit ouvert", "source": "test", "url": "http://x/circuit"},
             "sources_secondaires": [], "article": mal39b, "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
         })
         sleep_calls2 = {"n": 0}

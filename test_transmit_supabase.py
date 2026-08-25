@@ -9,7 +9,7 @@ import publishing.transmit as transmit
 
 # Fact HITL réaliste (issu de la logique reconçue : 3 sources fusionnées)
 fact = {
-    "champion": {
+    "article_retenu": {
         "title": "Guinée : la BAD finance un barrage à Koukoutamba",
         "url": "https://mosaiqueguinee.com/koukoutamba-bad-2026",
         "source": "mosaiqueguinee.com",

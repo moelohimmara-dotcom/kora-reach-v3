@@ -13,7 +13,7 @@ import { helpTip } from "../tour.js";
 import { videoListenButton, videoPlayerWrap, fmtDuration } from "./videos.js";
 
 function factCard(f, s, idx) {
-  const c = f.champion || {};
+  const c = f.article_retenu || {};
   const dec = s.decisions[f.fact_id];
   const img = imgSrc(f);
   const status = dec || (f.status || "PENDING_REVIEW");

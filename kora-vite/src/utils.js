@@ -105,7 +105,7 @@ function chip(label, kind = "", ic = "") {
   return `<span class="chip ${k}">${ic ? icon(ic) : ""}${esc(label)}</span>`;
 }
 function factMeta(f, status, compact) {
-  const c = f.champion || {};
+  const c = f.article_retenu || {};
   const lvl = c.level || (c.guinee_filter ? 2 : 1);
   const st = status || f.status || "PENDING_REVIEW";
   // Nommage métier unifié (2026-08-25, demande explicite utilisateur) :
@@ -153,14 +153,14 @@ function statusBadge(st) {
 }
 
 function imgSrc(f) {
-  const c = f.champion || {};
+  const c = f.article_retenu || {};
   const base = (f.image_meta && f.image_meta.image) || f.image || c.image || "";
   if (base && base.startsWith("http")) return base;
   const seed = (f.fact_id || f.id || f.title || "kora").split("").reduce((a, ch) => a + ch.charCodeAt(0), 0) % 100000;
   return `https://picsum.photos/seed/${seed}/800/450`;
 }
 function hasImg(f) {
-  const c = f.champion || {};
+  const c = f.article_retenu || {};
   const img = imgSrc(f);
   // Une image valide = URL http(s), pas le placeholder SVG data:
   return typeof img === "string" && img.startsWith("http");

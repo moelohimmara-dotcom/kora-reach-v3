@@ -35,7 +35,7 @@ def run(dry_run=False):
         if todo == 0:
             print("[batch] rien à faire")
             return
-        # Récupère les faits concernés (on passe par list_facts pour avoir le décodage champion/article)
+        # Récupère les faits concernés (on passe par list_facts pour avoir le décodage article_retenu/article)
         # Mais list_facts renvoie tous les faits ; on filtre en Python
         facts = list_facts() if 'list_facts' in globals() else []
         # Fallback si list_facts non importé : requête directe
@@ -47,7 +47,7 @@ def run(dry_run=False):
         done = 0
         for f in target:
             fid = f.get("fact_id")
-            champ = f.get("champion") or {}
+            champ = f.get("article_retenu") or f.get("champion") or {}
             if isinstance(champ, str):
                 try:
                     champ = json.loads(champ)

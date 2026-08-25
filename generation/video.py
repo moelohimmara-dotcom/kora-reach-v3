@@ -14,7 +14,7 @@ Pipeline MULTI-images (2026-08-24, demande explicite : "est-ce qu'il y a
 une possibilite d'utiliser plusieurs images dans la video ? plusieurs
 successions d'images, mais avec des effets de zoom") : quand le dossier
 fournit AU MOINS 2 images reelles distinctes (voir
-illustrate._candidate_images -- champion + contextes, jamais d'IA), chaque
+illustrate._candidate_images -- article_retenu + contextes, jamais d'IA), chaque
 image devient un clip avec son propre zoom Ken Burns (duree = duree_audio /
 nb_images), enchaines par des transitions en fondu (xfade). Repli AUTOMATIQUE
 sur le pipeline mono-image des qu'il y a moins de 2 images reelles
@@ -107,7 +107,7 @@ def fetch_cover_image(image_url: str, out_dir: str) -> str:
 def fetch_images(image_urls: list, out_dir: str, limit: int = MAX_MULTI_IMAGES) -> list:
     """Telecharge JUSQU'A `limit` images REELLES distinctes (2026-08-24,
     montage multi-images) -- `image_urls` est deja l'ordre de preference du
-    dossier (champion puis contextes par fiabilite, voir
+    dossier (article_retenu puis contextes par fiabilite, voir
     illustrate._candidate_images), donc on s'arrete des qu'on a assez
     d'images telechargeables plutot que de toutes les essayer. Une image
     dont le telechargement echoue est simplement IGNOREE (pas de blocage) --
@@ -350,7 +350,7 @@ def generate_video_for_article(title: str, article_text: str, image_url: str,
     de blocage de la video pour une valeur mal formee venue de l'appelant.
 
     `image_urls` (2026-08-24, montage multi-images) : liste ORDONNEE de
-    candidats reels (voir illustrate._candidate_images -- champion puis
+    candidats reels (voir illustrate._candidate_images -- article_retenu puis
     contextes par fiabilite), `image_url` etant deja le premier element de
     cette liste par construction cote appelant. Si au moins
     MIN_IMAGES_FOR_MULTI (2) images sont effectivement telechargeables,

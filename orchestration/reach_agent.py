@@ -3,7 +3,7 @@
 Cycle on-demand (mutex) :
   whitelist versionnee -> collecte (redirections bloquees) -> normalisation
   (fenetre glissante 24h, anomalie date) -> filtre Guinee INTL -> dedup ->
-  regroupement en dossiers (Jaccard 0.5) -> champion -> writer LLM -> audit -> rapport.
+  regroupement en dossiers (Jaccard 0.5) -> article_retenu -> writer LLM -> audit -> rapport.
 Toute defaillance source/LLM = isolee (jamais crash global).
 """
 from datetime import datetime, timezone, timedelta
@@ -15,7 +15,7 @@ from collection.fetchers import fetch_source
 from collection.normalizer import normalize, TZ, _parse_date
 from collection.guinea_filter import filter_guinea
 from collection.dedup import url_hash, is_dup
-from collection.dossiers import regrouper_dossiers, pick_champion, score_item
+from collection.dossiers import regrouper_dossiers, pick_article_retenu, score_item
 from editorial.state_store import (seen, mark, new_cycle, end_cycle, init as _init_state,
                           get_avg_article_seconds, record_article_seconds)
 from generation.writer import write_article, llm_circuit_status, angle_directive
@@ -517,7 +517,7 @@ class ReachAgent:
             # uniques collectes lors du cycle (un dossier = un fait = un
             # article), meme si cela prend du temps. N = min(demande explicite,
             # nb dossiers disponibles, garde-fou quotidien). Les dossiers les
-            # plus pertinents (score du champion) sont generes en premier, afin
+            # plus pertinents (score de l'article_retenu) sont generes en premier, afin
             # qu'une interruption utilisateur laisse toujours les faits les plus
             # importants deja traites.
             dossiers.sort(key=lambda d: max(score_item(i) for i in d), reverse=True)
@@ -532,7 +532,7 @@ class ReachAgent:
             # writer.py). Avant ce changement, chaque article (~400s, jusqu'a
             # 4 appels LLM sequentiels) attendait la fin du precedent : un
             # cycle de 10 articles pouvait depasser 1h. Chaque worker ne
-            # touche AUCUN etat partage (pick_champion/write_article sont
+            # touche AUCUN etat partage (pick_article_retenu/write_article sont
             # purs) -- toutes les mutations partagees (CYCLE_PROGRESS,
             # facts, dedup mark(), logs) restent faites par le thread
             # PRINCIPAL au fur et a mesure que les resultats arrivent
@@ -540,13 +540,13 @@ class ReachAgent:
             def _gen_one(dossier):
                 if CANCEL_FLAG["requested"]:
                     return {"status": "cancelled"}, None, None, 0.0
-                champ, ctx = pick_champion(dossier)
+                champ, ctx = pick_article_retenu(dossier)
                 # Par fact, pas globalement au cycle : seul un item réellement
                 # bypassé (STALE, jamais présent hors "Forcer") doit porter le
                 # tag "Hors fenêtre 48h" -- un cycle forcé peut très bien
                 # mélanger des faits frais normaux et des faits bypassés.
                 fact_forced_stale = champ.get("date_status") == "STALE"
-                fact = {"champion": champ, "sources_secondaires": ctx, "n_sources": len(dossier), "forced_stale": fact_forced_stale, "cycle_id": cid}
+                fact = {"article_retenu": champ, "sources_secondaires": ctx, "n_sources": len(dossier), "forced_stale": fact_forced_stale, "cycle_id": cid}
                 _t0 = datetime.now(TZ).timestamp()
                 # Bug corrige 2026-08-19 (rapporte : "Interrompre" restait
                 # sans effet plusieurs minutes) : should_cancel est revérifié
@@ -600,7 +600,7 @@ class ReachAgent:
                     fact["gen_status"] = written["status"]
                     fact["critique_issues"] = written.get("critique_issues", 0)
                     facts_by_idx[idx] = fact
-                    # Dedup inter-cycles : on marque CHAQUE item unique (pas que le champion)
+                    # Dedup inter-cycles : on marque CHAQUE item unique (pas que l'article_retenu)
                     for it in dossier:
                         mark(url_hash(it["url"]), it["title"])
                     log(cid, "FACT_GEN", f"provider={written['model']} src={champ['source']} durée={_elapsed:.0f}s",
@@ -614,7 +614,7 @@ class ReachAgent:
                         log(cid, "AUTOCRITIQUE",
                             f"{written['critique_issues']} probleme(s) corrige(s) | {(written.get('critique_report') or '')[:300]}",
                             written["model"], fact_id=fact_id_of(champ), action="CORRIGE")
-            # Ordre stable = ordre de priorite (score du champion), pas l'ordre
+            # Ordre stable = ordre de priorite (score de l'article_retenu), pas l'ordre
             # d'arrivee (aleatoire en parallele) : preserve le meme comportement
             # qu'avant pour tout code aval qui suppose cet ordre.
             facts = [facts_by_idx[i] for i in sorted(facts_by_idx)]
@@ -655,7 +655,7 @@ agent = ReachAgent()
 
 def regenerate(fact_id: str, suggestion: str = None, dry_run: bool = None) -> dict:
     """Régénère UN article à partir des INFOS DÉJÀ ACQUISES (table hitl_facts).
-    AUCUN re-scraping, AUCUNE requête vers les sources : le champion/
+    AUCUN re-scraping, AUCUNE requête vers les sources : l'article_retenu/
     sources_secondaires source est relu depuis la base et reste la source
     unique de vérité.
     La 'suggestion' oriente l'angle de rédaction (jamais les faits).
@@ -673,10 +673,10 @@ def regenerate(fact_id: str, suggestion: str = None, dry_run: bool = None) -> di
     if not row:
         return {"error": "fact_introuvable", "fact_id": fact_id}
     # Reconstituer le fact depuis la base (infos sécurisées)
-    champ = row["champion"] if isinstance(row["champion"], dict) else json.loads(row["champion"] or "{}")
+    champ = row["article_retenu"] if isinstance(row["article_retenu"], dict) else json.loads(row["article_retenu"] or "{}")
     ctx = row["sources_secondaires"] if isinstance(row["sources_secondaires"], list) else json.loads(row["sources_secondaires"] or "[]")
     fact = {
-        "champion": champ,
+        "article_retenu": champ,
         "sources_secondaires": ctx,
         "image": row.get("image", "") or champ.get("image", ""),
         "image_meta": (row["image_meta"] if isinstance(row["image_meta"], dict)

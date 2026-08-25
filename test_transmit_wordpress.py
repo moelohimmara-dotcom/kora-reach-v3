@@ -5,7 +5,7 @@ import publishing.transmit as transmit
 
 # Fact HITL réaliste
 fact = {
-    "champion": {
+    "article_retenu": {
         "title": "Guinée : la BAD finance un barrage à Koukoutamba (test Reach)",
         "url": "https://mosaiqueguinee.com/koukoutamba-bad-wp-test",
         "source": "mosaiqueguinee.com",

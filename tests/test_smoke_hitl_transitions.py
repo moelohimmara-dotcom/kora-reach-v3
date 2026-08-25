@@ -82,7 +82,7 @@ def main():
 
         def make_fact(tag):
             return hitl_store.upsert_fact({
-                "champion": {"title": f"Article {tag}", "source": "test", "url": f"http://x/{tag}"},
+                "article_retenu": {"title": f"Article {tag}", "source": "test", "url": f"http://x/{tag}"},
                 "sources_secondaires": [], "article": "# T\n\nchapo.\n\ncorps un.\n\ncorps deux.\n\ncorps trois.\n\nPar La Redaction",
                 "image": "", "image_meta": {}, "gen_model": "test", "n_sources": 1,
             })

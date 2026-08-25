@@ -25,10 +25,10 @@ print(f"✅ Cycle OK | sources_ok={res['sources_ok']} items={res['total_items']}
 
 # Génère le 1er article de synthèse illustré
 f = facts[0]
-art = synth_template(f["champion"], f["sources_secondaires"])
+art = synth_template(f["article_retenu"], f["sources_secondaires"])
 print("=== ARTICLE DE SYNTHÈSE (illustré) ===")
 print(art[:700])
 print("\n=== IMAGE ASSOCIÉE ===")
-print("URL image  :", f["champion"].get("image") or "(aucune trouvée)")
-assert f["champion"].get("image"), "ERREUR: article sans image"
+print("URL image  :", f["article_retenu"].get("image") or "(aucune trouvée)")
+assert f["article_retenu"].get("image"), "ERREUR: article sans image"
 print("\n✅ TEST OK : article de synthèse livré avec image illustrée.")

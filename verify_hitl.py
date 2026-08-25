@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import core.config as config
 from collection.normalizer import normalize, TZ
-from collection.dossiers import regrouper_dossiers, pick_champion
+from collection.dossiers import regrouper_dossiers, pick_article_retenu
 from generation.writer import write_article
 from editorial.hitl_store import fact_id_of, get as hitl_get
 
@@ -44,8 +44,8 @@ pool = [d for d in docs if d["actual"]]
 dossiers = regrouper_dossiers(pool, config.LIMITS["dossier_sim_threshold"])
 facts = []
 for dossier in dossiers:
-    champ, ctx = pick_champion(dossier)
-    fact = {"champion": champ, "sources_secondaires": ctx, "n_sources": len(dossier)}
+    champ, ctx = pick_article_retenu(dossier)
+    fact = {"article_retenu": champ, "sources_secondaires": ctx, "n_sources": len(dossier)}
     w = write_article(fact)
     fact["article"] = w["article"]; fact["gen_model"] = w["model"]
     facts.append(fact)

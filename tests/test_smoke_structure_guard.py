@@ -114,7 +114,7 @@ def main():
     writer.simple_completion = lambda sysp, usrp, max_tokens=2600: None
     writer._self_critique = lambda raw: ""
     writer._ensure_min_length = lambda raw, fact, lt, max_attempts=1: raw
-    fact = {"champion": {"title": "Test", "source": "test", "url": "http://x"}, "sources_secondaires": []}
+    fact = {"article_retenu": {"title": "Test", "source": "test", "url": "http://x"}, "sources_secondaires": []}
     lt = {"target": 10, "score": 0, "reasons": []}
     result = writer._finalize_article(MAL_STRUCTURE, fact, lt)
     if not writer._structure_ok(result["article"]):

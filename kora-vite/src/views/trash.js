@@ -6,7 +6,7 @@ import { Store } from "../store.js";
 import { esc, icon, chip, statusBadge, imgSrc, placeholderSvg, stateBox } from "../utils.js";
 
 function trashCard(f, s) {
-  const c = f.champion || {};
+  const c = f.article_retenu || {};
   const img = imgSrc(f);
   const ph = placeholderSvg(Store.getTheme());
   const src = img ? esc(img) : ph;

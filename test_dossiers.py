@@ -1,9 +1,9 @@
 """test_dossiers.py — prouve la fusion multi-sources sur un même fait.
 Simule 3 'articles' de 3 médias guinéens parlant du MÊME fait (match Guinée-Mali)
 avec rédactions différentes, comme en réalité. Vérifie que Reach les regroupe
-en 1 dossier/fait + sélectionne le champion le plus parlant.
+en 1 dossier/fait + sélectionne l'article_retenu le plus parlant.
 """
-from collection.dossiers import regrouper_dossiers, pick_champion, score_item
+from collection.dossiers import regrouper_dossiers, pick_article_retenu, score_item
 
 items = [
     {"title": "Guinée bat Mali 2-1 en match amical à Conakry",
@@ -28,7 +28,7 @@ dossiers = regrouper_dossiers(items)  # seuil par defaut (0.35, Jaccard reel —
 assert len(dossiers) == 2, f"ERREUR: {len(dossiers)} dossiers (attendu 2)"
 d = dossiers[0]
 assert len(d) == 3, f"ERREUR: le fait match n'a fusionné que {len(d)} sources"
-champ, ctx = pick_champion(d)
+champ, ctx = pick_article_retenu(d)
 assert len(ctx) == 2
 print("✅ TEST OK")
 print(f"  - 3 sources même fait (match Guinée-Mali) → 1 dossier (fusion)")

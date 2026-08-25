@@ -45,7 +45,7 @@ def main():
 
     try:
         fid = hitl_store.upsert_fact({
-            "champion": {"title": "Sujet test", "source": "test", "url": "http://x/1"},
+            "article_retenu": {"title": "Sujet test", "source": "test", "url": "http://x/1"},
             "sources_secondaires": [], "article": "ancien texte", "image": "http://old.img",
             "image_meta": {"provider": "loremflickr"}, "gen_model": "test", "n_sources": 1,
         })

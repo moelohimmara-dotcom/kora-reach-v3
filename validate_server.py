@@ -44,7 +44,7 @@ try:
           "| dossiers=",res.get("dossiers"), "| facts=",res.get("facts_to_generate"))
     if res.get("facts"):
         f0=res["facts"][0]
-        print("  FACT0:", f0["champion"]["source"], "::", f0["champion"]["title"][:45],
+        print("  FACT0:", f0["article_retenu"]["source"], "::", f0["article_retenu"]["title"][:45],
               "| gen=",f0["gen_model"], "| img=",bool(f0.get("image")))
 except Exception as e:
     print("CYCLE err:", b[:200])

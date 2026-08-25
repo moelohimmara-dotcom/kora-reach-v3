@@ -5,7 +5,7 @@ plutôt que fabriquer) : KORA ne génère PLUS AUCUNE image par IA (FAL et
 Pollinations retirés). L'image de couverture d'un article est désormais
 TOUJOURS une vraie photo :
   1) en priorité, une image réelle issue d'une des sources du dossier
-     (champion en premier, puis les contextes par fiabilité de source) --
+     (article_retenu en premier, puis les contextes par fiabilité de source) --
      c'est précisément le cas "2+ sources sur le même sujet -> on choisit
      l'une de leurs images" demandé ; un dossier à une seule source suit la
      même règle en dégénérant naturellement (un seul candidat) ;
@@ -95,12 +95,12 @@ def _extract_keywords(text: str) -> list:
     return kws[:4]
 
 
-def _build_search_text(champion: dict, sources_secondaires: list, title: str = "") -> str:
+def _build_search_text(article_retenu: dict, sources_secondaires: list, title: str = "") -> str:
     """Assemble un texte de recherche plus riche que le seul titre : titre +
     résumé + extrait du contenu brut de la meilleure source disponible
-    (champion, puis à défaut le premier contexte) -- augmente les chances de
+    (article_retenu, puis à défaut le premier contexte) -- augmente les chances de
     repérer le vrai thème de l'article (voir _extract_keywords())."""
-    champ = champion or {}
+    champ = article_retenu or {}
     parts = [title or champ.get("title", ""), champ.get("summary", ""), champ.get("raw_content", "")[:400]]
     if not champ.get("raw_content") and sources_secondaires:
         first_ctx = (sources_secondaires or [{}])[0] or {}
@@ -173,9 +173,9 @@ def _call_loremflickr(title: str, salt: str = "", lock_override: int = None):
     raise RuntimeError(f"LoremFlickr: aucun match après retry (dernière erreur : {last_err})")
 
 
-def _candidate_images(champion: dict, sources_secondaires: list) -> list:
+def _candidate_images(article_retenu: dict, sources_secondaires: list) -> list:
     """Liste ordonnée des images réelles candidates pour un dossier : le
-    champion d'abord (meilleure source), puis les contextes triés par
+    article_retenu d'abord (meilleure source), puis les contextes triés par
     fiabilité de source (source_level décroissant). Retourne des tuples
     (url, nom_source) -- non vides uniquement, sans doublon d'URL. Le nom de
     source (2026-08-23, demande explicite : "il ne doit pas y avoir aucune
@@ -185,9 +185,9 @@ def _candidate_images(champion: dict, sources_secondaires: list) -> list:
     WordPress (voir publishing/transmit.py::_upload_media)."""
     cands = []
     seen = set()
-    champ_img = (champion or {}).get("image", "") or ""
+    champ_img = (article_retenu or {}).get("image", "") or ""
     if champ_img:
-        cands.append((champ_img, (champion or {}).get("source", "")))
+        cands.append((champ_img, (article_retenu or {}).get("source", "")))
         seen.add(champ_img)
     ctx_sorted = sorted(sources_secondaires or [], key=lambda c: (c or {}).get("source_level", 0), reverse=True)
     for c in ctx_sorted:
@@ -198,40 +198,40 @@ def _candidate_images(champion: dict, sources_secondaires: list) -> list:
     return cands
 
 
-def select_source_image(champion: dict, sources_secondaires: list, exclude: set = None) -> tuple:
+def select_source_image(article_retenu: dict, sources_secondaires: list, exclude: set = None) -> tuple:
     """Choisit la meilleure image RÉELLE parmi les sources d'un dossier
-    (champion prioritaire, puis contextes par fiabilité), en évitant les
+    (article_retenu prioritaire, puis contextes par fiabilité), en évitant les
     URLs déjà utilisées par un autre article du même cycle (`exclude`, pour
     la garantie d'unicité inter-articles -- voir illustrate_all()).
     Retourne (url, nom_source), ou ("", "") si aucune source du dossier n'a
     d'image (ou si toutes les images du dossier sont déjà utilisées ailleurs)."""
     exclude = exclude or set()
-    for img, src_name in _candidate_images(champion, sources_secondaires):
+    for img, src_name in _candidate_images(article_retenu, sources_secondaires):
         if img not in exclude:
             return img, src_name
     return "", ""
 
 
-def illustrate(champion: dict, sources_secondaires: list, title: str = "", fact_id: str = "",
+def illustrate(article_retenu: dict, sources_secondaires: list, title: str = "", fact_id: str = "",
                 exclude: set = None) -> dict:
     """Retourne toujours un dict : {image, provider, generated(bool), detail}.
-    Ordre : image réelle d'une source du dossier (champion puis contextes) ->
+    Ordre : image réelle d'une source du dossier (article_retenu puis contextes) ->
     LoremFlickr (photo réelle par mot-clé) -> Picsum (photo générique).
     `generated` signifie ici "n'est pas une photo du dossier de sources"
     (stock photo de repli), jamais "fabriquée par IA" -- KORA n'en génère
     plus aucune (retrait de FAL/Pollinations, 2026-08-21)."""
-    title = title or (champion or {}).get("title", "")
-    src_img, src_name = select_source_image(champion, sources_secondaires, exclude=exclude)
+    title = title or (article_retenu or {}).get("title", "")
+    src_img, src_name = select_source_image(article_retenu, sources_secondaires, exclude=exclude)
     if src_img:
         return {"image": src_img, "provider": "source", "generated": False,
                 "image_source_name": src_name,
-                "detail": "Image réelle issue d'une source du dossier (champion ou contexte)."}
+                "detail": "Image réelle issue d'une source du dossier (article_retenu ou contexte)."}
     # Aucune source du dossier n'a d'image (ou toutes déjà utilisées par un
     # autre article de ce cycle) -> repli sur une vraie photo générique, avec
     # un texte de recherche enrichi (titre + résumé + extrait du contenu
     # source, pas le titre seul -- 2026-08-21, renfort mots-clés) pour mieux
     # cerner le thème réel de l'article.
-    search_text = _build_search_text(champion, sources_secondaires, title)
+    search_text = _build_search_text(article_retenu, sources_secondaires, title)
     lf_err = ""
     try:
         url, provider = _call_loremflickr(search_text, salt=fact_id)
@@ -256,14 +256,14 @@ def illustrate(champion: dict, sources_secondaires: list, title: str = "", fact_
 def illustrate_all(facts: list) -> list:
     """Attribue une image à chaque fact en GARANTISSANT l'unicité (aucun
     doublon) dans le cycle. Pour chaque fact, essaie ses propres candidats
-    réels (champion puis contextes) dans l'ordre, en sautant ceux déjà
+    réels (article_retenu puis contextes) dans l'ordre, en sautant ceux déjà
     utilisés par un fact précédent de ce même cycle ; ne tombe sur le repli
     stock (LoremFlickr/Picsum) que si TOUS les candidats réels du dossier
     sont épuisés (vides ou déjà pris). Retourne la même liste de facts,
     enrichie de 'image'/'image_meta'."""
     used = set()
     for i, fact in enumerate(facts):
-        champ = fact.get("champion", {}) or {}
+        champ = fact.get("article_retenu", {}) or fact.get("champion", {}) or {}
         sources_secondaires = fact.get("sources_secondaires", []) or []
         title = champ.get("title", "")
         fid = fact.get("fact_id", str(i))
@@ -298,7 +298,7 @@ def illustrate_all(facts: list) -> list:
 
 if __name__ == "__main__":
     # Test local : dossier à 2 sources, la seconde a une image -> doit la choisir
-    # (le champion en amont n'en a pas).
+    # (l'article_retenu en amont n'en a pas).
     champ = {"title": "Guinée: accord minier signé à Conakry", "image": ""}
     ctx = [{"image": "https://exemple-source.example/photo-accord.jpg", "source_level": 2}]
     print(illustrate(champ, ctx))

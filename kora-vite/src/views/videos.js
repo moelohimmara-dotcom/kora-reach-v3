@@ -379,13 +379,13 @@ function bindVideos() {
   });
   // Rejeter = ouvre la même bulle de choix (corbeille vs suppression
   // définitive) que la fiche article -- reject-confirm ne lit que
-  // fact_id/champion.title, un objet minimal suffit (pas besoin de l'article
+  // fact_id/article_retenu.title, un objet minimal suffit (pas besoin de l'article
   // complet, absent de la réponse allégée de /api/videos).
   document.querySelectorAll("#view [data-video-reject]").forEach(b => b.onclick = (e) => {
     e.preventDefault(); e.stopPropagation();
     const fid = b.dataset.videoReject;
     const title = b.dataset.videoRejectTitle || "";
-    Store.openSheet({ type: "reject-confirm", fact: { fact_id: fid, champion: { title } } });
+    Store.openSheet({ type: "reject-confirm", fact: { fact_id: fid, article_retenu: { title } } });
     renderSheet(Store.state);
   });
   bindVideoPlayers(Store.state.videos);

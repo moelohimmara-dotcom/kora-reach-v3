@@ -130,7 +130,7 @@ def score_item(it: dict) -> float:
         s += 0.5  # dates
     return s
 
-def pick_champion(dossier: list) -> tuple:
-    """Retourne (champion, contextes) pour un dossier."""
+def pick_article_retenu(dossier: list) -> tuple:
+    """Retourne (article_retenu, sources_secondaires) pour un dossier."""
     ranked = sorted(dossier, key=score_item, reverse=True)
     return ranked[0], ranked[1:]

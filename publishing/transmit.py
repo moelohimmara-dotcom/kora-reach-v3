@@ -307,13 +307,13 @@ def _wp_slugify(title: str) -> str:
 
 def _build_payload(fact: dict, final_text: str) -> dict:
     """Payload générique (pour dry_run / wordpress)."""
-    champ = fact.get("champion", {})
+    champ = fact.get("article_retenu", {})
     return {
         "title": champ.get("title", ""),
         "content": _strip_leading_title(final_text or fact.get("article", "")),
         "source_url": champ.get("url", ""),
         "image": fact.get("image", ""),
-        "og_image": champ.get("raw_og_image") or champ.get("image", ""),  # fallback OG champion
+        "og_image": champ.get("raw_og_image") or champ.get("image", ""),  # fallback OG article_retenu
         "n_sources": fact.get("n_sources", 1),
         "generated_model": fact.get("gen_model", ""),
         # provider de l'image (2026-08-21) : "source" = vraie photo d'une des
@@ -325,11 +325,11 @@ def _build_payload(fact: dict, final_text: str) -> dict:
         # niveau de l'article") -- vide pour un repli stock (loremflickr/
         # picsum), qui n'a par définition aucune source à créditer.
         "image_source_name": (fact.get("image_meta", {}) or {}).get("image_source_name", ""),
-        # Nom de la source du CHAMPION (2026-08-23) : utilisé pour créditer
+        # Nom de la source de l'ARTICLE_RETENU (2026-08-23) : utilisé pour créditer
         # correctement l'image de secours (og_image ci-dessus, TOUJOURS celle
-        # du champion) si jamais l'image primaire échoue et que _upload_media
+        # de l'article_retenu) si jamais l'image primaire échoue et que _upload_media
         # bascule dessus -- voir _to_wordpress.
-        "champion_source_name": champ.get("source", ""),
+        "article_retenu_source_name": champ.get("source", ""),
         # Classement pré-calculé (2026-08-23, demande explicite : "fais
         # appliquer cela aux articles actuels déjà sur kora") -- si un
         # classement a déjà été fait en lot avant la transmission
@@ -358,7 +358,7 @@ def _derive_source_level(fact: dict) -> int:
     Import paresseux pour éviter dépendance circulaire / coût au chargement."""
     try:
         import collection.whitelist as wl
-        src = fact.get("champion", {}).get("source", "")
+        src = fact.get("article_retenu", {}).get("source", "")
         entry = wl.get_entry_by_source(src)
         if entry and entry.category == "INTL":
             return 2
@@ -371,7 +371,7 @@ def _build_supabase_payload(fact: dict, final_text: str) -> dict:
     """Mappe le fait HITL vers le SCHÉMA RÉEL de la table 'articles' (KORA prod).
     Ne touche JAMAIS aux colonnes wp_* (gérées par le pipeline WP séparé).
     origin = AGENT_SEMI (flux semi-auto + validation HITL humaine)."""
-    champ = fact.get("champion", {})
+    champ = fact.get("article_retenu", {})
     # Bug corrigé 2026-08-22 (même cause que _build_payload/_strip_leading_title
     # ci-dessus) : `corps` brut commence par "# Titre" -- `corps.split("\n")[0]`
     # ne capturait donc JAMAIS le vrai chapô, seulement la ligne de titre
@@ -558,7 +558,7 @@ def _upload_media(image_url: str, fallback_url: str = "", image_provider: str = 
     manuellement, WordPress accepte le format nativement, HTTP 201 en test
     direct) mais rejetée ici faute de signature reconnue -- silencieusement,
     d'où featured_media=0 sans le moindre indice pour comprendre pourquoi).
-    Fallback: si l'image générée est corrompue, tente l'OG du champion."""
+    Fallback: si l'image générée est corrompue, tente l'OG de l'article_retenu."""
     candidates = [image_url, fallback_url] if fallback_url else [image_url]
     reasons = []
     for url in candidates:
@@ -627,7 +627,7 @@ def _upload_media(image_url: str, fallback_url: str = "", image_provider: str = 
             # presentee comme une illustration IA.
             # Bug corrige (revue de code) : `image_provider` decrit l'image
             # PRIMAIRE demandee (image_url), mais si celle-ci echoue la magic-
-            # byte check, c'est fallback_url (og du champion, TOUJOURS une
+            # byte check, c'est fallback_url (og de l'article_retenu, TOUJOURS une
             # vraie photo de source) qui est effectivement uploadee -- la
             # legende doit refleter l'URL REELLEMENT envoyee, pas la demande
             # initiale.
@@ -637,7 +637,7 @@ def _upload_media(image_url: str, fallback_url: str = "", image_provider: str = 
             # source d'où provient l'image figure au niveau de l'article") --
             # le nom credité suit la MEME URL réellement envoyée (source_name
             # pour l'image primaire, fallback_source_name pour l'OG du
-            # champion), jamais une source devinée ou fixe. Un repli stock
+            # article_retenu), jamais une source devinée ou fixe. Un repli stock
             # (loremflickr/picsum) n'a par définition aucune source réelle à
             # créditer -> légende générique inchangée dans ce cas.
             is_stock_fallback = (not is_fallback) and image_provider in ("loremflickr", "picsum")
@@ -744,7 +744,7 @@ def _to_wordpress(payload: dict, wp_status: str = "publish") -> dict:
     # L'app-password WP peut contenir des espaces (affichage) -> on les retire
     app_pass = (WP_APP_PASS or "").replace(" ", "")
     # 1) Upload de l'image à la une (visuel adaptatif obligatoire)
-    #    Fallback OG du champion si l'image générée est corrompue (JSON/HTML)
+    #    Fallback OG de l'article_retenu si l'image générée est corrompue (JSON/HTML)
     media_id = 0
     image_error = None
     credited_source_name = ""
@@ -754,7 +754,7 @@ def _to_wordpress(payload: dict, wp_status: str = "publish") -> dict:
         mid, image_error, credited_source_name = _upload_media(
             img, fallback_url=og, image_provider=payload.get("image_provider", ""),
             source_name=payload.get("image_source_name", ""),
-            fallback_source_name=payload.get("champion_source_name", ""))
+            fallback_source_name=payload.get("article_retenu_source_name", ""))
         if mid > 0:
             media_id = mid
             image_error = None

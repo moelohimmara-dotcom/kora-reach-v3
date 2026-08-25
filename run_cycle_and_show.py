@@ -15,6 +15,6 @@ print("sources_ok=",res.get("sources_ok"),"items=",res.get("total_items"),
       "facts=",res.get("facts_to_generate"))
 if res.get("facts"):
     for i,f in enumerate(res["facts"][:3]):
-        print(f"  [{i}] {f['champion']['source']} :: {f['champion']['title'][:50]} | gen={f['gen_model']} | img={bool(f.get('image'))}")
+        print(f"  [{i}] {f['article_retenu']['source']} :: {f['article_retenu']['title'][:50]} | gen={f['gen_model']} | img={bool(f.get('image'))}")
 else:
     print("  (aucun fait dans la fenêtre 24h — comportement attendu si articles >24h)")

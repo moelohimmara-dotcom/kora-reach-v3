@@ -71,12 +71,12 @@ def published_source_urls(con) -> set:
     """Ensemble des source_url réellement publiés sur WordPress (preuve d'audit)."""
     cur = con.cursor()
     cur.execute(
-        "SELECT f.champion AS champion, d.provider AS provider, d.http_status AS http_status "
+        "SELECT f.article_retenu AS article_retenu, d.provider AS provider, d.http_status AS http_status "
         "FROM hitl_decisions d JOIN hitl_facts f ON f.fact_id = d.fact_id "
         "WHERE d.status = 'TRANSMITTED'")
     urls = set()
     for row in cur.fetchall():
-        champion = _val(row, "champion", 0)
+        article_retenu = _val(row, "article_retenu", 0)
         provider = _val(row, "provider", 1)
         http_status = _val(row, "http_status", 2)
         if provider not in REAL_WP_PROVIDERS:
@@ -87,7 +87,7 @@ def published_source_urls(con) -> set:
         except (TypeError, ValueError):
             continue
         try:
-            champ = json.loads(champion) if champion else {}
+            champ = json.loads(article_retenu) if article_retenu else {}
         except (json.JSONDecodeError, TypeError):
             champ = {}
         url = (champ or {}).get("url", "")
