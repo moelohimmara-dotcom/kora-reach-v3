@@ -5,11 +5,20 @@
 // dans dist/index.html après `npm run build` : en dev, AUCUNE icône ne
 // s'affichait jamais nulle part dans l'app (bug constaté en preview live).
 export const SPRITE = `<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <!-- Icône tableau de bord (2026-08-25, demande explicite : "une icône vraiment
+       magnifique... comme dans les autres applications") -- remplace l'ancienne
+       jauge/aiguille (peu reconnaissable, ressemblait plus à un compteur qu'à un
+       tableau de bord) par le pictogramme "layout-dashboard" de Lucide : une
+       grille asymétrique de 4 panneaux, le motif standard du secteur (Vercel,
+       Linear, Notion, GitHub...) pour désigner un tableau de bord. Même viewBox
+       24x24, même style de trait (fill="none" stroke="currentColor" stroke-width="2"
+       stroke-linecap/linejoin="round") que toutes les autres icônes du sprite --
+       dimensions et rendu identiques partout où #i-dashboard est déjà utilisé. -->
   <symbol id="i-dashboard" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="12" cy="12" r="8.5" opacity=".35" />
-  <circle cx="12" cy="12" r="5" opacity=".6" />
-  <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
-  <path d="M12 12V3.5" opacity=".9" />
+  <rect x="3" y="3" width="7" height="9" rx="1" />
+  <rect x="14" y="3" width="7" height="5" rx="1" />
+  <rect x="14" y="12" width="7" height="9" rx="1" />
+  <rect x="3" y="16" width="7" height="5" rx="1" />
 </g></symbol>
   <symbol id="i-facts" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />

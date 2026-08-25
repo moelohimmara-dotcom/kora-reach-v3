@@ -675,8 +675,22 @@ html.icons-ready .material-icons { visibility: visible; }
    part : reste cohérent si un futur bouton utilise disabled pour une autre
    raison. */
 .btn:disabled, .btn[disabled] {
+  position: relative; overflow: hidden;
   opacity: .45; cursor: not-allowed; filter: none; box-shadow: none; transform: none;
   pointer-events: none; /* neutralise aussi les règles :hover plus spécifiques (btn-tonal etc.) */
+}
+/* Signal non-couleur (2026-08-25, audit mobile réel : l'opacité seule ne
+   suffit pas -- un utilisateur daltonien voyant, sur tactile (pas de
+   curseur "not-allowed" perceptible), n'avait que la baisse de luminosité
+   comme indice). Hachures diagonales en surimpression : un MOTIF, pas une
+   teinte, reste identifiable même en simulation de daltonisme/niveaux de
+   gris. */
+.btn:disabled::after, .btn[disabled]::after {
+  content: ""; position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(135deg, transparent 0 4px, rgba(0,0,0,.22) 4px 5px);
+}
+:root[data-theme="light"] .btn:disabled::after, :root[data-theme="light"] .btn[disabled]::after {
+  background-image: repeating-linear-gradient(135deg, transparent 0 4px, rgba(0,0,0,.14) 4px 5px);
 }
 .btn-primary { background: linear-gradient(135deg, var(--coral), var(--bordeaux)); color: #20100B; }
 .btn-primary:hover { filter: brightness(1.04); }
@@ -1102,11 +1116,29 @@ html.icons-ready .material-icons { visibility: visible; }
 /* ---- Sélection multiple + barre d'action ---- */
 .toolbar-row { display: flex; justify-content: flex-end; margin: 6px 2px 12px; }
 .section-head-actions { display: flex; gap: 8px; align-items: center; }
-.fact-check { position: absolute; top: 8px; left: 8px; width: 26px; height: 26px; border-radius: 50%;
-  background: color-mix(in srgb, var(--md-sys-color-surface) 85%, transparent); border: 2px solid var(--coral);
-  display: grid; place-items: center; color: #fff; z-index: 3; box-shadow: var(--elev-1);
+/* Zone tactile élargie à 44×44px (2026-08-25, audit mobile réel : mesurée à
+   26×26px, très en dessous du seuil WCAG/Material -- et c'est le SEUL moyen
+   de cocher un article, action fréquente en liste). Le cercle visuel reste
+   inchangé (26px, via ::before) : seule la zone RÉELLEMENT cliquable
+   s'agrandit, technique explicitement recommandée par WCAG 2.5.8 (cible
+   visuelle petite + zone tactile invisible plus grande, plutôt que
+   d'agrandir le cercle lui-même et alourdir la carte). */
+.fact-check { position: absolute; top: 0; left: 0; width: 44px; height: 44px;
+  display: grid; place-items: center; color: #fff; z-index: 3;
   opacity: 0; pointer-events: none; transition: opacity .18s var(--ease), transform .18s var(--ease); }
-.fact-check.on { background: var(--coral); }
+/* ::before sort volontairement du flux grid (position:absolute + inset:0 +
+   margin:auto = centrage classique) : reste indépendant du placement de
+   l'icône .ic (seul item grid réel), évite tout risque d'ambiguïté sur le
+   comportement d'alignement CSS Grid pour un enfant absolument positionné. */
+.fact-check::before { content: ""; position: absolute; inset: 0; margin: auto; width: 26px; height: 26px; border-radius: 50%;
+  background: color-mix(in srgb, var(--md-sys-color-surface) 85%, transparent); border: 2px solid var(--coral);
+  box-shadow: var(--elev-1); }
+.fact-check.on::before { background: var(--coral); }
+/* ::before (positionné) peint sinon AU-DESSUS d'un enfant non positionné en
+   flux normal (ordre de peinture CSS standard) -- position:relative sur
+   l'icône la rend positionnée à son tour, donc départagée par l'ordre du
+   DOM (::before, virtuellement premier enfant, peint avant/en dessous). */
+.fact-check .ic { position: relative; }
 .fact-card.selectable .fact-check,
 .fact-card.selected .fact-check,
 .fact-card.long-press-active .fact-check { opacity: 1; pointer-events: auto; }
@@ -1167,7 +1199,9 @@ html.icons-ready .material-icons { visibility: visible; }
   }
   .select-bar-info .sel-word { font-weight: 400; }
   .select-bar-actions {
-    flex: 1 1 100%; min-width: 0; display: flex; gap: 6px;
+    /* 8px (2026-08-25, audit mobile réel : mesuré à 6px, sous le seuil
+       recommandé pour l'espacement entre cibles tactiles adjacentes). */
+    flex: 1 1 100%; min-width: 0; display: flex; gap: 8px;
     justify-content: center; align-items: stretch; overflow: visible;
   }
   .select-bar-actions .btn {
@@ -2440,8 +2474,10 @@ html.icons-ready .material-icons { visibility: visible; }
    ============================================================ */
 .notif-wrap { position: relative; }
 .notif-bell {
+  /* 44×44px (2026-08-25, audit mobile réel : mesuré à 36×36px, sous le
+     seuil WCAG/Material de 44×44px pour une cible tactile). */
   position: relative; display: inline-flex; align-items: center; justify-content: center;
-  width: 36px; height: 36px; border: none; border-radius: 10px; background: transparent;
+  width: 44px; height: 44px; border: none; border-radius: 12px; background: transparent;
   color: var(--text-primary); cursor: pointer;
 }
 .notif-bell:hover { background: var(--surface-raised); }
