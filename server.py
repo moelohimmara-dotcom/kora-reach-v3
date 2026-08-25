@@ -513,7 +513,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/audit":
             if not self._require_auth():
                 return
-            return self._send(200, {"days": get_daily(), "total": sum(d["count"] for d in get_daily())})
+            # Bug corrigé (2026-08-25, audit pages Historique/Paramètres) :
+            # get_daily() fait un SELECT * FROM audit_events + regroupement
+            # par jour SANS aucune limite -- appelée ICI deux fois de suite
+            # (une pour "days", une pour "total") faisait ce travail EN
+            # DOUBLE pour une seule requête HTTP, pour rien.
+            days = get_daily()
+            return self._send(200, {"days": days, "total": sum(d["count"] for d in days)})
         if path == "/api/audit/admin":
             # Bug corrige 2026-08-22 (audit mobile reel) : le tiroir Parametres
             # > "Journal d'audit" appelait cette route depuis le debut sans
