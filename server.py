@@ -995,6 +995,11 @@ class Handler(BaseHTTPRequestHandler):
             decision = payload.get("decision")  # EDITED | APPROVED | REJECTED
             edited = payload.get("edited_text", "")
             final = payload.get("final_text", edited)
+            # edited_title (2026-08-25, correctif bug critique "Modifier" --
+            # voir hitl_store.decide() docstring) : titre corrigé par
+            # l'éditeur dans le formulaire d'édition, absent jusqu'ici de ce
+            # payload -- jamais transmis au serveur, donc jamais enregistré.
+            edited_title = payload.get("edited_title", "")
             wp_status = payload.get("wp_status", "publish")  # publish | draft
             # Garde-fou ajouté suite à la revue de code du 2026-08-20 (2e
             # passage) : verifier le statut AVANT d'appeler decide(), pas
@@ -1009,7 +1014,7 @@ class Handler(BaseHTTPRequestHandler):
                 _skip = _already_transmitted_skip(fid)
                 if _skip:
                     return self._send(200, {"ok": True, "fact_id": fid, "status": "TRANSMITTED", "transmission": _skip})
-            res = decide(fid, decision, EDITOR_NAME, edited_text=edited, final_text=final)
+            res = decide(fid, decision, EDITOR_NAME, edited_text=edited, final_text=final, edited_title=edited_title)
             if res.get("ok"):
                 log(fid, "HITL_DECISION", f"decision={decision} by={EDITOR_NAME} wp={wp_status}", "hitl")
                 # A => Approuver déclenche la transmission (dry_run par défaut)

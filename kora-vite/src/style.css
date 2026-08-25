@@ -2467,8 +2467,13 @@ html.icons-ready .material-icons { visibility: visible; }
 .rte-status-saved { color: var(--success); }
 .rte-toolbar { display: flex; align-items: center; gap: 4px; padding: 6px; margin: 8px 0; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; flex-wrap: wrap; }
 .rte-btn {
+  /* Cible tactile (2026-08-25, trouvé par test réel en viewport mobile,
+     chantier "Modifier un article" -- 32x32px, sous le seuil de confort
+     WCAG/mobile de 44x44px, gras/italique/souligné rapprochés inconfortables
+     à viser au doigt). Passé à 44x44 -- l'icône elle-même (.ic ci-dessous)
+     reste compacte, seule la zone cliquable grandit. */
   display: inline-flex; align-items: center; justify-content: center;
-  width: 32px; height: 32px; border: none; border-radius: 8px; background: transparent;
+  width: 44px; height: 44px; border: none; border-radius: 8px; background: transparent;
   color: var(--text-primary); cursor: pointer; font-size: 13px;
 }
 .rte-btn:hover, .rte-btn:focus-visible { background: var(--surface-raised); outline: none; }

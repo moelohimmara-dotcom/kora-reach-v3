@@ -719,7 +719,17 @@ function renderSheet(s) {
     if (edSaveDraft) edSaveDraft.onclick = () => {
       const { t, x } = getEdited();
       f._edited = { title: t, text: x };
-      Store.decide(f.fact_id, "EDITED", x).then(() => {
+      // Bug CRITIQUE corrigé (2026-08-25, demande explicite utilisateur :
+      // "si l'utilisateur ajoute un s... est-ce pris en compte ?") : `t`
+      // (le titre corrigé) n'était JAMAIS transmis à Store.decide() -- une
+      // correction de titre était donc silencieusement perdue, quel que
+      // soit le bouton utilisé. Voir editorial/hitl_store.py::decide()
+      // docstring pour le détail complet du bug (touchait aussi le corps,
+      // côté serveur, dans certains cas). Reflète aussi immédiatement le
+      // nouveau titre dans l'objet fact local (affichage instantané, avant
+      // même le rechargement déclenché par Store.decide()).
+      if (f.article_retenu) f.article_retenu.title = t;
+      Store.decide(f.fact_id, "EDITED", x, undefined, t).then(() => {
         Store.closeSheet();
         snack("Brouillon enregistré");
       }).catch(e => snack(friendlyActionError(e)));
@@ -728,12 +738,13 @@ function renderSheet(s) {
     if (edApprove) edApprove.onclick = () => {
       const { t, x } = getEdited();
       f._edited = { title: t, text: x };
+      if (f.article_retenu) f.article_retenu.title = t;
       // Bug corrigé 2026-08-20 (4e/8e passage de revue) : ce bouton n'affichait
       // jamais r.transmission (ni le skip WP, ni un VRAI échec d'envoi)
       // contrairement au bouton "Approuver & transmettre" du tiroir principal
       // -- un éditeur pouvait croire l'article publié sur WordPress alors
       // qu'il n'avait été qu'approuvé localement, ou que l'envoi avait échoué.
-      Store.decide(f.fact_id, "APPROVED", x).then(r => {
+      Store.decide(f.fact_id, "APPROVED", x, undefined, t).then(r => {
         // Bug corrigé 2026-08-20 (9e passage de revue) : SKIPPED_ALREADY_TRANSMITTED
         // signifie que decide() n'a JAMAIS été appelé côté serveur (garde-fou
         // en amont, voir _already_transmitted_skip dans server.py) -- le texte

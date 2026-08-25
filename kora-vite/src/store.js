@@ -740,7 +740,7 @@ export const Store = (() => {
   // inchangé pour tous les appelants existants qui ne le passent pas ;
   // le backend retombe alors sur son propre défaut "publish", voir
   // server.py). Seul APPROVED en tient compte côté serveur.
-  async function decide(factId, decision, editedText = "", wpStatus = undefined) {
+  async function decide(factId, decision, editedText = "", wpStatus = undefined, editedTitle = "") {
     setState({ ui: { ...state.ui, busy: true, overlay: "Enregistrement…" } });
     try {
       const r = await api("/api/hitl/decide", {
@@ -748,6 +748,11 @@ export const Store = (() => {
         body: JSON.stringify({
           fact_id: factId, decision, edited_text: editedText, decided_by: "chef_de_secteur",
           ...(wpStatus ? { wp_status: wpStatus } : {}),
+          // edited_title (2026-08-25, correctif bug critique "Modifier" --
+          // voir hitl_store.decide() docstring) : jusqu'ici jamais envoyé,
+          // le titre corrigé dans le formulaire d'édition était donc perdu
+          // silencieusement à chaque sauvegarde.
+          ...(editedTitle ? { edited_title: editedTitle } : {}),
         })
       });
       // Bug corrigé 2026-08-20 (9e passage de revue) : ne garder que r.error

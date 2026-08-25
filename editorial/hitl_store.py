@@ -633,7 +633,36 @@ def list_all() -> list:
 
 
 def decide(fact_id: str, decision: str, decided_by: str,
-           edited_text: str = "", final_text: str = "") -> dict:
+           edited_text: str = "", final_text: str = "", edited_title: str = "") -> dict:
+    """edited_title (2026-08-25, bug CRITIQUE trouvé en testant en conditions
+    réelles la fonctionnalité "Modifier" à la demande explicite de
+    l'utilisateur -- "si l'utilisateur ajoute un s, enlève un a... est-ce
+    pris en compte ?") : AVANT ce correctif, hitl_facts.article (colonne
+    lue en PRIORITÉ par le frontend pour l'affichage, voir sheet.js::
+    renderSheet()) n'était JAMAIS mise à jour par decide(), ni même par
+    mark_transmitted() -- seule hitl_decisions.edited_text/final_text
+    l'était. Conséquence mesurée en conditions réelles (article de test,
+    titre + corps modifiés, "Enregistrer le brouillon" cliqué, article
+    rouvert) : le titre édité n'était PAS DU TOUT transmis au serveur
+    (bug frontend séparé, voir kora-vite/src/sheet.js -- f._edited écrit
+    mais jamais lu), et le corps édité, bien qu'enregistré correctement
+    dans hitl_decisions, restait invisible à la réouverture (l'affichage
+    retombait sur l'ancien hitl_facts.article, inchangé). PIRE : le bouton
+    principal "Approuver & transmettre" (hors formulaire d'édition, voir
+    app.js::_resolveFactWpChoice) envoie edited_text="" -- côté serveur,
+    ceci fait retomber la transmission RÉELLE vers WordPress sur
+    fact.get("article") (l'ancien hitl_facts.article, JAMAIS synchronisé)
+    au lieu du brouillon corrigé précédemment enregistré : une correction
+    sauvegardée puis approuvée plus tard (sans repasser par le formulaire
+    d'édition) publiait silencieusement la version D'ORIGINE, PERDANT
+    RÉELLEMENT la correction de l'éditeur au moment de la publication.
+
+    Correctif : dès qu'un texte/titre édité non vide est fourni ici,
+    hitl_facts.article (et .article_retenu.title pour le titre) sont
+    RESYNCHRONISÉS dans la même transaction que hitl_decisions -- devient
+    la source unique de vérité, cohérente pour TOUS les appelants
+    (affichage, transmission immédiate, transmission différée après
+    brouillon), sans qu'aucun appelant n'ait besoin de connaître ce détail."""
     if not decided_by or not decided_by.strip():
         return {"error": "decision_anonyme_refusee"}
     # Bug corrige 2026-08-20 (7e passage de revue de code) : decide() est LA
@@ -707,9 +736,28 @@ def decide(fact_id: str, decision: str, decided_by: str,
         # si hitl_facts.status est TOUJOURS celui lu ICI, MAINTENANT -- si un
         # autre thread/requete l'a change entre-temps, 0 ligne est affectee
         # et on le detecte via rowcount plutot que d'ecraser aveuglement.
-        cur.execute(f"SELECT status FROM hitl_facts WHERE fact_id={p}", (fact_id,))
+        cur.execute(f"SELECT status, article, article_retenu FROM hitl_facts WHERE fact_id={p}", (fact_id,))
         _facts_row = cur.fetchone()
         _fresh_facts_status = _facts_row["status"] if _facts_row else None
+        # Resynchronisation hitl_facts.article/.article_retenu (voir docstring
+        # ci-dessus) : si aucun texte/titre édité n'est fourni (cas normal
+        # d'une simple transition de statut, ou d'un "Approuver" qui ne
+        # repasse pas par le formulaire), on RÉÉCRIT la valeur déjà présente
+        # (no-op réel) plutôt que de complexifier la requête avec des
+        # colonnes conditionnelles -- garde la même forme de requête (et donc
+        # la même garantie compare-and-swap) dans tous les cas.
+        _cur_article = _facts_row["article"] if _facts_row else None
+        _cur_article_retenu_raw = _facts_row["article_retenu"] if _facts_row else None
+        _persist_text = final_text or edited_text
+        _new_article = _persist_text if _persist_text else _cur_article
+        _new_article_retenu_raw = _cur_article_retenu_raw
+        if edited_title and edited_title.strip():
+            try:
+                _ar = json.loads(_cur_article_retenu_raw) if _cur_article_retenu_raw else {}
+                _ar["title"] = edited_title.strip()
+                _new_article_retenu_raw = json.dumps(_ar, ensure_ascii=False)
+            except Exception:
+                pass  # JSON corrompu (cas limite) -- ne bloque pas la décision, le titre ne sera juste pas mis à jour cette fois
         # Bug corrige 2026-08-20 (8e passage de revue de code) : cette
         # branche testait encore `existing` (lu plus haut, via une connexion
         # SEPAREE, potentiellement perime -- voir re-verification ci-dessus)
@@ -766,12 +814,12 @@ def decide(fact_id: str, decision: str, decided_by: str,
             # hitl_facts passe en TRASHED + trashed_at ; la décision HITL reste REJECTED
             # (traçabilité : on distingue un rejet d'une suppression manuelle).
             cur.execute(
-                f"UPDATE hitl_facts SET status='TRASHED', trashed_at={p} WHERE fact_id={p} AND status={p}",
-                (now, fact_id, _fresh_facts_status))
+                f"UPDATE hitl_facts SET status='TRASHED', trashed_at={p}, article={p}, article_retenu={p} WHERE fact_id={p} AND status={p}",
+                (now, _new_article, _new_article_retenu_raw, fact_id, _fresh_facts_status))
         else:
             cur.execute(
-                f"UPDATE hitl_facts SET status={p} WHERE fact_id={p} AND status={p}",
-                (decision, fact_id, _fresh_facts_status))
+                f"UPDATE hitl_facts SET status={p}, article={p}, article_retenu={p} WHERE fact_id={p} AND status={p}",
+                (decision, _new_article, _new_article_retenu_raw, fact_id, _fresh_facts_status))
         if cur.rowcount == 0 and _fresh_facts_status is not None:
             # Compare-and-swap manque : hitl_facts a change entre notre
             # lecture et notre ecriture (course concurrente). On annule
