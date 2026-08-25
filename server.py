@@ -401,8 +401,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": "id_requis"})
             uname = auth.username_by_id(uid) or uid
             r = auth.set_active(uid, active)
-            root_auth.log_root_event("account_disabled" if not active else "account_enabled", f"{uname} by root:{actor}", ip)
-            return self._send(200, r)
+            # Bug corrigé (2026-08-25, audit sécurité auth, trouvé par revue
+            # après le correctif rowcount d'identity/auth.py) : contrairement
+            # aux routes soeurs juste au-dessus/en dessous (role, reset-
+            # password), celle-ci journalisait "account_disabled"/
+            # "account_enabled" et renvoyait 200 INCONDITIONNELLEMENT, sans
+            # vérifier r.get("ok") -- un uid inexistant produit désormais
+            # {"ok": False, "error": "utilisateur_introuvable"} (voir
+            # auth.set_active), et cette route aurait quand même journalisé
+            # un événement root mensonger + renvoyé succès à la console.
+            if r.get("ok"):
+                root_auth.log_root_event("account_disabled" if not active else "account_enabled", f"{uname} by root:{actor}", ip)
+            return self._send(200 if r.get("ok") else 400, r)
         if path == "/api/root/users/reset-password":
             uid = payload.get("id")
             new_pw = payload.get("password") or ""

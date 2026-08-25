@@ -249,8 +249,15 @@ def set_role(uid, role, actor_role=None):
     try:
         cur = con.cursor()
         cur.execute(f"UPDATE kora_users SET role={ph} WHERE id={ph}", (role, uid))
+        # Bug corrigé (2026-08-25, audit sécurité auth) : aucune vérification
+        # que la ligne existait réellement avant ce correctif -- un uid
+        # inexistant (faute de frappe, id périmé) affectait 0 ligne mais
+        # renvoyait quand même {"ok": True}, et le tiroir "Journal d'audit"
+        # enregistrait alors un faux "role_changed" laissant croire à tort
+        # qu'un changement avait eu lieu. cur.rowcount == 0 -> échec explicite.
+        found = cur.rowcount > 0
         con.commit()
-        return {"ok": True}
+        return {"ok": True} if found else {"ok": False, "error": "utilisateur_introuvable"}
     finally:
         con.close()
 
@@ -264,9 +271,14 @@ def set_active(uid, active):
     try:
         cur = con.cursor()
         cur.execute(f"UPDATE kora_users SET active={ph} WHERE id={ph}", (1 if active else 0, uid))
+        # Même correctif que set_role() ci-dessus : ne renvoie {"ok": True}
+        # que si une ligne a réellement été modifiée.
+        found = cur.rowcount > 0
         con.commit()
     finally:
         con.close()
+    if not found:
+        return {"ok": False, "error": "utilisateur_introuvable"}
     if not active:
         delete_all_sessions_for_user(uid)
     return {"ok": True}
@@ -284,9 +296,13 @@ def admin_reset_password(uid, new_password):
     try:
         cur = con.cursor()
         cur.execute(f"UPDATE kora_users SET password_hash={ph} WHERE id={ph}", (_hash_password(new_password), uid))
+        # Même correctif que set_role()/set_active() ci-dessus.
+        found = cur.rowcount > 0
         con.commit()
     finally:
         con.close()
+    if not found:
+        return {"ok": False, "error": "utilisateur_introuvable"}
     delete_all_sessions_for_user(uid)
     return {"ok": True}
 
@@ -352,8 +368,15 @@ def delete_user(uid, actor_role=None):
         cur = con.cursor()
         cur.execute(f"DELETE FROM kora_sessions WHERE user_id={ph}", (uid,))
         cur.execute(f"DELETE FROM kora_users WHERE id={ph}", (uid,))
+        # Bug corrigé (2026-08-25, audit sécurité auth, trouvé en testant le
+        # flux invitation/suppression en conditions réelles) : un uid
+        # inexistant (id périmé, faute de frappe côté appelant) affectait 0
+        # ligne mais renvoyait quand même {"ok": True} -- le tiroir "Journal
+        # d'audit" enregistrait alors un "user_deleted" mensonger, laissant
+        # croire à tort qu'un compte réel venait d'être supprimé.
+        found = cur.rowcount > 0
         con.commit()
-        return {"ok": True}
+        return {"ok": True} if found else {"ok": False, "error": "utilisateur_introuvable"}
     finally:
         con.close()
 
@@ -368,8 +391,11 @@ def set_wp_publish(uid, allowed):
     try:
         cur = con.cursor()
         cur.execute(f"UPDATE kora_users SET wp_publish_allowed={ph} WHERE id={ph}", (1 if allowed else 0, uid))
+        # Même correctif que set_role()/set_active()/admin_reset_password()/
+        # delete_user() ci-dessus.
+        found = cur.rowcount > 0
         con.commit()
-        return {"ok": True}
+        return {"ok": True} if found else {"ok": False, "error": "utilisateur_introuvable"}
     finally:
         con.close()
 
@@ -606,8 +632,13 @@ def revoke_invitation(token):
     try:
         cur = con.cursor()
         cur.execute(f"UPDATE kora_invitations SET status='revoked' WHERE token={ph} AND status='pending'", (token,))
+        # Même correctif que les autres mutations d'auth.py (voir set_role) :
+        # un jeton déjà consommé/expiré/inconnu affectait 0 ligne mais
+        # renvoyait quand même {"ok": True}, avec un "invitation_revoked"
+        # mensonger dans le journal d'audit.
+        found = cur.rowcount > 0
         con.commit()
-        return {"ok": True}
+        return {"ok": True} if found else {"ok": False, "error": "invitation_introuvable"}
     finally:
         con.close()
 
