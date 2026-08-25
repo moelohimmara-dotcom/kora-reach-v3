@@ -82,11 +82,22 @@ def fetch_rss(source) -> List[Dict]:
     baser sur l'info reelle et complete, pas un extrait partiel (regle metier
     2026-08-19, notamment pour l'actualite nationale/GN_NAT)."""
     out = []
+    # Bug corrigé (2026-08-25, audit fiabilité collecte) : rate_limit +
+    # get_with_retry + raise_for_status vivaient AVANT dans le même try/except
+    # que tout le reste (parsing/boucle d'items), qui avale toute exception et
+    # se contente d'un print() -- un échec HTTP réel (403/404/5xx persistant)
+    # ne remontait donc jamais comme tel à l'appelant (orchestration/
+    # reach_agent.py::_collect(), qui n'appelle record_fetch_result(ok=False,...)
+    # QUE sur une exception qui s'échappe jusqu'à lui) : le flux retombait
+    # toujours sur un retour vide "silencieux", indiscernable d'une source
+    # légitimement sans nouveauté. Sorti du try : une vraie erreur de
+    # connexion/statut se propage désormais normalement (voir _collect(),
+    # qui tente quand même le repli sitemap avant de considérer l'échec
+    # définitif).
+    rate_limit(source.url)
+    resp = get_with_retry(source.url)
+    resp.raise_for_status()
     try:
-        rate_limit(source.url)
-        # timeout réseau explicite (évite blocage indéfini) + retry/backoff
-        resp = get_with_retry(source.url)
-        resp.raise_for_status()
         d = feedparser.parse(resp.content)
         for i, e in enumerate(d.entries):
             img = ""
@@ -121,9 +132,24 @@ def fetch_html(source) -> List[Dict]:
     Pattern permissif : tout lien same-domain avec slug profond (>=3 segments), hors
     catégories/tags/auteurs. Limite 10 articles/source, les plus récents (URL datée) d'abord."""
     out = []
+    # Bug corrigé (2026-08-25, audit fiabilité collecte -- même correctif que
+    # fetch_rss() ci-dessus) : cette fonction parsait le corps de la réponse
+    # SANS vérifier le code HTTP, et l'ancien placement à l'intérieur du
+    # try/except plus bas (qui avale toute exception avec un simple print())
+    # empêchait de toute façon une éventuelle erreur de remonter. Un blocage
+    # anti-bot (403) ou une page de maintenance renvoie souvent un corps HTML
+    # minimal, quasi sans lien réel, ce qui produisait silencieusement 0
+    # article ET un statut "ok" (le design "0 item = pas forcément une
+    # erreur" reste volontaire pour une source qui n'a légitimement rien de
+    # neuf -- mais un 403/404 n'a rien à voir avec une absence de nouveauté :
+    # c'est un vrai échec de collecte, confirmé en conditions réelles sur
+    # africaguinee.com, bloqué en 403 tout en apparaissant "ok" sur la page
+    # Sources). Sorti du try, comme rate_limit/get_with_retry : une erreur
+    # ici se propage désormais normalement jusqu'à _collect() (reach_agent.py).
+    rate_limit(source.url)
+    resp = get_with_retry(source.url)
+    resp.raise_for_status()
     try:
-        rate_limit(source.url)
-        resp = get_with_retry(source.url)
         html = resp.text
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(html, "html.parser")

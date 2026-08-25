@@ -350,15 +350,37 @@ class ReachAgent:
                        if not scope_filter or e.category == scope_filter]
 
             def _collect(e):
+                # Bug corrigé (2026-08-25, audit fiabilité collecte) :
+                # fetch_html()/fetch_rss() peuvent désormais lever une
+                # exception sur un vrai échec HTTP (403/404/5xx persistant,
+                # voir fetchers.py) au lieu de toujours retourner [] en
+                # silence. Avant de considérer cet échec définitif, on tente
+                # quand même le repli sitemap ci-dessous (efficace contre
+                # certains blocages type Cloudflare) -- primary_exc n'est
+                # relevée que si le repli échoue LUI AUSSI, pour que
+                # record_fetch_result(ok=False, ...) (voir plus bas, appelé
+                # sur l'exception qui s'échappe de _collect) reflète la
+                # vraie cause plutôt qu'un silence indiscernable d'une
+                # source légitimement sans nouveauté.
+                primary_exc = None
                 if e.vector_primary in ("rss", "html"):
-                    raws, src = fetch_source(e), e
+                    try:
+                        raws, src = fetch_source(e), e
+                    except Exception as _pe:
+                        primary_exc = _pe
+                        raws, src = [], e
                 else:
                     raws, src = alt_fetch(e), e
                 # Fallback sitemap si la collecte primaire est vide (sites derriere Cloudflare)
                 # B5 fix : étendu à TOUTE source HTML/RSS vide, pas seulement vector_secondary="sitemap"
                 if not raws and e.vector_primary in ("rss", "html"):
-                    raws = alt_fetch(e, primary="sitemap")
-                    src = e
+                    try:
+                        raws = alt_fetch(e, primary="sitemap")
+                        src = e
+                    except Exception:
+                        pass  # repli échoué aussi -> primary_exc (s'il existe) sera relevée ci-dessous
+                if not raws and primary_exc:
+                    raise primary_exc
                 return raws, src
 
             with ThreadPoolExecutor(max_workers=8) as ex:
