@@ -19,7 +19,17 @@ const page = await ctx.newPage();
 await page.addInitScript(() => { try { if (window.caches) caches.keys().then(ks => ks.forEach(k => caches.delete(k))); } catch (e) {} });
 await page.setViewportSize({ width: 1280, height: 900 });
 const errors = [];
-page.on('console', m => { if (m.type() === 'error' && !m.text().includes('401')) errors.push(m.text()); });
+// 401 (probe d'auth initiale) et 403/ORB (protection anti-hotlink de sites
+// sources externes sur les images d'articles -- hors périmètre, pas une
+// régression de KORA) sont du bruit connu -- même filtre que
+// test_parcours_c.mjs (2026-08-26, incohérence trouvée : B déclenchait un
+// exit 2 "bruit" sur ces 403 alors que C les ignore déjà explicitement).
+page.on('console', m => {
+  const t = m.text();
+  if (m.type() !== 'error') return;
+  if (t.includes('401') || t.includes('403') || t.includes('ERR_BLOCKED_BY_ORB')) return;
+  errors.push(t);
+});
 page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message));
 
 try {

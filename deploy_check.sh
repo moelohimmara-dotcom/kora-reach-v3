@@ -84,32 +84,46 @@ mkdir -p "$TMPDIR"
 
 cd "$APP_DIR/kora-vite"
 
-echo "==> Smoke test (non-régression A)"
-if node smoke_test.mjs "https://213.156.135.139.sslip.io/kora-v2"; then
-  echo "SMOKE_A_PASS"
-else
-  echo "SMOKE_A_FAIL"
+# Convention d'exit code des 3 scripts (déjà en place AVANT ce fichier,
+# vérifié dans leur code) : 0 = succès propre, 2 = succès MAIS avec du bruit
+# JS non bloquant (ex: 403 sur une image externe hors de notre contrôle),
+# 1 = vrai échec (au moins une assertion a réellement échoué). Bug trouvé en
+# testant ce script en conditions réelles (2026-08-26) : `if node ...; then`
+# traite TOUT code non nul comme un échec, donc un exit 2 (bruit, pas un
+# echec) declenchait un rollback pour rien -- corrige en verifiant le code
+# reel plutot que le succes/echec binaire de bash.
+run_suite() {
+  local name="$1"; shift
+  # set +e/-e autour de l'appel : sans ca, `set -e` (actif en tete de ce
+  # fichier) ferait avorter le script des qu'un exit 1 OU 2 survient, avant
+  # meme que `local code=$?` ait la moindre chance de lire le vrai code
+  # (et `node ... || true` masquerait $? avec celui de `true`, tout aussi
+  # inutilisable -- d'ou ce toggle explicite plutot qu'un simple `|| true`).
+  set +e
+  node "$@"
+  local code=$?
+  set -e
+  if [ "$code" -eq 0 ] || [ "$code" -eq 2 ]; then
+    if [ "$code" -eq 2 ]; then
+      echo "${name}_PASS (avec bruit JS non bloquant, voir logs ci-dessus)"
+    else
+      echo "${name}_PASS"
+    fi
+    return 0
+  fi
+  echo "${name}_FAIL (code $code)"
   rollback
   exit 1
-fi
+}
+
+echo "==> Smoke test (non-régression A)"
+run_suite SMOKE_A smoke_test.mjs "https://213.156.135.139.sslip.io/kora-v2"
 
 echo "==> Parcours B (Sources/Params/Audit/Corbeille/Sélection)"
-if node test_parcours_b.mjs "https://213.156.135.139.sslip.io/kora-v2"; then
-  echo "SMOKE_B_PASS"
-else
-  echo "SMOKE_B_FAIL"
-  rollback
-  exit 1
-fi
+run_suite SMOKE_B test_parcours_b.mjs "https://213.156.135.139.sslip.io/kora-v2"
 
 echo "==> Parcours C (Vidéos/Bandeau de cycle/Notifications)"
-if node test_parcours_c.mjs "https://213.156.135.139.sslip.io/kora-v2"; then
-  echo "SMOKE_C_PASS"
-else
-  echo "SMOKE_C_FAIL"
-  rollback
-  exit 1
-fi
+run_suite SMOKE_C test_parcours_c.mjs "https://213.156.135.139.sslip.io/kora-v2"
 
 echo "DEPLOY_OK_ALL_PASS"
 # Ne garde que les 5 dernières sauvegardes de rollback (évite d'accumuler
