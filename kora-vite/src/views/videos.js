@@ -159,7 +159,7 @@ function viewVideos(s) {
         // viewPublished() (views/facts.js) où un fait TRANSMITTED EST
         // affiché, avec ses propres actions (Retirer) à la place.
         actions += `
-          <button type="button" class="btn btn-tonal btn-sm" data-video-publish="${esc(v.fact_id)}">${icon("i-send")} Publier</button>
+          <button type="button" class="btn btn-primary btn-sm" data-video-publish="${esc(v.fact_id)}">${icon("i-send")} Publier</button>
           <button type="button" class="btn btn-danger-ghost btn-sm" data-video-reject="${esc(v.fact_id)}" data-video-reject-title="${esc(v.title || "")}">${icon("i-reject")} Rejeter</button>`;
       }
     }

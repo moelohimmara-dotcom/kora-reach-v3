@@ -15,6 +15,7 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import orchestration.reach_agent as reach_agent
+import orchestration.watch as watch
 import collection.whitelist as wl
 import collection.normalizer as normalizer
 import core.config as config
@@ -27,7 +28,7 @@ import identity.permissions as permissions
 from editorial.hitl_store import (
     fact_id_of, decide, get as hitl_get, list_all,
     mark_transmitted, mark_transmission_failed, retract, mark_retracted, mark_wp_deleted,
-    upsert_fact, list_facts, get_fact, get_fact_detail,
+    upsert_fact, list_facts, get_fact, get_fact_detail, set_suggested_category,
     trash_facts, restore_fact, delete_facts, list_trashed, purge_trashed,
     count_published, count_rejected, count_deleted, get_dashboard_stats,
 )
@@ -843,8 +844,37 @@ class Handler(BaseHTTPRequestHandler):
                     # Persiste les faits pour qu'ils survivent au redémarrage
                     facts = (result.get("facts") if isinstance(result, dict) else None) or []
                     for fct in facts:
-                        try: upsert_fact(fct)
-                        except Exception as _e: log("cycle", "FACT_PERSIST_WARN", str(_e), "hitl")
+                        try:
+                            fid = upsert_fact(fct)
+                        except Exception as _e:
+                            log("cycle", "FACT_PERSIST_WARN", str(_e), "hitl")
+                            continue
+                        # Classement automatique par catégorie (2026-08-26, demande
+                        # explicite : "avant même que l'article ne soit généré, tu dois
+                        # être en mesure de déterminer la catégorie... je veux vraiment
+                        # que tu fasses cela et teste cela"). _classify_category()
+                        # (publishing/transmit.py) existait déjà et tournait bien au
+                        # moment de la transmission WordPress -- mais SEULEMENT à ce
+                        # moment-là, jamais pendant la génération elle-même : un article
+                        # fraîchement généré n'avait donc AUCUNE catégorie visible
+                        # pendant la revue (suggested_category restait NULL jusqu'à
+                        # l'approbation), l'éditeur ne pouvait rien vérifier avant de
+                        # cliquer "Approuver & transmettre". Câblé ici, juste après la
+                        # persistance de CHAQUE fait généré -- best-effort, ne bloque
+                        # jamais la persistance du fait lui-même si la classification
+                        # échoue (log seulement, suggested_category reste NULL, le
+                        # filet de _classify_category() au moment de la transmission
+                        # reste le dernier recours inchangé).
+                        try:
+                            _champ = fct.get("article_retenu") or {}
+                            _cat = transmit._classify_category(
+                                _champ.get("title", "") or "",
+                                fct.get("article", "") or "",
+                                n_sources=fct.get("n_sources", 1),
+                            )
+                            set_suggested_category(fid, _cat)
+                        except Exception as _ce:
+                            log("cycle", "CATEGORY_WARN", str(_ce), "hitl", fact_id=fid)
                     with _LAST_LOCK:
                         LAST_CYCLE["result"] = result
                         LAST_CYCLE["ts"] = datetime.now().isoformat(timespec="seconds")
@@ -1736,6 +1766,15 @@ def main():
         _sig.signal(_sig.SIGINT, _handle_sig)
     except Exception:
         pass
+    # Veille passive des sources (2026-08-26, demande explicite : prévenir
+    # l'éditeur quand du contenu frais apparaît, SANS jamais générer tout
+    # seul -- voir orchestration/watch.py). Thread daemon : aucun impact sur
+    # l'arrêt gracieux du service (rien à laisser finir, contrairement aux
+    # threads de cycle réels non-daemon gérés plus haut).
+    try:
+        watch.start()
+    except Exception as e:
+        print("watch.start():", e)
     print(f"KORA dashboard sur http://localhost:{port} | editor={EDITOR_NAME} | transmit={transmit.mode()}")
     try:
         srv.serve_forever()

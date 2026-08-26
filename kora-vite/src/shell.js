@@ -213,11 +213,17 @@ export const SHELL = `
        centrée + messages chaleureux personnifiés, fermable vers le bandeau
        compact #cycleBanner sans interrompre le cycle en arrière-plan. -->
   <div class="global-loader" id="globalLoader" hidden role="status" aria-live="polite">
-    <div class="gl-orb">
-      <span class="gl-orb-ring"></span>
-      <span class="gl-orb-ring gl-orb-ring-2"></span>
-      <span class="gl-orb-core">${ic("i-spark")}</span>
-    </div>
+    <!-- Même animation qu'au démarrage de l'app (#bootSplash, index.html) --
+         demande explicite (2026-08-26) : l'utilisateur relançant un cycle
+         retrouve exactement le même repère visuel qu'à l'ouverture de KORA,
+         plutôt que deux langages d'attente différents dans la même appli.
+         .gl-badge reprend le badge de marque (dégradé corail->bordeaux,
+         statique -- l'ancien halo pulsé/respirant est retiré, c'est le
+         seul élément qui différait du splash de boot) ; .gl-wave est le
+         MÊME balayage de 5 points que .bs-wave (index.html), porté ici
+         dans la feuille de style externe. -->
+    <div class="gl-badge">${ic("i-spark")}</div>
+    <div class="gl-wave"><i></i><i></i><i></i><i></i><i></i></div>
     <div class="gl-text" id="globalLoaderText">Kora Agent explore les sources d'actualité…</div>
     <div class="gl-progress" id="globalLoaderProgress" hidden></div>
     <div class="gl-estimate" id="globalLoaderEstimate" hidden></div>

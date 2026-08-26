@@ -67,7 +67,7 @@ function renderSourceDetail(s) {
       ${isAdvanced ? `
         <p class="muted source-detail-footnote">${icon("i-shield")} Chaque activation/suspension est tracée dans le journal d'audit.</p>
         <div class="mini-sheet-actions">
-          <button class="btn ${active ? "btn-outline" : "btn-primary"}" id="sourceToggleBtn">${active ? "Suspendre" : "Réactiver"}</button>
+          <button class="btn ${active ? "btn-danger-ghost" : "btn-primary"}" id="sourceToggleBtn">${active ? "Suspendre" : "Réactiver"}</button>
           <button class="btn btn-tonal" id="sourceEditBtn">Modifier</button>
         </div>
         <button class="btn btn-ghost btn-block" id="sourceHistoryBtn" style="margin-top:8px">${icon("i-audit")} Voir l'historique dans le journal d'audit</button>
@@ -315,9 +315,17 @@ function renderRejectConfirm(s) {
 // composant, réutilisé par tous les sites d'appel (suppression définitive,
 // purge d'historique, retrait de compte, reset de prompt, cycle forcé...).
 // Usage : confirmAction({ title, message, confirmLabel, danger, onConfirm }).
+// typedConfirmWord (2026-08-26, chantier "friction sur les purges massives",
+// audit UI/UX) : optionnel -- quand fourni, le bouton de confirmation reste
+// désactivé tant que l'utilisateur n'a pas RETAPÉ ce mot exact dans un
+// champ dédié. Réservé aux actions dont le rayon d'action est le plus large
+// (ex. vider tout l'historique -- des centaines d'événements en un clic) ;
+// les autres confirmations de l'app restent volontairement plus légères
+// (un aller-retour suffit), pour ne pas banaliser la friction forte au
+// point que l'utilisateur tape le mot sans plus lire le message.
 
-function confirmAction({ title, message, confirmLabel = "Confirmer", cancelLabel = "Annuler", danger = true, onConfirm }) {
-  Store.openSheet({ type: "confirm", title, message, confirmLabel, cancelLabel, danger, onConfirm });
+function confirmAction({ title, message, confirmLabel = "Confirmer", cancelLabel = "Annuler", danger = true, onConfirm, typedConfirmWord }) {
+  Store.openSheet({ type: "confirm", title, message, confirmLabel, cancelLabel, danger, onConfirm, typedConfirmWord });
   renderSheet(Store.state);
 }
 
@@ -326,6 +334,7 @@ function renderConfirmSheet(s) {
   const body = document.getElementById("sheetBody");
   const sheet = document.getElementById("sheet");
   const scrim = document.getElementById("sheetScrim");
+  const needsTyped = !!sh.typedConfirmWord;
   body.innerHTML = `
     <div class="reject-confirm">
       <div class="reject-confirm-head">
@@ -333,15 +342,25 @@ function renderConfirmSheet(s) {
         <h2 class="sheet-title">${esc(sh.title)}</h2>
       </div>
       <p class="muted">${esc(sh.message)}</p>
-      <button class="btn ${sh.danger ? "btn-danger" : "btn-primary"} btn-block" data-confirm-yes="1">${esc(sh.confirmLabel)}</button>
+      ${needsTyped ? `
+      <label class="confirm-typed-label" for="confirmTypedInput">Tape <strong>${esc(sh.typedConfirmWord)}</strong> pour confirmer</label>
+      <input class="text-input" id="confirmTypedInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${esc(sh.typedConfirmWord)}" style="margin-bottom:12px">
+      ` : ""}
+      <button class="btn ${sh.danger ? "btn-danger" : "btn-primary"} btn-block" data-confirm-yes="1" ${needsTyped ? "disabled" : ""}>${esc(sh.confirmLabel)}</button>
       <button class="btn btn-tonal btn-block" data-confirm-no="1">${esc(sh.cancelLabel)}</button>
     </div>`;
   sheet.hidden = false; scrim.hidden = false;
   const yesBtn = body.querySelector("[data-confirm-yes]");
   const noBtn = body.querySelector("[data-confirm-no]");
-  yesBtn.onclick = () => { Store.closeSheet(); sh.onConfirm && sh.onConfirm(); };
+  yesBtn.onclick = () => { if (yesBtn.disabled) return; Store.closeSheet(); sh.onConfirm && sh.onConfirm(); };
   noBtn.onclick = () => Store.closeSheet();
-  noBtn.focus();
+  if (needsTyped) {
+    const input = body.querySelector("#confirmTypedInput");
+    input.oninput = () => { yesBtn.disabled = input.value.trim().toUpperCase() !== sh.typedConfirmWord.toUpperCase(); };
+    input.focus();
+  } else {
+    noBtn.focus();
+  }
 }
 
 // Vrai le temps que l'éditeur enrichi (4.4) est ouvert. Le mode édition n'est
@@ -357,6 +376,23 @@ function renderConfirmSheet(s) {
 // pour l'importeur ; render() ne fait que la lire, un getter suffit donc).
 let _editingActive = false;
 export function isEditingActive() { return _editingActive; }
+
+// isVideoPlaying (2026-08-26, retour utilisateur réel en production : "la
+// vidéo se lit... quelques secondes... et puis ça plante") -- MÊME
+// PRINCIPE qu'isEditingActive() ci-dessus, pour le même symptôme racine :
+// renderSheet() reconstruit ENTIÈREMENT #sheetBody (body.innerHTML = ...),
+// ce qui détruit et recrée la balise <video> à chaque passage -- avant ce
+// correctif, aucun garde-fou n'empêchait ça pendant la lecture (seule
+// l'édition de texte en bénéficiait). Le poll périodique de l'app (30s,
+// voir store.js startAutoRefresh) ou tout autre setState() déclenchait donc
+// un renderSheet() qui remettait la vidéo à zéro EN PLEINE LECTURE --
+// perçu comme un plantage après quelques secondes. Suivi via les
+// événements natifs play/pause/ended du <video> (voir binding plus bas),
+// pas un simple bool posé au clic : capture aussi une lecture interrompue
+// par l'utilisateur lui-même (pause), qui doit alors autoriser à nouveau
+// le re-rendu normal.
+let _videoPlayingActive = false;
+export function isVideoPlaying() { return _videoPlayingActive; }
 
 // 2026-08-21 : plus aucune génération IA) : texte -> narration (edge-tts) +
 // la même image de couverture réelle que l'article -> .mp4 (ffmpeg, zoom Ken
@@ -865,6 +901,22 @@ function renderSheet(s) {
       if (newVideo.readyState >= 1) _restore();
       else newVideo.addEventListener("loadedmetadata", _restore, { once: true });
     }
+  }
+
+  // Suivi lecture/pause pour isVideoPlaying() (voir en tête de fichier) --
+  // filet PRINCIPAL contre le symptôme "la vidéo plante après quelques
+  // secondes" (2026-08-26, retour utilisateur réel) : plutôt que de
+  // compter sur la restauration ci-dessus (fragile -- politique autoplay
+  // du navigateur, décalages de timing), on empêche désormais render()
+  // (app.js) de rappeler renderSheet() TANT QUE la vidéo joue, donc le
+  // <video> n'est simplement plus jamais détruit en cours de lecture. Lié
+  // à CHAQUE reconstruction (l'élément est neuf à chaque appel de
+  // renderSheet(), les écouteurs doivent l'être aussi).
+  const _videoEl = body.querySelector('[data-mode-panel="video"] video');
+  if (_videoEl) {
+    _videoEl.addEventListener("play", () => { _videoPlayingActive = true; });
+    _videoEl.addEventListener("pause", () => { _videoPlayingActive = false; });
+    _videoEl.addEventListener("ended", () => { _videoPlayingActive = false; });
   }
 
   // ---- Onglet Texte/Vidéo (2026-08-25) : bascule locale, SANS re-rendu

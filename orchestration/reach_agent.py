@@ -8,6 +8,7 @@ Toute defaillance source/LLM = isolee (jamais crash global).
 """
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
+import re
 import threading
 import core.config as config
 import collection.whitelist as wl
@@ -18,7 +19,7 @@ from collection.dedup import url_hash, is_dup
 from collection.dossiers import regrouper_dossiers, pick_article_retenu, score_item
 from editorial.state_store import (seen, mark, new_cycle, end_cycle, init as _init_state,
                           get_avg_article_seconds, record_article_seconds)
-from generation.writer import write_article, llm_circuit_status, angle_directive
+from generation.writer import write_article, llm_circuit_status, angle_directive, simple_completion
 
 # Flag d'annulation de cycle (bouton « Interrompre » côté UI)
 CANCEL_FLAG = {"requested": False}
@@ -307,6 +308,124 @@ def _is_cycle_locked():
         return False
 
 
+# ---------------------------------------------------------------------------
+# FUSION SEMANTIQUE DES DOSSIERS (2026-08-26) -- voir appel dans le cycle
+# principal ci-dessous pour le contexte complet. Reste ICI (orchestration),
+# jamais dans collection/dossiers.py qui est explicitement "sans LLM" par
+# conception (docstring du module).
+#
+# CHOIX D'IMPLEMENTATION (revu apres un premier essai infructueux) : une
+# premiere version comparait les dossiers PAR PAIRES, en ne soumettant a
+# l'arbitrage LLM que les paires partageant deja au moins une entite nommee
+# (heuristique de pre-filtrage bon marche). Teste en conditions reelles sur
+# deux formulations tres differentes du meme eboulement de Dar-es-Salam SANS
+# aucun nom propre partage (l'un citait "Conakry", l'autre "Dar-es-Salam",
+# zero intersection) : la paire n'etait JAMAIS soumise au LLM, donc jamais
+# fusionnee -- exactement le cas d'usage demande ("peu importe la subtilite
+# la plus ingenieuse") passait au travers du garde-fou cense le couvrir. Un
+# filtre par recouvrement lexical brut souffre du meme defaut (deux
+# reformulations d'un meme fait peuvent ne partager quasiment aucun mot).
+#
+# Solution retenue : UN SEUL appel LLM par cycle, qui voit la liste ENTIERE
+# des dossiers numerotes et identifie lui-meme les groupes decrivant le meme
+# fait -- le modele juge sur le SENS, pas sur un filtre lexical en amont qui
+# pourrait exclure a tort le cas precisement vise. Cout : 1 appel (pas O(n^2))
+# quel que soit le nombre de dossiers, borne par _SEMANTIC_BATCH_CAP pour
+# eviter un prompt demesure sur un cycle exceptionnellement charge.
+# ---------------------------------------------------------------------------
+_SEMANTIC_BATCH_CAP = 60  # au-dela, les dossiers excedentaires ne sont pas
+                          # soumis a cette passe (regroupement lexical seul) --
+                          # protege la latence du cycle sur un jour tres chargé.
+
+_SEMANTIC_GROUP_SYSTEM = (
+    "Tu es analyste de presse tres rigoureux. On te donne une liste numerotee "
+    "de resumes d'actualite collectes INDEPENDAMMENT lors du meme cycle de "
+    "collecte -- certains peuvent decrire EXACTEMENT le meme evenement/fait "
+    "reel precis, meme avec des mots, un angle, un niveau de detail ou une "
+    "langue tres differents (c'est precisement ce que tu dois detecter, pas "
+    "seulement des textes qui se ressemblent lexicalement). Identifie "
+    "UNIQUEMENT les groupes de numeros qui parlent du MEME fait precis -- "
+    "PAS seulement le meme theme general, le meme lieu, ou la meme categorie "
+    "d'actualite (ex: deux faits divers differents survenus tous les deux a "
+    "Conakry ne sont PAS le meme fait). En cas de doute reel, NE les groupe "
+    "PAS (une fusion a tort est pire qu'une non-fusion : elle ferait "
+    "disparaitre un fait distinct de l'actualite du jour).\n\n"
+    "Reponds STRICTEMENT selon ce format, une ligne par groupe trouve "
+    "(numeros separes par des virgules, au moins 2 numeros par ligne, "
+    "AUCUN autre texte) :\nGROUPE: n1,n2\n\nSi aucun groupe n'existe, reponds "
+    "UNIQUEMENT : AUCUN"
+)
+
+_GROUPE_LINE_RE = re.compile(r"groupe\s*:\s*([\d,\s]+)", re.IGNORECASE)
+
+
+def _llm_find_semantic_groups(dossiers: list) -> list:
+    """Un seul appel LLM : renvoie une liste de groupes (listes d'indices)
+    de dossiers jugés décrire le même fait réel. Liste vide si aucun groupe,
+    si l'appel échoue, ou si aucune clé LLM n'est configurée (repli
+    silencieux -- cette passe est un raffinement, jamais un point de
+    blocage du cycle)."""
+    batch = dossiers[:_SEMANTIC_BATCH_CAP]
+    lines = []
+    for idx, d in enumerate(batch):
+        it = d[0]
+        excerpt = (it.get("title", "") + " -- " + it.get("raw_content", "")[:220]).replace("\n", " ")
+        lines.append(f"{idx}. {excerpt[:300]}")
+    if len(lines) < 2:
+        return []
+    user = "\n".join(lines)
+    try:
+        out = simple_completion(_SEMANTIC_GROUP_SYSTEM, user, max_tokens=400)
+    except Exception:
+        return []
+    if not out or out.strip().upper().startswith("AUCUN"):
+        return []
+    groups = []
+    for m in _GROUPE_LINE_RE.finditer(out):
+        nums = sorted({int(n) for n in re.findall(r"\d+", m.group(1)) if int(n) < len(batch)})
+        if len(nums) >= 2:
+            groups.append(nums)
+    return groups
+
+
+def merge_semantic_duplicates(dossiers: list, cid: str = None) -> list:
+    """Fusionne les dossiers qu'un arbitrage LLM (vue d'ensemble, un seul
+    appel -- voir _llm_find_semantic_groups) juge décrire le même fait réel,
+    même sans noms propres ni mots partagés -- comble la limite structurelle
+    du Jaccard purement lexical de regrouper_dossiers (voir docstring
+    collection/dossiers.py, "sans LLM" par conception). Repli SILENCIEUX
+    (dossiers renvoyés inchangés) si aucun groupe détecté, aucune clé LLM
+    configurée, ou en cas d'échec d'appel."""
+    if len(dossiers) < 2:
+        return dossiers
+    groups = _llm_find_semantic_groups(dossiers)
+    if not groups:
+        return dossiers
+    parent = list(range(len(dossiers)))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    for group in groups:
+        for n in group[1:]:
+            union(group[0], n)
+        if cid:
+            titles = [dossiers[n][0]["title"][:50] for n in group]
+            log(cid, "SEMANTIC_MERGE", " + ".join(titles))
+    merged = {}
+    for idx, d in enumerate(dossiers):
+        merged.setdefault(find(idx), []).extend(d)
+    return list(merged.values())
+
+
 class ReachAgent:
     def __init__(self):
         # Compat lecture API (desactive) : on delegue au lock fichier
@@ -409,14 +528,30 @@ class ReachAgent:
                         sources_ok += 1
                     for r in raws:
                         n = normalize(r, e, cycle_start)
-                        if e.guinee_filter:
-                            text_filter = (n["title"] + " " + n.get("summary", "")
-                                           + " " + n["raw_content"])[:2500]
-                            ok, motif = filter_guinea(text_filter, title=n["title"])
-                            if not ok:
-                                rejected_intl += 1
-                                log(cid, "REJECT_INTL", f"{motif} | {n['title'][:60]}", "")
-                                continue
+                        # Filtre de pertinence Guinée APPLIQUÉ À TOUTE SOURCE, GN_NAT
+                        # comme INTL (2026-08-26, demande explicite et répétée de
+                        # l'utilisateur -- incident réel confirmé : un article de
+                        # "Guinée 360" (source GN_NAT, donc jusque-là EXEMPTÉE de ce
+                        # filtre par hypothèse implicite "source guinéenne = forcément
+                        # pertinente") portait en réalité sur la guerre Russie-Ukraine
+                        # et l'aide de l'UE à l'Ukraine, sans aucun rapport avec la
+                        # Guinée -- généré, transmis à la revue humaine sans aucun
+                        # garde-fou. Une source guinéenne peut tout à fait publier de
+                        # l'actualité internationale générale (fil d'agence, rubrique
+                        # "Monde") qui n'a pas plus de pertinence Guinée qu'un article
+                        # d'une source internationale non filtrée -- l'hypothèse qui
+                        # exemptait le GN_NAT était donc fausse. e.guinee_filter (champ
+                        # de configuration par source, voir core/config.py) n'est plus
+                        # consulté ici : filter_guinea() (collection/guinea_filter.py,
+                        # règle DEC-003 déjà éprouvée sur les sources INTL) s'applique
+                        # désormais À TOUS les items, sans exception de source.
+                        text_filter = (n["title"] + " " + n.get("summary", "")
+                                       + " " + n["raw_content"])[:2500]
+                        ok, motif = filter_guinea(text_filter, title=n["title"])
+                        if not ok:
+                            rejected_intl += 1
+                            log(cid, "REJECT_INTL", f"{motif} | {n['title'][:60]} | source={e.name}", "")
+                            continue
                         if n.get("date_status") in ("UNRELIABLE", "FUTURE", "OLD_YEAR"):
                             anomalies += 1
                             log(cid, "DATE_ANOMALY", f"{n['date_status']} | {n['url'][:80]}", "")
@@ -512,6 +647,21 @@ class ReachAgent:
                 log(cid, "FALLBACK_SINGLETONS",
                     f"regroupement n'a produit aucun dossier -> {len(uniq)} dossiers singleton")
 
+            # FUSION SEMANTIQUE (2026-08-26, demande explicite : "peu importe la
+            # subtilite la plus ingenieuse possible, peu importe les differentes
+            # manieres employees" -- jamais deux articles generes sur le meme
+            # sujet). regrouper_dossiers() ci-dessus est VOLONTAIREMENT sans LLM
+            # (voir docstring collection/dossiers.py) et ne fusionne que sur des
+            # noms propres textuellement identiques -- deux sources qui racontent
+            # le meme fait avec des mots/angles differents et sans nom propre
+            # partage passent au travers PAR CONSTRUCTION. Cette passe comble ce
+            # trou : un arbitrage LLM tranche uniquement les paires candidates
+            # plausibles (au moins 1 entite commune, cf _candidate_semantic_pairs),
+            # jamais O(n^2) sur tous les dossiers. Repli silencieux (dossiers
+            # inchanges) si aucune cle LLM configuree ou en cas d'echec reseau --
+            # jamais de blocage du cycle pour cette passe additionnelle.
+            dossiers = merge_semantic_duplicates(dossiers, cid)
+
             # REGLE METIER (LOGIQUE-METIER-REACH.md §7, retablie 2026-08-19) :
             # Kora Agent genere TOUS les articles issus des faits FRAIS et
             # uniques collectes lors du cycle (un dossier = un fait = un
@@ -520,7 +670,21 @@ class ReachAgent:
             # plus pertinents (score de l'article_retenu) sont generes en premier, afin
             # qu'une interruption utilisateur laisse toujours les faits les plus
             # importants deja traites.
-            dossiers.sort(key=lambda d: max(score_item(i) for i in d), reverse=True)
+            # PRIORISATION PAR "BUZZ" (2026-08-26, demande explicite : "toujours
+            # mettre en priorite les informations qui font le plus parler
+            # d'elles"). Avant ce correctif, le tri ne dependait QUE du score
+            # qualite/fraicheur du meilleur item du dossier (score_item), jamais
+            # du nombre de sources distinctes qui convergent dessus (len(d),
+            # deja calcule et stocke en aval sous n_sources mais jamais exploite
+            # ici) -- un sujet couvert par 8 sources et un sujet couvert par 1
+            # seule pouvaient etre generes dans le meme ordre si leur item le
+            # plus riche avait un score_item proche. Le nombre de sources est
+            # le signal le plus direct de "fait qui fait parler de lui" que ce
+            # pipeline puisse mesurer (aucun acces a des donnees d'engagement
+            # social) -- pondere pour dominer un ecart de score_item raisonnable
+            # sans pour autant faire passer un dossier a 2 sources pauvres avant
+            # un scoop a 1 source tres bien sourcee.
+            dossiers.sort(key=lambda d: len(d) * 3.0 + max(score_item(i) for i in d), reverse=True)
             safety_cap = config.LIMITS.get("daily_article_limit", 10)
             limit = min(demand, len(dossiers), safety_cap) if demand else min(len(dossiers), safety_cap)
             _reset_progress(cid=cid, total=limit)

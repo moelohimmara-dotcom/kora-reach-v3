@@ -66,6 +66,14 @@ def _init_locked():
         # démarrer.
         cur.execute("""CREATE TABLE IF NOT EXISTS timing_stats (
             key TEXT PRIMARY KEY, avg_seconds REAL, samples INTEGER)""")
+        # watch_notified (2026-08-26, veille passive -- voir orchestration/watch.py) :
+        # namespace de dedup SEPARE de seen_items ci-dessus. seen_items ne doit
+        # JAMAIS etre touche par la veille (elle ne genere rien, ne doit donc
+        # jamais marquer un item comme "traite" pour un vrai cycle) -- cette
+        # table sert uniquement a eviter de renotifier l'utilisateur toutes les
+        # 30 min pour les MEMES items frais qu'il n'a pas encore fait generer.
+        cur.execute("""CREATE TABLE IF NOT EXISTS watch_notified (
+            url_hash TEXT PRIMARY KEY, notified_at TEXT)""")
         con.commit()
     finally:
         con.close()
@@ -160,6 +168,43 @@ def mark(url_hash: str, title: str):
                 f"""INSERT OR IGNORE INTO seen_items (url_hash, title, first_seen)
                    VALUES ({p},{p},{p})""",
                 (url_hash, title, now))
+        con.commit()
+    finally:
+        con.close()
+
+
+def watch_seen(url_hash: str) -> bool:
+    """True si cet item a déjà déclenché une notification de veille passive
+    (voir orchestration/watch.py) -- namespace séparé de seen()/mark()
+    ci-dessus, qui restent réservés au dédup des VRAIS cycles de génération."""
+    init()
+    p = _ph()
+    con, mode = db.conn()
+    try:
+        cur = con.cursor()
+        cur.execute(f"SELECT 1 FROM watch_notified WHERE url_hash={p}", (url_hash,))
+        return cur.fetchone() is not None
+    finally:
+        con.close()
+
+
+def watch_mark(url_hash: str):
+    init()
+    p = _ph()
+    now = datetime.now().isoformat()
+    con, mode = db.conn()
+    try:
+        cur = con.cursor()
+        if mode == "postgres":
+            cur.execute(
+                f"""INSERT INTO watch_notified (url_hash, notified_at)
+                   VALUES ({p},{p}) ON CONFLICT(url_hash) DO NOTHING""",
+                (url_hash, now))
+        else:
+            cur.execute(
+                f"""INSERT OR IGNORE INTO watch_notified (url_hash, notified_at)
+                   VALUES ({p},{p})""",
+                (url_hash, now))
         con.commit()
     finally:
         con.close()

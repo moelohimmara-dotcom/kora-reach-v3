@@ -703,8 +703,6 @@ html.icons-ready .material-icons { visibility: visible; }
 .btn-primary:hover { filter: brightness(1.04); }
 .btn-secondary { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
 .btn-error { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
-.btn-danger { background: linear-gradient(135deg, #E8615A, #C23B34); color: #fff; box-shadow: 0 8px 24px rgba(224,97,90,0.4); }
-.btn-danger:hover { filter: brightness(1.06); }
 /* Bordure corrigée 2026-08-22 (audit mobile réel) : --glass-border vaut
    transparent dans les 3 thèmes -- un bouton .btn-tonal (ex. "Régénérer")
    se fondait presque totalement dans son environnement, sans repère
@@ -813,6 +811,15 @@ html.icons-ready .material-icons { visibility: visible; }
   transform: translateY(110%); transition: transform var(--dur-med) var(--ease);
 }
 .overflow-menu.open { transform: translateY(0); }
+/* Bug corrige (2026-08-26, audit UI/UX mobile) : `.overflow-menu` etant une
+   regle de classe (specificite 0,1,0), elle l'emportait TOUJOURS sur la
+   regle `[hidden]{display:none}` de la feuille UA -- l'attribut HTML
+   `hidden` pose par le JS (closeOverflow) n'avait donc AUCUN effet visuel,
+   seule la classe `.open` (transform) fermait reellement le menu. Regle
+   dediee, plus specifique (0,2,0), pour que `hidden` fonctionne vraiment
+   en filet de securite -- coherent avec le comportement attendu partout
+   ailleurs dans l'app ou `[hidden]` masque effectivement l'element. */
+.overflow-menu[hidden] { display: none; }
 .overflow-item {
   display: flex; align-items: center; gap: 14px; padding: 14px 12px; border: none; background: none; cursor: pointer;
   font-family: var(--font); font-size: 15px; font-weight: 600; color: var(--md-sys-color-on-surface); border-radius: var(--radius-lg);
@@ -841,7 +848,10 @@ html.icons-ready .material-icons { visibility: visible; }
 .sheet-meta-line .dot-sep { color: var(--md-sys-color-outline); opacity: .7; }
 .sheet-standfirst { font-size: var(--t-body); line-height: 1.5; color: var(--md-sys-color-on-surface-variant); font-weight: 500; margin: 4px 0 0; padding-left: 12px; border-left: 3px solid var(--coral); }
 .sheet-close {
-  flex: none; width: 34px; height: 34px; border-radius: var(--radius-pill); border: 1px solid var(--glass-border);
+  /* 44x44 partout (2026-08-26, audit UI/UX tablette : mesuré à 34x34px,
+     sous le minimum tactile recommandé -- aucune raison de le réduire
+     au-dessus de 600px, un pointeur tactile existe aussi sur tablette). */
+  flex: none; width: 44px; height: 44px; border-radius: var(--radius-pill); border: 1px solid var(--glass-border);
   background: var(--glass-bg); color: var(--md-sys-color-on-surface-variant); cursor: pointer; display: grid; place-items: center;
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
@@ -984,9 +994,11 @@ html.icons-ready .material-icons { visibility: visible; }
 .regen-chip:hover { transform: translateY(-1px); box-shadow: var(--neu-raised), var(--glass-glow); color: var(--coral-text); }
 .regen-chip:active { transform: scale(0.97); }
 .regen-chip.loading { opacity: 0.6; pointer-events: none; }
-/* Rejeter en ghost discret (rouge texte, pas de bloc massif) */
-.btn-danger-ghost { background: transparent; color: var(--md-sys-color-error); border: 1px solid color-mix(in srgb, var(--md-sys-color-error) 40%, transparent); box-shadow: none; }
-.btn-danger-ghost:hover { background: color-mix(in srgb, var(--md-sys-color-error) 12%, transparent); }
+/* Rejeter en ghost discret (bordeaux texte, pas de bloc massif) --
+   var(--bordeaux) plutot que var(--md-sys-color-error), voir note au-dessus
+   de .btn-danger (chantier "couleur destructive", 2026-08-26). */
+.btn-danger-ghost { background: transparent; color: var(--bordeaux); border: 1px solid color-mix(in srgb, var(--bordeaux) 40%, transparent); box-shadow: none; }
+.btn-danger-ghost:hover { background: color-mix(in srgb, var(--bordeaux) 12%, transparent); }
 
 .edit-input, .edit-area {
   width: 100%; font-family: var(--font); font-size: var(--t-body); padding: 13px 14px; border-radius: var(--radius-sm);
@@ -995,6 +1007,20 @@ html.icons-ready .material-icons { visibility: visible; }
 .edit-input { margin-bottom: 12px; font-weight: 700; }
 .edit-area { min-height: 180px; resize: vertical; line-height: 1.6; }
 
+/* Chantier "panneau sheet par taille d'écran" (2026-08-26, audit UI/UX) :
+   AVANT ce correctif, une seule mise en page (celle ci-dessous, une carte
+   centrée façon bottom-sheet mobile) servait de 601px à l'infini -- tablette
+   ET desktop récupéraient donc littéralement le même composant que le
+   mobile, juste recentré avec des marges, poignée de glissement comprise
+   alors qu'aucun geste de balayage n'est câblé sur #sheet (grep confirmé --
+   la poignée était purement décorative, et trompeuse : elle laisse croire à
+   un geste qui n'existe pas). Trois profils désormais explicites :
+   1. ≤600px (bloc ci-dessous, INCHANGÉ) : plein écran, sans poignée.
+   2. 601-1023px (règle de base ci-dessous) : modale centrée, sans poignée,
+      pensée pour un pointeur (souris/tactile), pas pour un balayage.
+   3. ≥1024px (bloc plus bas) : panneau latéral ancré à droite, pleine
+      hauteur, en-tête toujours visible -- jamais plus un bottom-sheet
+      recentré à cette largeur. */
 .sheet {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-sheet); background: var(--glass-bg-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
   border-radius: var(--radius-xl) var(--radius-xl) 0 0; border-top: 1px solid var(--glass-border-strong); border-left: 1px solid var(--glass-border); border-right: 1px solid var(--glass-border);
@@ -1002,7 +1028,9 @@ html.icons-ready .material-icons { visibility: visible; }
   margin: 0 auto; max-width: 680px;
   transform: translateY(0);
 }
-.sheet-handle { width: 42px; height: 4px; border-radius: 3px; background: var(--md-sys-color-outline); margin: 10px auto var(--space-4); }
+/* Poignée retirée partout (2026-08-26, voir note ci-dessus) : aucun geste
+   de balayage réel ne l'accompagne, sur aucun format. */
+.sheet-handle { display: none; }
 
 /* Smartphone (≤600px) : le tiroir occupe TOUT l'écran, sans marges ni coins arrondis */
 @media (max-width: 600px) {
@@ -1013,7 +1041,6 @@ html.icons-ready .material-icons { visibility: visible; }
     padding-top: env(safe-area-inset-top);
     overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
   }
-  .sheet-handle { display: none; }
   /* barre d'actions collante : cibles tactiles ≥44px */
   .sheet-actions .btn { min-height: 44px; padding: 12px 18px; font-size: var(--t-label); }
   /* Bug corrige 2026-08-19 : Modifier/Regenerer/Rejeter en ligne (flex:1)
@@ -1041,7 +1068,6 @@ html.icons-ready .material-icons { visibility: visible; }
     flex: none; width: 48px; height: 48px; padding: 0; border-radius: 50%;
   }
   .sheet-actions-row-secondary .btn-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
-  .sheet-close { width: 44px; height: 44px; }
   /* le corps laisse de la place sous les boutons sticky (pas de chevauchement) */
   .sheet-textwrap { padding-bottom: 16px; }
   /* puces : sur mobile, wrap autorisé (2x2 max) pour éviter toute coupure ; restent groupées */
@@ -1051,6 +1077,26 @@ html.icons-ready .material-icons { visibility: visible; }
   .sheet-title { font-size: 1.45rem; }
   .sheet-img { height: 200px; max-height: 200px; }
 }
+
+/* Chantier "panneau sheet" REVERTÉ EN PARTIE (2026-08-26, retour utilisateur
+   réel en production -- deux régressions concrètes rapportées le jour même) :
+   1. En-tête sticky (ajouté ci-dessous à l'origine) : sur un titre long
+      (3 lignes réelles, ~250px avec l'eyebrow+meta), combiné au bandeau
+      d'actions déjà sticky en bas (.sheet-actions, préexistant, INCHANGÉ),
+      les deux bandes fixes ensemble écrasaient la zone de lecture au
+      milieu du panneau -- le corps de l'article défilait coincé entre les
+      deux, illisible ("le bandeau reste fixé, le texte passe en dessous").
+      Confirmé visuellement (captures d'écran réelles) avant retrait.
+   2. Panneau latéral ancré à droite sur desktop (≥1024px) : conforme à la
+      demande initiale de l'audit ("panneau latéral plutôt que bottom-sheet
+      recentré"), mais rejeté à l'usage réel -- "avant l'article s'affichait
+      de façon centrée... actuellement à l'extrême droite". Le panneau
+      centré (règle de base .sheet, 601px+) redevient donc le seul
+      comportement au-delà de 600px, aucune substitution desktop distincte.
+   Conservé de ce chantier (non remis en cause) : poignée de glissement
+   supprimée partout (aucun geste réel ne l'accompagnait), bouton de
+   fermeture 44x44px. .sheet-head garde sa règle de base d'origine
+   (display:flex, voir plus haut dans ce fichier), sans ajout ici. */
 
 @keyframes slideup { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
@@ -1086,32 +1132,38 @@ html.icons-ready .material-icons { visibility: visible; }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: var(--space-5); padding: 32px; text-align: center;
 }
-.gl-orb { position: relative; width: 104px; height: 104px; display: grid; place-items: center; }
-.gl-orb-ring {
-  position: absolute; inset: 0; border-radius: 50%;
-  border: 1.5px solid color-mix(in srgb, var(--coral) 55%, transparent);
-  animation: gl-pulse 2.6s ease-out infinite;
-}
-.gl-orb-ring-2 { animation-delay: 1.3s; }
-.gl-orb-core {
-  position: relative; z-index: 1; width: 56px; height: 56px; border-radius: 50%;
-  display: grid; place-items: center;
+/* Badge de marque statique (plus de halo pulsé/respirant -- voir note dans
+   shell.js) + vague de points, IDENTIQUE à .bs-wave du splash de boot
+   (index.html, CSS critique inline -- dupliquée ici plutôt que partagée
+   car index.html doit rester self-contained pour peindre avant le premier
+   chargement de cette feuille externe). Toute évolution de l'un des deux
+   doit être répercutée sur l'autre pour rester cohérente. */
+.gl-badge {
+  width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center;
   background: linear-gradient(135deg, var(--coral), var(--bordeaux));
   box-shadow: 0 0 32px color-mix(in srgb, var(--coral) 45%, transparent);
-  animation: gl-breathe 2.6s ease-in-out infinite;
+  /* Entrée UNE SEULE FOIS (pas de boucle) -- la seule touche de mouvement
+     ajoutée ici, volontairement retenue plutôt que la halo pulsé/respirant
+     en boucle retiré ci-dessus (cf. philosophie d'Emil Kowalski, référence
+     demandée par l'utilisateur : "You Don't Need [More] Animations" --
+     mieux vaut UN mouvement qui a un sens que plusieurs qui tournent). */
+  animation: gl-badge-in .35s cubic-bezier(.2,.8,.2,1) both;
 }
-.gl-orb-core .ic { width: 26px; height: 26px; color: #fff; }
-@keyframes gl-pulse {
-  0% { transform: scale(.85); opacity: .9; }
-  100% { transform: scale(1.55); opacity: 0; }
-}
-@keyframes gl-breathe {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.06); }
-}
+@keyframes gl-badge-in { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) {
-  .gl-orb-ring { animation: none; opacity: .5; }
-  .gl-orb-core { animation: none; }
+  .gl-badge { animation: none; }
+}
+.gl-badge .ic { width: 26px; height: 26px; color: #fff; }
+.gl-wave { display: flex; gap: 7px; }
+.gl-wave i { width: 9px; height: 9px; border-radius: 50%; background: var(--coral); animation: gl-wave-bounce 1s infinite ease-in-out both; }
+.gl-wave i:nth-child(1) { animation-delay: -0.32s; }
+.gl-wave i:nth-child(2) { animation-delay: -0.16s; }
+.gl-wave i:nth-child(3) { animation-delay: 0s; }
+.gl-wave i:nth-child(4) { animation-delay: 0.16s; }
+.gl-wave i:nth-child(5) { animation-delay: 0.32s; }
+@keyframes gl-wave-bounce { 0%, 80%, 100% { transform: scale(0.5); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .gl-wave i { animation: none; opacity: .7; }
 }
 .gl-text { font-size: 17px; font-weight: 700; color: var(--md-sys-color-on-surface); max-width: 40ch; }
 .gl-progress { font-size: 12.5px; font-weight: 600; letter-spacing: .02em; color: var(--coral);
@@ -1296,7 +1348,6 @@ html.icons-ready .material-icons { visibility: visible; }
 .trash-row { align-items: center; }
 .trash-actions { display: flex; gap: 8px; margin-left: auto; }
 .btn-sm { padding: 6px 10px; font-size: var(--t-label-sm); }
-.btn-danger { background: var(--md-sys-color-error); color: var(--md-sys-color-on-error); border: none; }
 .draft-cell { display: flex; flex-direction: column; gap: 8px; }
 .draft-actions { display: flex; gap: 8px; padding: 0 2px 4px; }
 /* Bouton Brouillons affiné : même gabarit que les btn-sm publiés, vif au clic (corail) */
@@ -1497,6 +1548,23 @@ html.icons-ready .material-icons { visibility: visible; }
 .audit-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: var(--space-3) 0; padding: var(--space-3); background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); }
 .audit-toolbar .spacer { flex: 1; }
 .audit-toolbar .btn-sm { padding: 7px 12px; font-size: var(--t-label-sm); }
+/* Chantier "friction sur les purges massives" (2026-08-26, audit UI/UX) :
+   zone teintée bordeaux, séparée du reste de la barre d'outils -- avant ce
+   correctif, "Vider tout l'historique" était un simple bouton parmi
+   "Tout sélectionner"/"Exporter CSV", à peine différencié par sa couleur. */
+.audit-danger-zone {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 14px;
+  margin: 0 0 var(--space-3); padding: 12px 14px;
+  background: color-mix(in srgb, var(--bordeaux) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bordeaux) 35%, transparent);
+  border-radius: var(--radius-lg);
+}
+.audit-danger-zone-label { display: flex; align-items: center; gap: 8px; font-size: var(--t-label-sm); font-weight: 700; color: var(--bordeaux); white-space: nowrap; }
+.audit-danger-zone-label .ic { width: 16px; height: 16px; flex: none; }
+.audit-danger-zone-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Confirmation à saisie obligatoire (confirmAction typedConfirmWord, sheet.js) */
+.confirm-typed-label { display: block; font-size: var(--t-label-sm); font-weight: 600; margin: 4px 0 8px; color: var(--md-sys-color-on-surface-variant); }
+.confirm-typed-label strong { color: var(--bordeaux); font-family: var(--font-mono, monospace); letter-spacing: .04em; }
 .audit-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: var(--space-3) 0; }
 .audit-filter-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip-filter { font: inherit; font-size: var(--t-label-sm); padding: 6px 12px; border-radius: var(--radius-pill); border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--on-surface-soft); cursor: pointer; transition: all .15s ease; }
@@ -1504,10 +1572,36 @@ html.icons-ready .material-icons { visibility: visible; }
 .chip-filter.active { background: var(--coral); color: #fff; border-color: var(--coral); }
 .audit-search { flex: 1; min-width: 200px; max-width: 360px; padding: 8px 12px; font: inherit; font-size: var(--t-body-sm); border-radius: var(--radius-pill); border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--md-sys-color-on-surface); }
 .audit-search:focus { outline: none; border-color: var(--coral); box-shadow: 0 0 0 3px rgba(233,112,93,.12); }
-.btn-danger { background: var(--md-sys-color-error); color: var(--md-sys-color-on-error); border: none; }
-.btn-danger:hover { filter: brightness(0.95); }
+/* Chantier "couleur destructive" (2026-08-26, audit UI/UX) : avant ce
+   correctif, .btn-danger utilisait var(--md-sys-color-error) -- un token
+   PENSÉ pour les états d'erreur de formulaire (champ invalide, mot de passe
+   faible...), pas pour les boutons d'action destructive. Problème réel :
+   en thème sombre (celui par défaut), --md-sys-color-error (#F2A199, un
+   saumon clair) est visuellement TRÈS proche de --coral (#E9705D, même
+   famille orangée) -- vérifié en direct dans le navigateur, les deux se
+   confondent au premier coup d'œil. Résultat : "Supprimer" (irréversible)
+   et "Se connecter"/"Approuver" (normal) semblaient porter la même couleur,
+   aucun repère visuel pour éviter un clic accidentel sur une action
+   destructive. --bordeaux est deja la couleur "secondaire" officielle de
+   la marque (visible dans Réglages -> Personnalisation), stable dans les 3
+   thèmes, et clairement distincte du corail -- desormais reservee aux
+   actions destructives (Supprimer/Rejeter/Vider), jamais aux actions
+   positives. Les autres usages de --md-sys-color-error (validation de
+   formulaire, badges "rejeté", indicateurs d'alerte) restent INCHANGÉS --
+   seuls .btn-danger et .btn-danger-ghost (ci-dessus) sont concernés, cette
+   distinction reste volontaire (deux sémantiques différentes : "champ en
+   erreur" vs "action irréversible"). */
+.btn-danger { background: var(--bordeaux); color: #fff; border: none; }
+.btn-danger:hover { filter: brightness(1.08); }
 .btn-outline { background: transparent; border: 1px solid var(--md-sys-color-outline); color: var(--on-surface-soft); }
-.audit-check { width: 18px; height: 18px; flex: none; accent-color: var(--coral); cursor: pointer; }
+/* Chantier "cibles tactiles" (2026-08-26, audit UI/UX tablette : case à
+   cocher mesurée à 18x18px, très en dessous de 44x44px) -- la case reste
+   visuellement compacte (convention établie des tableaux denses type
+   Gmail/GitHub, un 44px visuel serait disproportionné dans une liste
+   d'événements), mais sa zone de clic RÉELLE est agrandie via padding
+   (inclus dans la boîte cliquable d'un input) + marge négative égale pour
+   compenser sans décaler la mise en page environnante. */
+.audit-check { width: 18px; height: 18px; padding: 13px; margin: -13px; box-sizing: content-box; flex: none; accent-color: var(--coral); cursor: pointer; }
 .audit-counters { display: flex; flex-wrap: wrap; gap: 6px; margin: var(--space-2) 0 var(--space-3); }
 .audit-counters .chip { font-size: var(--t-label-sm); padding: 3px 10px; border-radius: var(--radius-pill); }
 .audit-day .group-count { margin-left: auto; }
@@ -2206,7 +2300,9 @@ html.icons-ready .material-icons { visibility: visible; }
    ce qui partage sa ligne à l'avenir. Forme pilule/cercle, cohérente avec
    les items ci-dessous (langage d'interaction unique dans tout le rail). */
 .rail-toggle {
-  flex: 0 0 auto; width: 36px; height: 36px; border-radius: var(--radius-pill);
+  /* 44x44 (2026-08-26, audit UI/UX tablette : mesuré à 36x36px, sous le
+     minimum tactile recommandé). */
+  flex: 0 0 auto; width: 44px; height: 44px; border-radius: var(--radius-pill);
   display: grid; place-items: center; border: 1px solid var(--glass-border-strong);
   background: var(--glass-bg); color: var(--md-sys-color-on-surface-variant);
   cursor: pointer;
@@ -2540,6 +2636,7 @@ html.icons-ready .material-icons { visibility: visible; }
 .notif-unread .notif-item-msg { font-weight: 600; }
 .notif-ic-error { color: var(--danger); }
 .notif-ic-success { color: var(--success); }
+.notif-ic-info { color: var(--accent); }
 .link-btn { background: none; border: none; color: var(--coral); font-size: 12px; cursor: pointer; padding: 0; }
 .link-btn:hover, .link-btn:focus-visible { text-decoration: underline; outline: none; }
 
@@ -2591,6 +2688,15 @@ html.icons-ready .material-icons { visibility: visible; }
 .cycle-banner-row .ic { width: 16px; height: 16px; flex: none; color: var(--coral); animation: cycle-spin 1.6s linear infinite; }
 .cycle-banner-progress { font-size: 12px; font-weight: 600; color: var(--coral); flex: none; white-space: nowrap; }
 .cycle-banner-estimate { font-size: 11.5px; color: var(--md-sys-color-on-surface-variant); flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Chantier "textes de génération" (2026-08-26, testé en conditions reelles :
+   generation video declenchee sur un vrai article au titre long) -- meme
+   traitement que .cycle-banner-estimate ci-dessus, dont #videoJobText
+   (bandeau "Génération vidéo en cours — <titre complet de l'article>…")
+   ne beneficiait PAS : sans troncature, un titre d'actualite realiste
+   (~95 caracteres, mesure en test) faisait grimper le bandeau a 120px /
+   6 lignes sur mobile -- pres de 15% de la hauteur d'ecran occupee en
+   permanence pendant toute la generation, juste pour le texte. */
+#videoJobText { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .cycle-banner-row .ic { animation: none; } }
 @keyframes cycle-spin { to { transform: rotate(360deg); } }
 

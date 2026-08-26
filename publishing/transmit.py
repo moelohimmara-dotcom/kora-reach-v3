@@ -178,7 +178,22 @@ _CATEGORY_KEYWORDS = {
     "Afrique": ("afrique", "cedeao", "union africaine", "sénégal", "mali", "côte d'ivoire",
                 "nigeria", "libéria", "sierra leone"),
     "Monde": ("monde", "international", "onu", "états-unis", "europe", "chine", "russie", "france"),
-    "Art": ("peinture", "sculpture", "exposition d'art", "artiste plasticien", "galerie d'art", "beaux-arts"),
+    # Chantier "nuance Art vs Culture" (2026-08-26, demande explicite : "il
+    # faut savoir faire la nuance"). Avant ce correctif, "Culture" incluait
+    # "artiste" tout court (sans qualificatif) -- un article sur un peintre
+    # ou un sculpteur qui ne dit jamais "artiste plasticien" mot pour mot
+    # (variante courante : "le peintre a présenté ses toiles lors du
+    # vernissage") retombait donc sur "Culture" par défaut, faute de mot-clé
+    # "Art" suffisamment large. Liste élargie au vocabulaire réel des arts
+    # visuels (peintre/sculpteur/toile/oeuvre d'art/vernissage), Culture
+    # reste le mot-clé pour la musique/cinéma/festival/patrimoine -- la
+    # distinction n'est plus "dit-il exactement artiste plasticien ?" mais
+    # "parle-t-il d'arts visuels (peinture/sculpture) ou d'un autre pan de
+    # la culture (musique/cinéma/festival) ?", plus proche de la vraie
+    # question éditoriale.
+    "Art": ("peinture", "sculpture", "exposition d'art", "artiste plasticien", "galerie d'art",
+            "beaux-arts", "peintre", "sculpteur", "toile", "œuvre d'art", "oeuvre d'art",
+            "vernissage", "atelier d'artiste"),
     "Affaires religieuses": ("religion", "religieux", "mosquée", "église", "imam", "évêque",
                               "ramadan", "pèlerinage", "hadj", "chrétien", "musulman", "islam"),
     "Nécrologie": ("décès", "décédé", "obsèques", "funérailles", "disparition", "défunt",
@@ -219,6 +234,17 @@ _CATEGORY_SYSTEM_PROMPT = (
     "d'un article. Ta seule tâche : choisir la catégorie éditoriale la plus appropriée, "
     "UNIQUEMENT parmi cette liste exacte (aucune autre catégorie n'existe) :\n"
     + ", ".join(WP_CATEGORY_MAP.keys()) + ", " + WP_CATEGORY_DEFAULT + "\n\n"
+    # Nuance Art/Culture (2026-08-26, demande explicite de l'utilisateur :
+    # "il faut savoir faire la nuance") -- les deux catégories existent
+    # RÉELLEMENT et séparément sur le site WordPress (voir WP_CATEGORY_MAP),
+    # sans cette précision un LLM tend à tout regrouper sous "Culture" (plus
+    # généraliste) au détriment d'"Art", plus spécifique.
+    "Distinction importante entre deux catégories proches : 'Art' concerne les arts VISUELS "
+    "(peinture, sculpture, exposition, galerie, artiste plasticien) ; 'Culture' concerne le "
+    "reste de la vie culturelle (musique, cinéma, festival, danse, patrimoine, littérature). "
+    "Une exposition de peinture ou une sculpture relève d'Art, un concert ou un festival de "
+    "musique relève de Culture -- ne choisis JAMAIS 'Culture' par défaut quand le sujet est "
+    "clairement un art visuel.\n\n"
     "Réponds par UN SEUL mot ou groupe de mots de cette liste, EXACTEMENT comme il est écrit "
     "ci-dessus, rien d'autre (pas de ponctuation, pas d'explication). Si aucune catégorie ne "
     "convient clairement, réponds '" + WP_CATEGORY_DEFAULT + "'."
@@ -268,9 +294,22 @@ def _classify_category_raw(title: str, text: str, n_sources=1) -> str:
     excerpt = (text or "")[:1200]
     try:
         import generation.writer as writer
+        # max_tokens releve de 20 a 350 (2026-08-26) : le modele NVIDIA
+        # desormais configure (voir NVIDIA_MODEL, deploy/.env -- l'ancien
+        # modele a atteint sa fin de vie cote NVIDIA le 2026-08-26) est un
+        # modele A RAISONNEMENT -- il consomme des tokens de reflexion
+        # (champ reasoning_content de l'API) AVANT de produire la reponse
+        # finale (champ content), meme pour une question aussi simple que
+        # cette classification. Teste en conditions reelles : ~85-225 tokens
+        # de raisonnement observes selon la complexite de l'article. Avec
+        # l'ancien budget de 20, la reponse etait TOUJOURS tronquee avant
+        # d'atteindre le contenu utile -> `out` restait vide -> repli
+        # mecanique systematique, silencieusement, sans jamais utiliser le
+        # LLM. Les 3 autres appelants de simple_completion() ont deja des
+        # budgets largement suffisants (1400-2600), rien a changer ailleurs.
         out = writer.simple_completion(_CATEGORY_SYSTEM_PROMPT,
                                         f"TITRE : {title}\n\nDÉBUT DE L'ARTICLE :\n{excerpt}",
-                                        max_tokens=20)
+                                        max_tokens=350)
     except Exception:
         out = None
     if out:

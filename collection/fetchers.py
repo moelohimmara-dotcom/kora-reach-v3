@@ -60,20 +60,41 @@ _RSS_FULLTEXT_CAP = 10  # articles/source dont on va chercher le texte COMPLET (
 # vitesse), et absorbe par la collecte parallele multi-sources de reach_agent.
 _RSS_FULLTEXT_MIN_LEN = 200  # sous ce seuil, le resume RSS est juge trop pauvre -> on tente le scrape
 
-def _fetch_full_article(url: str) -> str:
-    """Recupere le texte COMPLET d'un article (pas le resume RSS tronque a
-    quelques phrases). Retourne '' si echec — l'appelant retombe alors sur le
-    resume RSS (jamais de crash, jamais d'item perdu)."""
+def _fetch_full_article_and_image(url: str) -> tuple:
+    """Recupere le texte COMPLET d'un article ET son image reelle (meta
+    og:image extraite par trafilatura, meme mecanisme que fetch_html() plus
+    bas -- 2026-08-26, demande explicite : "toujours utiliser les images
+    provenant des divers sources". Avant ce correctif, fetch_rss() ne
+    regardait QUE le flux RSS lui-meme (media_content/enclosures) pour
+    l'image et abandonnait des qu'il allait chercher le texte complet de la
+    page -- alors que cette meme page est deja telechargee et deja passee a
+    trafilatura pour le texte : son metadata.image etait simplement ignoree,
+    forcant un repli inutile sur le stock (LoremFlickr/Picsum, voir
+    generation/illustrate.py) alors qu'une vraie image de source existait.
+    Retourne ('', '') si echec — l'appelant retombe alors sur le resume RSS
+    et/ou l'image deja extraite du flux (jamais de crash, jamais d'item perdu)."""
     if not url:
-        return ""
+        return "", ""
     try:
         rate_limit(url)
         r = get_with_retry(url)
         r.raise_for_status()
         text = trafilatura.extract(r.text, include_comments=False, include_tables=False)
-        return text or ""
+        meta = trafilatura.extract_metadata(r.text)
+        img = (meta.image if meta else "") or ""
+        return text or "", img
     except Exception:
-        return ""
+        return "", ""
+
+
+def _fetch_full_article(url: str) -> str:
+    """Recupere le texte COMPLET d'un article (pas le resume RSS tronque a
+    quelques phrases). Retourne '' si echec — l'appelant retombe alors sur le
+    resume RSS (jamais de crash, jamais d'item perdu). Compat : delegue a
+    _fetch_full_article_and_image() ci-dessus, ne garde que le texte (les
+    appelants historiques de cette fonction n'ont pas besoin de l'image)."""
+    text, _img = _fetch_full_article_and_image(url)
+    return text
 
 def fetch_rss(source) -> List[Dict]:
     """Retourne liste d'items {title, url, summary, published_at, raw_content, image}.
@@ -112,9 +133,16 @@ def fetch_rss(source) -> List[Dict]:
             # recents dans un flux RSS) et si le resume est trop pauvre pour
             # nourrir une synthese fiable.
             if i < _RSS_FULLTEXT_CAP and len(summary) < 2000:
-                full = _fetch_full_article(link)
+                full, page_img = _fetch_full_article_and_image(link)
                 if len(full) >= _RSS_FULLTEXT_MIN_LEN:
                     raw_content = full
+                # Le flux RSS lui-meme n'a fourni aucune image
+                # (media_content/enclosures absents) -> on recupere celle de
+                # la page reelle deja telechargee ci-dessus, plutot que de
+                # laisser illustrate.py basculer sur du stock generique pour
+                # rien (voir docstring _fetch_full_article_and_image).
+                if not img and page_img:
+                    img = page_img
             out.append({
                 "title": e.get("title", ""),
                 "url": link,

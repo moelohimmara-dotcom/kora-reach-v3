@@ -27,6 +27,17 @@ function _statusChip(status) {
   if (status === "active") return "";
   return chip(SOURCE_STATUS_FR[status] || esc(status), "error");
 }
+// Chantier "codes techniques bruts" (2026-08-26, audit UI/UX) : e.category
+// ("GN_NAT"/"INTL") et e.vector ("html"/"rss"/"gnews") sont des constantes
+// internes (voir collection/whitelist.py), jamais pensées pour l'affichage --
+// elles fuitaient telles quelles dans le sous-titre de chaque ligne. Les
+// libellés catégorie existaient déjà dans sheet.js (détail d'une source) et
+// dans le titre des sections ci-dessous, mais pas ici, dans la liste
+// elle-même -- premier endroit que voit l'utilisateur. Repli sur la valeur
+// brute (esc(...)) si une nouvelle constante backend apparaît un jour sans
+// entrée ici -- jamais un texte vide.
+const CATEGORY_FR = { GN_NAT: "Nationale guinéenne", INTL: "Internationale" };
+const VECTOR_FR = { html: "Scraping HTML", rss: "Flux RSS", gnews: "Google News", sitemap: "Sitemap" };
 
 function viewSources(s) {
   const allSrc = s.sources || [];
@@ -61,7 +72,7 @@ function viewSources(s) {
       <span class="meta-ic">${icon(e.guinea_filter ? "i-shield" : "i-sources")}</span>
       <div class="meta">
         <div class="name">${esc(e.name)} ${e.guinea_filter ? chip("Filtre Guinée", "warning", "i-shield") : ""} ${_statusChip(e.status)}</div>
-        <div class="sub" id="${subId}">${esc(e.category)} · ${esc(e.vector)} · ${esc(e.entry_url)}</div>
+        <div class="sub" id="${subId}">${esc(CATEGORY_FR[e.category] || e.category)} · ${esc(VECTOR_FR[e.vector] || e.vector)} · ${esc(e.entry_url)}</div>
       </div>
       ${icon("i-chevron-right", "src-row-chevron")}
     </button>`;
@@ -69,7 +80,7 @@ function viewSources(s) {
   // Le titre reflète le TOTAL (allSrc), pas la liste filtrée -- doit
   // rester aligné avec le badge de la sidebar (B1) même filtre actif.
   return `<div class="section-title">Gouvernance des sources (${allSrc.length})</div>
-    <p class="muted" style="margin-bottom:16px">Ajout et suspension gérés depuis cet écran (advanced) — chaque modification est tracée dans le journal d'audit.</p>
+    <p class="muted" style="margin-bottom:16px">Ajout et suspension gérés depuis cet écran — chaque modification est tracée dans le journal d'audit.</p>
     <label style="display:block;max-width:360px;margin-bottom:16px">
       <span class="sr-only">Rechercher une source</span>
       <input class="text-input" type="search" id="sourceSearch" placeholder="Rechercher (nom, URL, catégorie, vecteur)…" value="${esc(s.sourceFilter?.q || "")}">

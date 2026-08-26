@@ -51,7 +51,12 @@ LIMITS = {
     "timeout_sec": 10,
     "retry": 2,
     "dossier_sim_threshold": 0.35,  # seuil Jaccard vrai (voir collection/dossiers.py, refonte 2026-08-19)
-    "daily_article_limit": 10,
+    # Reduit 10 -> 5 (2026-08-26, demande explicite : "le user ne veut pas
+    # des tonnes d'articles generes a la fois, il veut des articles generes
+    # avec beaucoup de rigueur pour garantir une qualite maximale") -- moins
+    # d'articles par cycle, meme pipeline de rigueur inchange par article
+    # (auto-critique, anti-plagiat, garde-fou de structure, classification).
+    "daily_article_limit": 5,
     "timezone": "Africa/Conakry",
     # Nombre d'articles generes EN PARALLELE pendant un cycle (2026-08-20,
     # demande explicite : reduire le temps total du cycle SANS toucher a la

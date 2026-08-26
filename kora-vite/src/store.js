@@ -885,6 +885,19 @@ export const Store = (() => {
   }
   function closeSheet() {
     _sheetGen++;
+    // Coupe la lecture vidéo en cours (2026-08-26, retour utilisateur réel :
+    // "quand je ferme l'article, la lecture continue toujours" -- le
+    // <video> vivait dans #sheetBody, mais rien ne l'arrêtait à la
+    // fermeture : la balise disparaissait du DOM AFFICHÉ (sheet.hidden),
+    // pourtant le navigateur continue de décoder/jouer l'audio d'un
+    // élément <video> tant qu'il reste dans le DOM et qu'on ne l'a pas
+    // explicitement mis en pause -- seul #sheet passe hidden, son contenu
+    // (#sheetBody) n'est vidé qu'au PROCHAIN renderSheet(), pas ici.
+    // Pause avant tout le reste : sans ça, la fenêtre entre "fermeture" et
+    // "prochain re-render qui videra le HTML" laisse l'audio tourner.
+    try {
+      document.querySelectorAll(".video-preview").forEach(v => { if (!v.paused) v.pause(); });
+    } catch (e) {}
     const sel = _sheetTriggerSelector;
     setState({ sheet: null });
     if (sel) { try { document.querySelector(sel)?.focus(); } catch (e) {} }

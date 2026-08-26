@@ -39,6 +39,9 @@ function _notifTime(ts) {
 function _notifIcon(type) {
   if (type === "video_error" || type === "cycle_error") return icon("i-close", "notif-ic-error");
   if (type === "video_done" || type === "cycle_done") return icon("i-check", "notif-ic-success");
+  // Veille passive (2026-08-26) : icône dédiée pour distinguer "du nouveau
+  // contenu est disponible, à toi de décider" d'une simple info générique.
+  if (type === "watch_new_content") return icon("i-spark", "notif-ic-info");
   return icon("i-info");
 }
 function renderNotifCenter() {

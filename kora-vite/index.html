@@ -49,6 +49,14 @@
   }
   #bootSplash .bs-logo { font-weight: 800; font-size: 30px; letter-spacing: 2px; color: #FF6B4A; }
   #bootSplash .bs-sub { font-size: 13px; color: #8A93A6; letter-spacing: 1px; }
+  /* Chantier "feedback de chargement" (2026-08-26, audit UI/UX mobile :
+     6-8s de splash sans aucune indication au-delà des points animés, un
+     reseau plus lent pouvant donner l'impression d'une app plantee) --
+     message de reassurance retarde (voir script juste apres le splash),
+     jamais affiche sur un chargement rapide (pas de bruit visuel inutile
+     dans le cas normal). */
+  #bootSplash .bs-status { font-size: 12px; color: #5C6579; min-height: 16px; opacity: 0; transition: opacity .4s ease; }
+  #bootSplash .bs-status.visible { opacity: 1; }
   #bootSplash .bs-wave { display: flex; gap: 7px; }
   #bootSplash .bs-wave i {
     width: 9px; height: 9px; border-radius: 50%; background: #FF6B4A;
@@ -71,7 +79,22 @@
   <div class="bs-logo">KORA</div>
   <div class="bs-wave"><i></i><i></i><i></i><i></i><i></i></div>
   <div class="bs-sub">VEILLE GUINÉE</div>
+  <div class="bs-status" id="bsStatus"></div>
 </div>
+<script>
+  // Message de reassurance progressif (voir note CSS ci-dessus) : deux
+  // paliers, jamais affiches si l'app monte avant -- hideBootSplash()
+  // (app.js) retire #bootSplash du DOM entier, ces setTimeout deviennent
+  // alors des no-op silencieux (l'element cible n'existe simplement plus).
+  setTimeout(function () {
+    var s = document.getElementById("bsStatus");
+    if (s) { s.textContent = "Connexion en cours…"; s.classList.add("visible"); }
+  }, 2500);
+  setTimeout(function () {
+    var s = document.getElementById("bsStatus");
+    if (s) s.textContent = "Ça arrive, encore un instant…";
+  }, 5500);
+</script>
 <script type="module" src="/src/main.js"></script>
 </body>
 </html>

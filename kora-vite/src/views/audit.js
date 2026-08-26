@@ -29,19 +29,58 @@ function viewAudit(s) {
     if (blob.includes("CYCLE") || blob.includes("MODE=") || blob.includes("PROVIDER=")) return "Cycle lancé";
     if (blob.includes("PURGE")) return "Historique purgé";
     if (blob.includes("SOURCE") || blob.includes("SRC=")) return "Source consultée";
+    // Chantier "codes techniques bruts" (2026-08-26, audit UI/UX) : ces 3
+    // actions (voir server.py, appels log(...)) sont loguées en ANGLAIS
+    // (HITL_RETRACT/WITHDRAW/DELETE_WORDPRESS) alors que le reste de la
+    // taxonomie ci-dessus (ACTION_FR) est en français -- sans cette
+    // traduction, elles retombaient dans le "return ev.action" tout en bas,
+    // affichant le code brut tel quel à l'écran (ex. "DELETE_WORDPRESS").
+    if (blob.includes("DELETE_WORDPRESS")) return "Suppression WordPress";
+    if (blob.includes("WITHDRAW")) return "Retrait de WordPress";
+    if (blob.includes("HITL_RETRACT")) return "Décision annulée";
     const k = (ev.kind || "").toLowerCase();
     if (k === "reject") return "Article rejeté";
     if (k === "edit") return "Article modifié";
     if (k === "approve" || k === "transmit") return "Article transmis";
     if (k === "cycle" || k === "run") return "Cycle lancé";
     if (k === "source") return "Source mise à jour";
-    return ev.action || "Activité";
+    // Filet final (2026-08-26, audit UI/UX) : chaque action produit en
+    // pratique DEUX entrées de log cote backend -- une deja traduite plus
+    // haut (transition/detail reconnus par les blob.includes() ci-dessus),
+    // et une seconde, plus sommaire, ou seul ev.action est renseigne (codes
+    // FRANÇAIS de hitl_store.py, ex. "MODIFIE"/"APPROUVE"/"SUPPRIME"/
+    // "SUPPRIME_WORDPRESS" -- distincts des codes ANGLAIS de server.py deja
+    // traduits plus haut). Sans ce filet, cette seconde entree affichait le
+    // code brut. ACTION_FR (déclaré plus haut, alimente aussi les puces de
+    // filtre) n'est volontairement PAS réutilisé tel quel ici : ses valeurs
+    // sont au pluriel ("Modifiés") pour une puce agrégée, un singulier est
+    // plus juste pour une ligne d'événement individuelle.
+    const ACTION_LABEL_SINGULAR_FR = {
+      GENERE: "Article généré", TRANSMIS: "Article transmis", APPROUVE: "Article approuvé",
+      REJETE: "Article rejeté", MODIFIE: "Article modifié", SUPPRIME: "Article supprimé",
+      SUPPRIME_WORDPRESS: "Suppression WordPress", CORBEILLE: "Envoyé à la corbeille",
+      CYCLE: "Cycle lancé", PURGE: "Historique purgé", ADMIN: "Action administrateur",
+    };
+    return ACTION_LABEL_SINGULAR_FR[ev.action] || ev.action || "Activité";
   };
   // Nettoie le detail en affichage lisible, masque les erreurs techniques
   const auditSub = (ev) => {
     let d = ev.detail || "";
     if (!d) return "";
     if (/error|traceback|exception|attributeerror|keyerror|typeerror/i.test(d)) return "Erreur d'exécution (voir logs)";
+    // Format "by=<nom éditeur> detail=<...>" (voir server.py, log() pour
+    // WITHDRAW/DELETE_WORDPRESS/HITL_RETRACT) : <nom éditeur> ("Rédacteur
+    // en chef") contient des espaces -- le découpage générique "mot=valeur"
+    // ci-dessous suppose des valeurs SANS espace et ne captait que le
+    // premier mot, laissant le reste ("en chef detail=ok") fuiter tel quel
+    // à l'écran. Motif dédié, tenté EN PREMIER, avant le découpage générique.
+    const byMatch = d.match(/^by=(.+?)(?:\s+detail=(.*))?$/);
+    if (byMatch) {
+      const [, by, detail] = byMatch;
+      const parts = ["par " + by];
+      if (detail && detail !== "ok") parts.push(detail);
+      return parts.join(" · ");
+    }
     const pairs = {};
     (d.match(/(\w+)=([^\s]+)/g) || []).forEach(p => { const [k,v]=p.split("="); pairs[k]=v; });
     const statusFr = { TRANSMITTED: "Transmis", APPROVED: "Approuvé", REJECTED: "Rejeté", EDITED: "Modifié", PENDING_REVIEW: "À approuver", TRANSMISSION_FAILED: "Échec d'envoi" };
@@ -119,9 +158,17 @@ function viewAudit(s) {
       <button class="btn btn-ghost btn-sm" id="auditSelNone">Désélectionner</button>
       <button class="btn btn-danger btn-sm" id="auditDelSel" disabled>Supprimer la sélection</button>
       <button class="btn btn-outline btn-sm" id="auditExport">Exporter (CSV)</button>
-      <div class="spacer"></div>
-      <button class="btn btn-outline btn-sm" id="auditResetToday">Réinitialiser aujourd'hui</button>
-      <button class="btn btn-danger btn-sm" id="auditPurgeAll">Vider tout l'historique</button>
+    </div>
+    <!-- Zone séparée (2026-08-26, audit UI/UX : les purges définitives se
+         confondaient visuellement avec "Tout sélectionner"/"Exporter",
+         même taille de bouton, différenciation de couleur ténue) -- fond et
+         bordure teintés bordeaux, icône dédiée, distincte du reste. -->
+    <div class="audit-danger-zone">
+      <div class="audit-danger-zone-label">${icon("i-trash")} Purge définitive</div>
+      <div class="audit-danger-zone-actions">
+        <button class="btn btn-danger-ghost btn-sm" id="auditResetToday">Réinitialiser aujourd'hui</button>
+        <button class="btn btn-danger btn-sm" id="auditPurgeAll">Vider tout l'historique</button>
+      </div>
     </div>
     <div class=\"audit-floatbar\" id=\"auditFloatbar\">
       <span class=\"fb-count\" id=\"auditFbCount\">0 sélectionné(s)</span>
@@ -200,10 +247,16 @@ function bindAudit() {
   if (delBtn) delBtn.onclick = doDelete;
   if (fbDel) fbDel.onclick = doDelete;
   const purgeAll = document.getElementById("auditPurgeAll");
+  // typedConfirmWord (2026-08-26, audit UI/UX : "Vider tout l'historique
+  // efface potentiellement 650 événements de traçabilité en un clic à
+  // peine plus rouge que ses voisins") -- l'action au rayon d'action le
+  // plus large de tout le journal d'audit, seule à exiger une confirmation
+  // par saisie plutôt qu'un simple aller-retour.
   if (purgeAll) purgeAll.onclick = () => confirmAction({
     title: "Vider tout l'historique ?",
     message: "Une ligne de purge sera conservée pour la traçabilité. Action irréversible.",
     confirmLabel: "Vider",
+    typedConfirmWord: "VIDER",
     onConfirm: async () => {
       await Store.api("/api/audit/purge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "all" }) });
       Store.loadAudit(); snack("Historique vidé");

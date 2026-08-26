@@ -198,6 +198,22 @@ function friendlyActionError(e) {
   }
   return `Erreur : ${msg}`;
 }
+// Traduit les codes d'erreur bruts de Store.loadAll() (ui.error, voir
+// store.js) en messages compréhensibles -- même esprit que
+// friendlyActionError ci-dessus, pour le chargement global plutôt que pour
+// une action ponctuelle. Chantier "codes techniques bruts" (2026-08-26,
+// audit UI/UX) : avant ce correctif, "stats_indisponibles" s'affichait
+// LITTÉRALEMENT dans le bandeau d'erreur (ex. observé sur la Corbeille) --
+// une clé technique interne, jamais pensée pour l'utilisateur final.
+function friendlyGlobalError(code) {
+  if (code === "stats_indisponibles") {
+    return "Statistiques temporairement indisponibles — le reste de l'application fonctionne normalement.";
+  }
+  if (code === "chargement_partiel") {
+    return "Certaines données n'ont pas pu être chargées. Réessaie dans un instant.";
+  }
+  return `Erreur de chargement : ${code}`;
+}
 // Traduit un objet r.transmission (voir publishing/transmit.py) en message à
 // afficher, ou null si tout va bien et qu'il n'y a rien à signaler. Ajouté
 // 2026-08-20 (8e passage de revue) : seuls les cas SKIPPED_* étaient
@@ -287,5 +303,5 @@ export {
   rteWrapSelection, rtePrefixLines, rteHeading, rteLink,
   icon, placeholderSvg, chip, factMeta, statusBadge,
   imgSrc, hasImg, stateBox, ROLE_LABEL_FR,
-  friendlyActionError, transmissionMessage, guardClick, snack,
+  friendlyActionError, friendlyGlobalError, transmissionMessage, guardClick, snack,
 };

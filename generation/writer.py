@@ -296,8 +296,68 @@ def _illustrate_fact(fact: Dict) -> Dict:
     return res
 
 
+# Detection de fuite de raisonnement (2026-08-26, incident reel constate en
+# prod le jour meme de la fin de vie de nvidia/llama-3.3-nemotron-super-49b-v1) :
+# le modele de remplacement nvidia/nemotron-3-super-120b-a12b est un modele DE
+# RAISONNEMENT dont l'API, pour cette configuration d'appel, met sa chaine de
+# pensee EN ANGLAIS directement dans le champ 'content' (pas dans un champ
+# separe 'reasoning'/'reasoning_content' comme le supposait le code existant
+# ci-dessous) -- HTTP 200, aucune exception, aucun warning logue : le bug est
+# totalement silencieux et 14 des 19 articles generes le 2026-08-26 ont ete
+# publies en HITL avec un corps illisible du type "We must output the
+# corrected full text... Let's scan for errors...", parfois avec un TITRE
+# propre (donc invisible a une relecture en diagonale). Ce garde-fou detecte
+# cette fuite et REND None -- ce qui declenche automatiquement la cascade de
+# repli deja en place (Ollama Cloud -> TokenRouter -> litellm) partout ou
+# _call_nvidia() est utilise (write_article, simple_completion, _ollama_chat),
+# sans avoir a dupliquer la logique de repli dans chaque appelant.
+_REASONING_LEAK_MARKERS = (
+    "we must", "let's", "let us", "let me ", "i need to", "i should",
+    "i'll ", "we should", "the user gave", "the user wants", "the user said",
+    "the user provided", "okay, ", "so the ", "first, i ", "first i ",
+    "potential error", "scan for error", "as an ai", "as a language model",
+    "system prompt", "the instructions say", "the actual", "wait, ",
+    "hmm, ", "i think the",
+)
+
+
+def _english_word_ratio(text: str) -> float:
+    """Ratio de mots anglais courants parmi les mots du texte -- heuristique
+    de repli quand aucun marqueur explicite de raisonnement n'apparaît mais
+    que le texte est quand même massivement en anglais (ex: article entier
+    en anglais sans jamais dire "we must" ni "let's")."""
+    words = re.findall(r"[a-zA-Zàâäéèêëïîôöùûüçñ]+", text.lower())
+    if len(words) < 20:
+        return 0.0
+    en_stop = {"the", "and", "is", "are", "was", "were", "must", "let", "we",
+               "user", "this", "that", "output", "should", "need", "needs",
+               "error", "errors", "instruction", "instructions", "scan",
+               "potential", "actual", "given", "okay", "first", "analysis",
+               "analyze", "with", "have", "has", "not", "but", "for", "from",
+               "text", "article", "correct", "corrected", "provide", "provided"}
+    hits = sum(1 for w in words if w in en_stop)
+    return hits / len(words)
+
+
+def _looks_like_reasoning_leak(text: str) -> bool:
+    if not text:
+        return True
+    low = text.lower()
+    for mk in _REASONING_LEAK_MARKERS:
+        if mk in low:
+            print(f"[LLM_REASONING_LEAK] marqueur '{mk}' détecté -> rejeté")
+            return True
+    ratio = _english_word_ratio(text)
+    if ratio > 0.08:
+        print(f"[LLM_REASONING_LEAK] ratio mots anglais {ratio:.2f} > seuil -> rejeté")
+        return True
+    return False
+
+
 def _call_nvidia(messages: List[Dict], max_tokens: int = 600) -> str:
-    """Appel Nvidia (integrate.api.nvidia.com). Retourne le texte ou None si échec."""
+    """Appel Nvidia (integrate.api.nvidia.com). Retourne le texte ou None si échec
+    OU si la réponse ressemble à une fuite de raisonnement brut (voir garde-fou
+    _looks_like_reasoning_leak ci-dessus, cascade de repli automatique)."""
     nv_key = os.environ.get("NVIDIA_API_KEY")
     if not nv_key:
         return None
@@ -318,11 +378,19 @@ def _call_nvidia(messages: List[Dict], max_tokens: int = 600) -> str:
         msg = data["choices"][0]["message"]
         # Modèles raisonnants (ex: openai/gpt-oss-*) renvoient la réponse
         # dans 'reasoning'/'reasoning_content' et laissent 'content' à None.
+        # ATTENTION (2026-08-26) : nvidia/nemotron-3-super-120b-a12b, lui,
+        # met sa chaîne de pensée EN ANGLAIS directement dans 'content' --
+        # ce champ seul ne suffit donc plus à distinguer une vraie réponse
+        # d'une fuite de raisonnement, d'où le garde-fou ci-dessous.
         text = msg.get("content") or msg.get("reasoning") or msg.get("reasoning_content")
         if not text:
             print(f"[LLM_NVIDIA_WARN] pas de content/reasoning: {str(data)[:200]}")
             return None
-        return text.strip()
+        text = text.strip()
+        if _looks_like_reasoning_leak(text):
+            print(f"[LLM_NVIDIA_REASONING_LEAK] contenu rejeté (extrait): {text[:200]!r}")
+            return None
+        return text
     except Exception as e:
         import traceback
         print(f"[LLM_NVIDIA_ERROR] {type(e).__name__}: {e}")
@@ -391,6 +459,78 @@ def _ensure_min_length(raw: str, fact: Dict, lt: Dict, min_words: int = 879, max
 
 _CRITIQUE_CLEAN_MARKER = "AUCUN PROBLÈME DÉTECTÉ"
 
+# Bug critique reel constate en prod (2026-08-25, signale par audit UI/UX) :
+# malgre la consigne "reponds avec le texte COMPLET corrige, rien d'autre",
+# le LLM de correction ajoute parfois un preambule conversationnel avant le
+# texte demande, ex. observe tel quel dans un article publiable :
+#   "Etant donne que l'analyse n'a revele AUCUN PROBLEME sur les six axes
+#   specifies (...), l'article reste inchange. Voici le texte COMPLET
+#   CORRIGE (sans aucune modification) :"
+# -- markdown non rendu compris. Ni _apply_critique_corrections ni
+# _llm_fix_structure ne detectaient ce cas : leur seul garde-fou est un
+# ratio de longueur (fixed >= 80% ou 85% du texte original), et un
+# preambule AJOUTE des mots -> il fait passer le ratio au lieu d'etre
+# rejete. _strip_meta_preamble() est le filet dedie a ce symptome precis.
+#
+# Revue de code (2026-08-25) : une premiere version exigeait seulement UN
+# marqueur "de verdict" (ex. "apres analyse", "aucun probleme", "etant donne
+# que") -- des tournures banales du francais journalistique qui apparaissent
+# aussi dans de VRAIS chapos (ex. un chapo citant un recensement, une analyse
+# sanitaire...). Preuve empirique fournie par la revue : un chapo reel citant
+# des chiffres de recensement, terminant par ':', a ete efface a tort car il
+# contenait "apres analyse". On exige desormais un marqueur de LIVRAISON --
+# une formule qui designe le texte LUI-MEME comme objet livre ("voici LE
+# TEXTE/L'ARTICLE/LA VERSION corrige(e)") -- absente de tout chapo legitime,
+# qui parle toujours du SUJET de l'article, jamais du texte en tant que tel.
+_META_DELIVERY_MARKERS = (
+    "voici le texte", "voici l'article", "voici la version",
+    "ci-dessous se trouve le texte", "ci-dessous se trouve l'article",
+    "en tant que correcteur",
+)
+
+
+def _strip_meta_preamble(text: str) -> str:
+    """Retire un eventuel preambule conversationnel ajoute par un LLM de
+    correction/reformatage avant le contenu reellement demande (voir note
+    ci-dessus). Opere par PARAGRAPHE (coupure sur ligne vide) plutot que par
+    ligne : le preambule observe en prod est une phrase unique mais peut
+    s'etaler sur plusieurs lignes avant la premiere ligne vide.
+
+    Un paragraphe de tete n'est retire que s'il cumule DEUX signaux (pour
+    exclure tout risque de retirer un vrai titre/chapo) :
+      1. il se termine par ':' (annonce typique avant le contenu livre) ;
+      2. il contient un marqueur de LIVRAISON (le texte se designe lui-meme
+         comme objet livre -- jamais present dans un chapo legitime, qui
+         parle du sujet de l'article, pas du texte en tant que tel).
+    Boucle bornee (3 paragraphes max) : le preambule reel observe tient en
+    un seul paragraphe, la marge est large sans risquer de manger le corps
+    d'un article legitimement court."""
+    if not text:
+        return text
+    remaining = text
+    stripped_any = 0
+    for _ in range(3):
+        parts = remaining.split("\n\n", 1)
+        if len(parts) != 2:
+            break
+        head, rest = parts
+        head_s = head.strip()
+        if not head_s or head_s.startswith("#"):
+            break
+        low = head_s.lower()
+        if head_s.rstrip().endswith(":") and any(mk in low for mk in _META_DELIVERY_MARKERS):
+            remaining = rest.lstrip("\n")
+            stripped_any += 1
+            continue
+        break
+    if stripped_any:
+        # Plus d'un paragraphe retire d'affilee = signal a surveiller (piste
+        # d'audit pour reperer rapidement un futur faux positif en prod,
+        # recommandation de la revue de code).
+        tag = "" if stripped_any == 1 else f" (ATTENTION : {stripped_any} paragraphes retires)"
+        print(f"[META_PREAMBLE_STRIPPED] preambule LLM residuel retire avant stockage{tag}")
+    return remaining
+
 
 def _self_critique(raw: str) -> str:
     """AUTO-CRITIQUE (2026-08-19, demande explicite : contrôle qualité avant
@@ -455,6 +595,8 @@ def _apply_critique_corrections(raw: str, critique_report: str) -> str:
     ]
     try:
         fixed = _ollama_chat(msg, 3000)
+        if fixed:
+            fixed = _strip_meta_preamble(fixed)
         if fixed and len(fixed.split()) >= len(raw.split()) * 0.8:
             return fixed
     except Exception as e:
@@ -721,6 +863,7 @@ def _llm_fix_structure(article: str) -> str | None:
         out = None
     if not out:
         return None
+    out = _strip_meta_preamble(out)
     if len(out.split()) < len(article.split()) * 0.85:
         return None  # perte de contenu suspecte -> rejeté, repli mécanique
     return out.strip()
@@ -772,6 +915,80 @@ def _mechanical_paragraph_split(article: str, sentences_per_para: int = 4) -> st
     out += "\n\n".join(paras) if paras else full_text
     out += "\n\n" + (signature or "Par La Rédaction")
     return out
+
+
+# ---------------------------------------------------------------------------
+# GARDE-FOU ANTI-PLAGIAT (2026-08-26) -- voir appel dans _finalize_article()
+# ci-dessous pour le contexte. Mesure de reprise textuelle par n-grammes de
+# mots (shingles), méthode standard de détection de plagiat léger : indépendante
+# du sens (contrairement à un LLM), donc rapide, déterministe et sans coût
+# d'appel réseau pour la MESURE elle-même (seule la correction, si nécessaire,
+# appelle un LLM).
+# ---------------------------------------------------------------------------
+_PLAGIARISM_NGRAM = 8           # taille de fenêtre (mots) -- assez long pour
+                                 # ne pas capter des tournures banales communes
+                                 # à tout texte de presse ("selon nos informations"),
+                                 # assez court pour détecter une phrase reprise
+                                 # avec de légères substitutions autour.
+_PLAGIARISM_THRESHOLD = 0.35    # au-delà, plus d'un tiers de l'article est
+                                 # composé de séquences de 8 mots identiques à
+                                 # la source -> reprise trop littérale.
+_WORD_RE = re.compile(r"[a-zà-öø-ÿ0-9']+")
+
+
+def _shingles(text: str, n: int = _PLAGIARISM_NGRAM) -> set:
+    words = _WORD_RE.findall((text or "").lower())
+    if len(words) < n:
+        return set()
+    return {tuple(words[i:i + n]) for i in range(len(words) - n + 1)}
+
+
+def _plagiarism_overlap_ratio(article: str, source: str) -> float:
+    """Proportion des n-grammes de l'ARTICLE qui apparaissent tels quels dans
+    la SOURCE -- pas un Jaccard symétrique : un article court entièrement
+    recopié d'une longue source doit ressortir à ~1.0, peu importe la taille
+    de la source. Retourne 0.0 si l'article est trop court pour former un
+    seul n-gramme (rien à mesurer, jamais un faux positif par division par 0)."""
+    art_sh = _shingles(article)
+    if not art_sh:
+        return 0.0
+    src_sh = _shingles(source)
+    if not src_sh:
+        return 0.0
+    return len(art_sh & src_sh) / len(art_sh)
+
+
+_PLAGIARISM_REWRITE_SYSTEM = (
+    "Tu es correcteur-relecteur professionnel de presse francophone, spécialisé "
+    "dans la déontologie anti-plagiat. On te donne un article déjà rédigé et son "
+    "texte SOURCE d'origine. Certains passages de l'article reprennent la source "
+    "de façon trop littérale (suites de mots quasi identiques). Ta mission : "
+    "REFORMULE ces passages avec un vocabulaire et une syntaxe différents, SANS "
+    "changer un seul fait, chiffre, date, nom ou citation entre guillemets (les "
+    "citations directes attribuées restent telles quelles, ce n'est pas du "
+    "plagiat). Ne touche PAS aux passages déjà correctement reformulés. Garde "
+    "la structure exacte (Titre, CHAPÔ, CORPS en paragraphes fluides, signature "
+    "'Par La Rédaction'). Réponds avec l'article COMPLET reformulé, rien d'autre."
+)
+
+
+def _rewrite_for_plagiarism(article: str, source: str) -> str | None:
+    """Réécriture ciblée anti-plagiat (même prudence que
+    _apply_critique_corrections : repli sur None si la réponse semble avoir
+    perdu du contenu, l'appelant garde alors le texte original)."""
+    msg = [
+        {"role": "system", "content": _PLAGIARISM_REWRITE_SYSTEM},
+        {"role": "user", "content": f"TEXTE SOURCE :\n{source[:3000]}\n\nARTICLE À REFORMULER (passages trop proches) :\n{article}"},
+    ]
+    try:
+        out = _ollama_chat(msg, 3000)
+        if out:
+            out = _strip_meta_preamble(out)
+        if out and len(out.split()) >= len(article.split()) * 0.8:
+            return out
+    except Exception as e:
+        print(f"[PLAGIARISM_REWRITE_ERROR] {type(e).__name__}: {e}")
+    return None
 
 
 def _finalize_article(art: str, fact: Dict, lt: Dict, should_cancel=None) -> Dict:
@@ -853,6 +1070,37 @@ def _finalize_article(art: str, fact: Dict, lt: Dict, should_cancel=None) -> Dic
     # déjà propre) donc aucun coût si tout s'est bien passé en amont.
     art = _normalize_title_line(art)
     art = _strip_body_headings(art)
+    # Filet final (defense en profondeur) : couvre aussi bien un preambule
+    # deja echappe des filets dedies ci-dessus qu'un preambule introduit par
+    # une future passe LLM ajoutee a cette fonction -- idempotent, aucun cout
+    # si le texte est deja propre (cas normal).
+    art = _strip_meta_preamble(art)
+    # GARDE-FOU ANTI-PLAGIAT (2026-08-26, demande explicite : "toujours filtrer
+    # les articles generes pour supprimer tout risque de plagiat"). Avant ce
+    # correctif, RIEN dans le pipeline ne mesurait la reprise textuelle de
+    # l'article genere par rapport a sa source -- la consigne "anti-
+    # hallucination" du prompt systeme protege contre l'invention de faits,
+    # pas contre une reformulation trop proche mot pour mot d'une source
+    # unique. Une seule tentative de reecriture ciblee (comme
+    # _apply_critique_corrections) si le taux de reprise depasse le seuil ;
+    # repli sur le texte original si la reecriture echoue ou ne fait pas
+    # baisser suffisamment le taux (jamais de blocage/perte d'article pour
+    # cette passe -- coherent avec le choix produit : reecriture automatique,
+    # pas de rejet strict).
+    champ_src = fact.get("article_retenu", {}) or fact.get("champion", {}) or {}
+    source_text = clean_source(champ_src.get("raw_content", ""))
+    if source_text:
+        ratio = _plagiarism_overlap_ratio(art, source_text)
+        if ratio > _PLAGIARISM_THRESHOLD:
+            print(f"[PLAGIARISM_GUARD] taux de reprise {ratio:.2f} > seuil {_PLAGIARISM_THRESHOLD} -> réécriture ciblée")
+            rewritten = _rewrite_for_plagiarism(art, source_text)
+            if rewritten:
+                new_ratio = _plagiarism_overlap_ratio(rewritten, source_text)
+                if new_ratio < ratio:
+                    art = rewritten
+                    print(f"[PLAGIARISM_GUARD] taux ramené à {new_ratio:.2f} après réécriture")
+                else:
+                    print(f"[PLAGIARISM_GUARD] réécriture n'a pas réduit le taux ({new_ratio:.2f}) -> texte original conservé")
     _v = validate_article(art, fact)
     if _v["flags"]:
         print("[INJECTION_BLOCKED]", "; ".join(_v["flags"]))

@@ -205,7 +205,7 @@ function viewSettings(s) {
                 ${role === "normal" ? `<label class="mini-sheet-check" style="margin:0" title="Autoriser l'envoi vers WordPress (brouillon et officiel)">
                   <input type="checkbox" class="wp-publish-toggle" data-id="${esc(u.id)}" ${u.wp_publish_allowed ? "checked" : ""}> Envoi WP
                 </label>` : ""}
-                <button class="btn btn-ghost btn-sm user-del" data-id="${esc(u.id)}" ${lockedForViewer ? "disabled title=\"Réservé aux Propriétaires\"" : ""}>Retirer</button>
+                <button class="btn btn-danger-ghost btn-sm user-del" data-id="${esc(u.id)}" ${lockedForViewer ? "disabled title=\"Réservé aux Propriétaires\"" : ""}>Retirer</button>
               </div>
             </div>`;
             }).join("")}
@@ -229,7 +229,7 @@ function viewSettings(s) {
               <div class="meta"><div class="name">${esc(inv.email)}</div><div class="sub">${ROLE_LABEL_FR[inv.role] || inv.role} · ${chip(statusLabel, statusVariant)}</div></div>
               ${inv.display_status === "pending" ? `<div class="role-edit">
                 <button class="btn btn-ghost btn-sm invite-resend" data-token="${esc(inv.token)}">Renvoyer</button>
-                <button class="btn btn-ghost btn-sm invite-revoke" data-token="${esc(inv.token)}">Révoquer</button>
+                <button class="btn btn-danger-ghost btn-sm invite-revoke" data-token="${esc(inv.token)}">Révoquer</button>
               </div>` : ""}
             </div>`;
             }).join("")}

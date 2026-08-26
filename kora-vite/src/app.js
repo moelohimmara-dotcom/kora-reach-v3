@@ -21,9 +21,9 @@
 import { Store } from "./store.js";
 import {
   $, $$, esc, isAdvancedRole, icon, statusBadge, guardClick, snack, ROLE_LABEL_FR,
-  transmissionMessage, friendlyActionError,
+  transmissionMessage, friendlyActionError, friendlyGlobalError,
 } from "./utils.js";
-import { renderSheet, confirmAction, isEditingActive } from "./sheet.js";
+import { renderSheet, confirmAction, isEditingActive, isVideoPlaying } from "./sheet.js";
 import { renderNotifCenter } from "./notifications.js";
 // "dashboard" (2026-08-25, audit de nommage : s'appelait "cockpit" --
 // terme aéronautique générique, aucun rapport avec le métier éditorial).
@@ -62,7 +62,7 @@ function renderErrorBanner(s) {
   if (!el || !msgEl) return;
   const err = s.ui && s.ui.error;
   el.hidden = !err;
-  if (err) msgEl.textContent = err;
+  if (err) msgEl.textContent = friendlyGlobalError(err);
   const retryBtn = document.getElementById("errorBannerRetry");
   const closeBtn = document.getElementById("errorBannerClose");
   const clearError = () => Store.setState({ ui: { ...Store.state.ui, error: null } });
@@ -125,7 +125,17 @@ const CYCLE_MESSAGES = [
   "Kora Agent choisit le visuel qui correspond le mieux…",
   "Kora Agent relit et peaufine les derniers détails…",
 ];
-const CYCLE_PATIENCE_MS = 45000; // au-delà, message de patience supplémentaire
+// CYCLE_PATIENCE_MS (2026-08-26, testé en conditions réelles : cycle
+// déclenché en production, message observé toutes les 10s) -- 45s était
+// beaucoup trop tôt : le loader affiche lui-même "environ 6 min par
+// article" dès le lancement, puis "Article 1 sur 10 (≈ 20 min restantes)"
+// une fois la collecte terminée -- voir un message "ça prend plus de temps
+// que d'habitude" apparaître à peine 45s après CES MÊMES estimations
+// contredit l'appli elle-même et sape la confiance plutôt que rassurer.
+// Relevé à 90s : le seuil ne se déclenche plus avant même la fin de la
+// collecte (15-30s annoncés) dans le cas normal, seulement si ça traîne
+// réellement au-delà de ce qui est raisonnable pour cette première étape.
+const CYCLE_PATIENCE_MS = 90000; // au-delà, message de patience supplémentaire
 let _wasBusy = false;
 // Suivi de transition du bandeau vidéo global (2026-08-21) -- voir render().
 let _lastVideoJobId = null;
@@ -134,7 +144,26 @@ let _loaderDismissed = false;
 let _cycleMsgTimer = null;
 let _cycleMsgIdx = 0;
 let _cycleStartedAt = 0;
+// _cycleMsgArticleNum (2026-08-26, MÊME test réel) : sans repère, le texte
+// décoratif ("Kora Agent choisit le visuel...", "...relit et peaufine...")
+// tourne sur une SIMPLE MINUTERIE de 5s, totalement indépendante de la
+// progression réelle -- observé en direct : le message affichait "choisit
+// le visuel" (donne l'impression d'un article presque terminé) alors que
+// la ligne de progression juste à côté affichait encore "Article 1 sur 10"
+// avec current=0 (le tout premier article pas encore achevé). Les deux
+// indicateurs se contredisaient l'un l'autre au même instant. Corrigé en
+// resynchronisant la narration sur le VRAI signal de progression déjà
+// disponible (s.ui.progress.current, backend) : chaque fois qu'on change
+// réellement d'article, la narration repart du début ("explore les
+// sources...") pour ce nouvel article, au lieu de dériver indéfiniment.
+let _cycleMsgArticleNum = -1;
 function updateCycleMessage() {
+  const progress = Store.state.ui && Store.state.ui.progress;
+  const articleNum = (progress && progress.total > 0) ? progress.current : -1;
+  if (articleNum !== _cycleMsgArticleNum) {
+    _cycleMsgArticleNum = articleNum;
+    _cycleMsgIdx = 0;
+  }
   const msg = CYCLE_MESSAGES[_cycleMsgIdx % CYCLE_MESSAGES.length];
   _cycleMsgIdx++;
   const glText = document.getElementById("globalLoaderText");
@@ -528,8 +557,13 @@ function render() {
   document.documentElement.style.setProperty("--banner-h", bannerH + "px");
   // Ne pas ré-exécuter renderSheet pendant l'édition (sinon le poll périodique
   // écrase le brouillon en cours) — sauf si le panneau a été fermé entre-temps
-  // (ex. Échap), auquel cas il faut bien le masquer.
-  if (!isEditingActive() || !s.sheet) {
+  // (ex. Échap), auquel cas il faut bien le masquer. Même garde pour une
+  // vidéo en cours de lecture (2026-08-26, retour utilisateur réel : "la
+  // vidéo plante après quelques secondes") -- renderSheet() reconstruit tout
+  // #sheetBody, donc détruit et recrée le <video> à chaque appel ; sans ce
+  // garde, le poll périodique (30s) ou n'importe quel autre setState()
+  // remettait la lecture à zéro en plein visionnage.
+  if ((!isEditingActive() && !isVideoPlaying()) || !s.sheet) {
     try { renderSheet(s); } catch (e) { console.error("renderSheet", e); }
   }
   try { if (s.route === "audit") bindAudit(); } catch (e) { console.error("bindAudit", e); }
@@ -694,6 +728,13 @@ function navigate(route, push = true) {
   // "cockpit" tant qu'elles restent non lues (notifications.js appelle
   // navigate(n.route) directement).
   route = _LEGACY_ROUTE_ALIASES[route] || route;
+  // Coupe toute vidéo en lecture avant de changer de page (2026-08-26,
+  // filet complémentaire à Store.closeSheet() : couvre le cas où
+  // l'utilisateur navigue directement -- rail, notification, lien --
+  // SANS être passé par un bouton de fermeture explicite du panneau, qui
+  // laisserait sinon l'audio d'une vidéo jouer en arrière-plan pendant
+  // qu'il consulte une autre page).
+  try { document.querySelectorAll(".video-preview").forEach(v => { if (!v.paused) v.pause(); }); } catch (e) {}
   const filter = route === "facts" ? Store.getFactFilter() : undefined;
   const path = routeToPath(route, filter);
   if (push && (location.pathname + location.search) !== path) {
@@ -1157,7 +1198,24 @@ function bind() {
   let overflowTouchStartTime = 0;
 
   const closeOverflow = () => { if (overflowMenu) { overflowMenu.classList.remove("open"); overflowMenu.hidden = true; } if (navScrim) navScrim.hidden = true; };
-  if (overflowMenu) overflowMenu.querySelectorAll(".overflow-item").forEach(it => it.onclick = () => { navigate(it.dataset.route); closeOverflow(); });
+  // Bug corrige (2026-08-26, signale par audit UI/UX mobile, reproduit 2x) :
+  // le menu "Plus d'options" restait visible par-dessus la nouvelle page
+  // apres un tap sur un de ses items. Deux causes cumulees :
+  // 1. Ordre d'appel invers e par rapport au right-drawer desktop (qui lui
+  //    ferme AVANT de naviguer, voir plus bas) -- ici c'etait navigate()
+  //    D'ABORD, closeOverflow() APRES. navigate() appelle Store.setState()
+  //    puis render() de facon SYNCHRONE, qui relance bind() et reconstruit
+  //    tous les gestionnaires -- fermer APRES cette cascade est fragile
+  //    (fenetre ou l'etat visuel peut rester incoherent le temps d'un
+  //    re-render). Ferme desormais AVANT, comme le right-drawer.
+  // 2. Defaut CSS reel (voir style.css `.overflow-menu[hidden]`) : l'attribut
+  //    HTML `hidden` n'avait AUCUN effet visuel ici, la regle de classe
+  //    `.overflow-menu { display:flex }` d'un stylesheet auteur l'emportant
+  //    toujours sur `[hidden]{display:none}` de la feuille UA -- seule la
+  //    classe `.open` (transform) controlait vraiment la visibilite. Les deux
+  //    causes sont corrigees en defense en profondeur (l'une seule aurait pu
+  //    suffire a masquer le symptome, mais aurait laisse l'autre latente).
+  if (overflowMenu) overflowMenu.querySelectorAll(".overflow-item").forEach(it => it.onclick = () => { closeOverflow(); navigate(it.dataset.route); });
 
   // Bug corrigé (2026-08-25, audit mobile réel -- même classe de bug que
   // __koraCardClickBound plus haut) : ces listeners document/window et ce
