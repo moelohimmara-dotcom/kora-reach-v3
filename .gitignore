@@ -97,3 +97,12 @@ kora-vite/test-login*.mjs
 kora-vite/test_parcours_*.mjs
 kora-vite/smoke_test.mjs
 maquettes-dark/cap_*.mjs
+
+# Exceptions (2026-08-26) : ces 3 scripts ont ete NETTOYES de tout
+# identifiant en dur (ils LEVENT desormais une erreur si KORA_TEST_USER/
+# KORA_TEST_PASS ne sont pas fournis via l'environnement) -- reintegres au
+# depot pour que deploy_check.sh (non-regression automatique a chaque
+# deploiement) fonctionne sur un checkout frais, sans copie manuelle.
+!kora-vite/smoke_test.mjs
+!kora-vite/test_parcours_b.mjs
+!kora-vite/test_parcours_c.mjs
