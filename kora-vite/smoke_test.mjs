@@ -6,7 +6,7 @@
  */
 import { chromium } from 'playwright';
 
-const BASE = process.argv[2] || 'https://213-156-135-139.sslip.io/kora-v2';
+const BASE = process.argv[2] || 'https://213.156.135.139.sslip.io/kora-v2';
 // SECURITE (2026-08-26, incident reel : un mot de passe admin en dur ici
 // est reste visible dans l'historique git meme apres suppression du fichier
 // -- voir commit bde9bec, purge de securite du 2026-08-23). Plus JAMAIS de

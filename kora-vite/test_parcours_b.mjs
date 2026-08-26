@@ -1,5 +1,5 @@
 import { chromium } from 'playwright';
-const BASE = process.argv[2] || 'https://213-156-135-139.sslip.io/kora-v2';
+const BASE = process.argv[2] || 'https://213.156.135.139.sslip.io/kora-v2';
 // SECURITE (voir smoke_test.mjs pour le detail de l'incident) : jamais de
 // valeur de repli en dur -- ces variables DOIVENT venir de l'environnement.
 const USER = process.env.KORA_TEST_USER;

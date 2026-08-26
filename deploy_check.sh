@@ -85,7 +85,7 @@ mkdir -p "$TMPDIR"
 cd "$APP_DIR/kora-vite"
 
 echo "==> Smoke test (non-régression A)"
-if node smoke_test.mjs "https://213-156-135-139.sslip.io/kora-v2"; then
+if node smoke_test.mjs "https://213.156.135.139.sslip.io/kora-v2"; then
   echo "SMOKE_A_PASS"
 else
   echo "SMOKE_A_FAIL"
@@ -94,7 +94,7 @@ else
 fi
 
 echo "==> Parcours B (Sources/Params/Audit/Corbeille/Sélection)"
-if node test_parcours_b.mjs "https://213-156-135-139.sslip.io/kora-v2"; then
+if node test_parcours_b.mjs "https://213.156.135.139.sslip.io/kora-v2"; then
   echo "SMOKE_B_PASS"
 else
   echo "SMOKE_B_FAIL"
@@ -103,7 +103,7 @@ else
 fi
 
 echo "==> Parcours C (Vidéos/Bandeau de cycle/Notifications)"
-if node test_parcours_c.mjs "https://213-156-135-139.sslip.io/kora-v2"; then
+if node test_parcours_c.mjs "https://213.156.135.139.sslip.io/kora-v2"; then
   echo "SMOKE_C_PASS"
 else
   echo "SMOKE_C_FAIL"
