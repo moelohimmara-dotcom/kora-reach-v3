@@ -67,11 +67,18 @@ done
 sudo nginx -s reload
 
 # Identifiants du compte de TEST (2026-08-26, jamais en dur dans les scripts
-# -- voir incident de sécurité du 2026-08-23) : lus depuis deploy/.env,
-# JAMAIS commis dans le dépôt.
-set -a
-source "$REMOTE_APP/deploy/.env"
-set +a
+# -- voir incident de sécurité du 2026-08-23) : extraits ponctuellement de
+# deploy/.env via sudo (ce fichier appartient à kora, illisible par
+# l'utilisateur `remote` qui exécute ce script -- un `source` direct échoue
+# en permission refusée). On ne récupère QUE ces 2 variables, jamais tout le
+# fichier : ce script n'a pas besoin des autres secrets qu'il contient
+# (clés API LLM, etc.), inutile de les charger dans son environnement.
+export KORA_TEST_USER="$(sudo grep '^KORA_TEST_USER=' "$REMOTE_APP/deploy/.env" | head -1 | cut -d= -f2-)"
+export KORA_TEST_PASS="$(sudo grep '^KORA_TEST_PASS=' "$REMOTE_APP/deploy/.env" | head -1 | cut -d= -f2-)"
+if [ -z "$KORA_TEST_USER" ] || [ -z "$KORA_TEST_PASS" ]; then
+  echo "ERREUR: KORA_TEST_USER/KORA_TEST_PASS introuvables dans $REMOTE_APP/deploy/.env"
+  exit 1
+fi
 export TMPDIR="$HOME/tmp"
 mkdir -p "$TMPDIR"
 
