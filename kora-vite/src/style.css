@@ -1406,6 +1406,37 @@ html.icons-ready .material-icons { visibility: visible; }
 @media (max-width: 520px) { .setting-card .field-row { grid-template-columns: 1fr; } }
 .setting-card .actions { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
 .setting-col { flex-direction: column; align-items: stretch; }
+
+/* Agent (panneau "Prompt système, instructions") -- réutilise .setting-card /
+   .list-row / .badge existants, n'introduit que ce que ces gabarits ne
+   couvrent pas déjà (zone d'avertissement, textarea monospace, case à
+   cocher de compétence, disclosure repliable, panneau de suggestions IA). */
+.setting-card textarea.text-input { width: 100%; resize: vertical; }
+#agentPromptSystem.text-input { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12.5px; line-height: 1.5; }
+.setting-warning { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 10px; }
+.setting-warning .ic { flex: none; width: 16px; height: 16px; margin-top: 2px; color: var(--md-sys-color-on-surface-variant); }
+.setting-warning code { background: var(--glass-bg-strong); padding: 1px 5px; border-radius: 4px; font-size: .92em; }
+
+.skill-row { cursor: pointer; align-items: flex-start; }
+.skill-row input[type="checkbox"] { flex: none; width: 18px; height: 18px; margin-top: 1px; accent-color: var(--coral); cursor: pointer; }
+
+.style-example-row, .style-preset-row { align-items: flex-start; }
+.style-example-row .btn, .style-preset-row .btn, .style-preset-row .badge { flex: none; margin-left: auto; }
+.style-upload-btn { margin-top: 4px; cursor: pointer; }
+.style-upload-btn input[type="file"] { display: none; }
+.style-upload-btn[disabled] { opacity: .5; pointer-events: none; }
+
+.disclosure { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--glass-border); }
+.disclosure summary { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 700; font-size: var(--t-label); color: var(--md-sys-color-on-surface); list-style: none; }
+.disclosure summary::-webkit-details-marker { display: none; }
+.disclosure summary .ic { width: 14px; height: 14px; flex: none; transition: transform var(--dur-fast) var(--ease); }
+.disclosure[open] summary .ic { transform: rotate(90deg); }
+.disclosure-body { margin-top: 10px; }
+
+.prompt-suggestions-panel { margin-top: 12px; padding: 14px; border-radius: var(--radius-lg); background: var(--glass-bg); border: 1px solid var(--glass-border); }
+.prompt-suggestions-panel .name { display: flex; align-items: center; gap: 7px; font-weight: 700; margin-bottom: 8px; }
+.prompt-suggestions-panel .ic { width: 15px; height: 15px; }
+.prompt-suggestions-text { white-space: pre-line; }
 /* Bordure corrigée 2026-08-22 (audit mobile réel : les champs de mot de
    passe étaient litéralement invisibles -- --glass-border-strong vaut
    transparent dans les 3 thèmes, et --glass-bg est ici identique au fond

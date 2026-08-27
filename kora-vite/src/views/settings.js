@@ -612,65 +612,70 @@ function bindSettings() {
     const stylePresets = data.style_presets || [];
     const addedPresetLabels = new Set(styleExamples.map((e) => e.filename));
     const skillRow = (s) => `
-      <label class="list-row skill-row" style="cursor:pointer;align-items:flex-start">
-        <input type="checkbox" class="skill-check" data-skill-id="${esc(s.id)}" ${skillsEnabled.has(s.id) ? "checked" : ""} style="margin-top:3px">
-        <div class="meta" style="margin-left:10px">
+      <label class="list-row skill-row">
+        <input type="checkbox" class="skill-check" data-skill-id="${esc(s.id)}" ${skillsEnabled.has(s.id) ? "checked" : ""}>
+        <div class="meta">
           <div class="name">${esc(s.label)}</div>
           <div class="sub">${esc(s.description)}</div>
         </div>
       </label>`;
     const exampleRow = (e) => `
-      <div class="list-row" style="align-items:center">
+      <div class="list-row style-example-row">
         <span class="meta-ic">${icon("i-facts")}</span>
         <div class="meta"><div class="name">${esc(e.filename)}</div><div class="sub">${e.length} caractères extraits · « ${esc(e.excerpt)}${e.excerpt.length >= 200 ? "…" : ""} »</div></div>
-        <button class="btn btn-ghost btn-sm" data-del-example="${esc(e.id)}">${icon("i-trash")}</button>
+        <button class="btn btn-ghost btn-sm" data-del-example="${esc(e.id)}" aria-label="Retirer cet exemple">${icon("i-trash")}</button>
       </div>`;
     const presetRow = (p) => {
       const already = addedPresetLabels.has(`Suggestion prédéfinie : ${p.label}`);
+      const maxed = styleExamples.length >= 5;
       return `
-      <label class="list-row" style="align-items:flex-start">
+      <div class="list-row style-preset-row">
         <span class="meta-ic">${icon("i-spark")}</span>
-        <div class="meta" style="margin-left:10px">
+        <div class="meta">
           <div class="name">${esc(p.label)}</div>
           <div class="sub">${esc(p.description)}</div>
         </div>
-        <button class="btn btn-ghost btn-sm" data-add-preset="${esc(p.id)}" ${already || styleExamples.length >= 5 ? "disabled" : ""}>${already ? "Déjà ajoutée" : "Ajouter"}</button>
-      </label>`;
+        ${already
+          ? `<span class="badge badge-approved">${icon("i-check")} Ajoutée</span>`
+          : `<button class="btn btn-ghost btn-sm" data-add-preset="${esc(p.id)}" ${maxed ? "disabled" : ""}>${icon("i-plus")} Ajouter</button>`}
+      </div>`;
     };
     body.innerHTML = `
       <p class="muted" style="margin:0 0 14px">Personnalise le comportement du rédacteur automatique. Toute modification est tracée dans le journal d'audit. Rien ici n'est obligatoire : l'agent fonctionne déjà avec le seul prompt système par défaut.</p>
       <div class="setting-card">
-        <div class="setting-card-head"><span class="meta-ic">${icon("i-alert")}</span><div class="meta"><div class="name">Prompt système</div><div class="sub">${systemIsDefault ? "Valeur par défaut (jamais modifiée)" : "Personnalisé"}</div></div></div>
-        <p class="muted" style="margin:0 0 10px">⚠️ Ce texte pilote directement la rédaction (structure, ton, garde-fous anti-invention et anti-injection). Le marqueur interne <code>2. LONGUEUR</code> doit rester présent : sa suppression ne provoque aucune erreur, mais modifie légèrement la génération section par section. En cas de doute, utilise « Réinitialiser par défaut ».</p>
-        <textarea class="text-input" id="agentPromptSystem" rows="14" style="font-family:monospace;font-size:12.5px;line-height:1.5;width:100%;resize:vertical">${escta(systemVal)}</textarea>
-        <div class="actions" style="margin-top:10px">
+        <div class="setting-card-head"><span class="meta-ic">${icon("i-edit")}</span><div class="meta"><div class="name">Prompt système</div><div class="sub">${systemIsDefault ? "Valeur par défaut (jamais modifiée)" : "Personnalisé"}</div></div></div>
+        <p class="muted setting-warning">${icon("i-info")} Ce texte pilote directement la rédaction (structure, ton, garde-fous anti-invention et anti-injection). Le marqueur interne <code>2. LONGUEUR</code> doit rester présent : sa suppression ne provoque aucune erreur, mais modifie légèrement la génération section par section. En cas de doute, utilise « Réinitialiser par défaut ».</p>
+        <textarea class="text-input" id="agentPromptSystem" rows="14">${escta(systemVal)}</textarea>
+        <div class="actions">
           <button class="btn btn-primary" id="agentPromptSaveSystem">Enregistrer le prompt système</button>
           <button class="btn btn-ghost" id="agentPromptResetSystem" ${systemIsDefault ? "disabled" : ""}>Réinitialiser par défaut</button>
           <button class="btn btn-ghost" id="agentPromptSuggest">${icon("i-spark")} Suggestions IA</button>
         </div>
-        <div id="agentPromptSuggestions" hidden style="margin-top:12px;padding:12px;border-radius:10px;background:var(--surface-2,rgba(255,255,255,.04))"></div>
+        <div class="prompt-suggestions-panel" id="agentPromptSuggestions" hidden></div>
       </div>
       <div class="setting-card">
         <div class="setting-card-head"><span class="meta-ic">${icon("i-check")}</span><div class="meta"><div class="name">Compétences facultatives</div><div class="sub">Comportements précis, activables un par un — aucune n'est requise</div></div></div>
         <div class="skills-list">${skills.map(skillRow).join("")}</div>
       </div>
       <div class="setting-card">
-        <div class="setting-card-head"><span class="meta-ic">${icon("i-facts")}</span><div class="meta"><div class="name">Exemples de style rédactionnel</div><div class="sub">Fichiers texte, .md, .docx ou .pdf — le rédacteur s'en inspire pour le ton, jamais pour le contenu</div></div></div>
-        ${styleExamples.length ? `<div class="style-examples-list" style="margin-bottom:12px">${styleExamples.map(exampleRow).join("")}</div>` : '<p class="muted" style="margin:0 0 12px">Aucun exemple fourni pour l\'instant.</p>'}
-        <label class="btn btn-ghost btn-sm" ${styleExamples.length >= 5 ? "disabled" : ""}>
+        <div class="setting-card-head"><span class="meta-ic">${icon("i-brush")}</span><div class="meta"><div class="name">Exemples de style rédactionnel</div><div class="sub">Fichiers texte, .md, .docx ou .pdf — le rédacteur s'en inspire pour le ton, jamais pour le contenu</div></div></div>
+        ${styleExamples.length ? `<div class="style-examples-list">${styleExamples.map(exampleRow).join("")}</div>` : '<p class="muted" style="margin:0 0 12px">Aucun exemple fourni pour l\'instant.</p>'}
+        <label class="btn btn-ghost btn-sm style-upload-btn" ${styleExamples.length >= 5 ? "disabled" : ""}>
           <input type="file" id="agentStyleFile" accept=".txt,.md,.markdown,.docx,.pdf" hidden ${styleExamples.length >= 5 ? "disabled" : ""}>
           ${icon("i-plus")} Ajouter un exemple ${styleExamples.length >= 5 ? "(maximum 5 atteint)" : ""}
         </label>
-        <details style="margin-top:14px">
-          <summary style="cursor:pointer;font-weight:600">Pas de fichier sous la main ? Suggestions prédéfinies</summary>
-          <p class="muted" style="margin:8px 0 10px">Extraits courts prêts à l'emploi, à ajouter en un clic comme exemple de style.</p>
-          <div class="style-presets-list">${stylePresets.map(presetRow).join("")}</div>
+        <details class="disclosure">
+          <summary>${icon("i-chevron-right")} Pas de fichier sous la main ? Suggestions prédéfinies</summary>
+          <div class="disclosure-body">
+            <p class="muted" style="margin:0 0 10px">Extraits courts prêts à l'emploi, à ajouter en un clic comme exemple de style.</p>
+            <div class="style-presets-list">${stylePresets.map(presetRow).join("")}</div>
+          </div>
         </details>
       </div>
       <div class="setting-card">
-        <div class="setting-card-head"><span class="meta-ic">${icon("i-edit")}</span><div class="meta"><div class="name">Prompt utilisateur</div><div class="sub">Instructions complémentaires, ajoutées à la suite du prompt système, sans risque sur sa structure</div></div></div>
-        <textarea class="text-input" id="agentPromptAddon" rows="6" style="width:100%;resize:vertical" placeholder="Ex. : privilégier un ton plus institutionnel sur les sujets diplomatiques…">${escta(data.addon)}</textarea>
-        <div class="actions" style="margin-top:10px">
+        <div class="setting-card-head"><span class="meta-ic">${icon("i-user")}</span><div class="meta"><div class="name">Prompt utilisateur</div><div class="sub">Instructions complémentaires, ajoutées à la suite du prompt système, sans risque sur sa structure</div></div></div>
+        <textarea class="text-input" id="agentPromptAddon" rows="6" placeholder="Ex. : privilégier un ton plus institutionnel sur les sujets diplomatiques…">${escta(data.addon)}</textarea>
+        <div class="actions">
           <button class="btn btn-primary" id="agentPromptSaveAddon">Enregistrer</button>
           <button class="btn btn-ghost" id="agentPromptResetAddon" ${data.addon ? "" : "disabled"}>Retirer</button>
         </div>
@@ -733,7 +738,7 @@ function bindSettings() {
         if (panel) {
           panel.hidden = false;
           panel.innerHTML = r.ok
-            ? `<div class="name" style="margin-bottom:8px">Pistes d'amélioration</div><div class="muted" style="white-space:pre-line">${esc(r.suggestions)}</div>`
+            ? `<div class="name">${icon("i-spark")} Pistes d'amélioration</div><div class="muted prompt-suggestions-text">${esc(r.suggestions)}</div>`
             : `<p class="muted">${esc(r.error || "Aucune suggestion disponible pour l'instant.")}</p>`;
         }
       } catch (e) { snack(e.message || "Erreur"); }
