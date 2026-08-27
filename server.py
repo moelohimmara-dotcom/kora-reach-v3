@@ -582,6 +582,7 @@ class Handler(BaseHTTPRequestHandler):
                 "skills": ov["skills"],
                 "skills_enabled": ov["skills_enabled"],
                 "style_examples": ov["style_examples"],
+                "style_presets": ov["style_presets"],
             })
         if path == "/api/last":
             if not self._require_auth():
@@ -1273,6 +1274,16 @@ class Handler(BaseHTTPRequestHandler):
             if not extracted.get("ok"):
                 return self._send(400, extracted)
             res = agent_prompts.add_style_example(filename, extracted["text"], editor=self._actor_username())
+            return self._send(200 if res.get("ok") else 400, res)
+        if p.path == "/api/agent-prompts/style-example/preset":
+            # Suggestions prédéfinies d'exemples de style (2026-08-27, demande
+            # explicite : "ajouter une fonctionnalité qui apporte quelques
+            # suggestions prédéfinies au user") -- ajoute un extrait tout prêt
+            # sans upload, même circuit que style-example.
+            if not self._require_capability("modifier_prompts_agent"):
+                return
+            preset_id = payload.get("preset_id") or ""
+            res = agent_prompts.add_style_preset(preset_id, editor=self._actor_username())
             return self._send(200 if res.get("ok") else 400, res)
         if p.path == "/api/agent-prompts/style-example/delete":
             if not self._require_capability("modifier_prompts_agent"):

@@ -609,6 +609,8 @@ function bindSettings() {
     const skills = data.skills || [];
     const skillsEnabled = new Set(data.skills_enabled || []);
     const styleExamples = data.style_examples || [];
+    const stylePresets = data.style_presets || [];
+    const addedPresetLabels = new Set(styleExamples.map((e) => e.filename));
     const skillRow = (s) => `
       <label class="list-row skill-row" style="cursor:pointer;align-items:flex-start">
         <input type="checkbox" class="skill-check" data-skill-id="${esc(s.id)}" ${skillsEnabled.has(s.id) ? "checked" : ""} style="margin-top:3px">
@@ -623,6 +625,18 @@ function bindSettings() {
         <div class="meta"><div class="name">${esc(e.filename)}</div><div class="sub">${e.length} caractères extraits · « ${esc(e.excerpt)}${e.excerpt.length >= 200 ? "…" : ""} »</div></div>
         <button class="btn btn-ghost btn-sm" data-del-example="${esc(e.id)}">${icon("i-trash")}</button>
       </div>`;
+    const presetRow = (p) => {
+      const already = addedPresetLabels.has(`Suggestion prédéfinie : ${p.label}`);
+      return `
+      <label class="list-row" style="align-items:flex-start">
+        <span class="meta-ic">${icon("i-spark")}</span>
+        <div class="meta" style="margin-left:10px">
+          <div class="name">${esc(p.label)}</div>
+          <div class="sub">${esc(p.description)}</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" data-add-preset="${esc(p.id)}" ${already || styleExamples.length >= 5 ? "disabled" : ""}>${already ? "Déjà ajoutée" : "Ajouter"}</button>
+      </label>`;
+    };
     body.innerHTML = `
       <p class="muted" style="margin:0 0 14px">Personnalise le comportement du rédacteur automatique. Toute modification est tracée dans le journal d'audit. Rien ici n'est obligatoire : l'agent fonctionne déjà avec le seul prompt système par défaut.</p>
       <div class="setting-card">
@@ -647,6 +661,11 @@ function bindSettings() {
           <input type="file" id="agentStyleFile" accept=".txt,.md,.markdown,.docx,.pdf" hidden ${styleExamples.length >= 5 ? "disabled" : ""}>
           ${icon("i-plus")} Ajouter un exemple ${styleExamples.length >= 5 ? "(maximum 5 atteint)" : ""}
         </label>
+        <details style="margin-top:14px">
+          <summary style="cursor:pointer;font-weight:600">Pas de fichier sous la main ? Suggestions prédéfinies</summary>
+          <p class="muted" style="margin:8px 0 10px">Extraits courts prêts à l'emploi, à ajouter en un clic comme exemple de style.</p>
+          <div class="style-presets-list">${stylePresets.map(presetRow).join("")}</div>
+        </details>
       </div>
       <div class="setting-card">
         <div class="setting-card-head"><span class="meta-ic">${icon("i-edit")}</span><div class="meta"><div class="name">Prompt utilisateur</div><div class="sub">Instructions complémentaires, ajoutées à la suite du prompt système, sans risque sur sa structure</div></div></div>
@@ -681,6 +700,16 @@ function bindSettings() {
         else snack(r.error || "Erreur");
       } catch (e) { snack(e.message || "Erreur d'envoi"); }
     };
+    body.querySelectorAll("[data-add-preset]").forEach((btn) => {
+      btn.onclick = async () => {
+        btn.disabled = true;
+        try {
+          const r = await Store.api("/api/agent-prompts/style-example/preset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preset_id: btn.dataset.addPreset }) });
+          if (r.ok) { snack("Exemple ajouté"); await loadAgentPrompts(); }
+          else { snack(r.error || "Erreur"); btn.disabled = false; }
+        } catch (e) { snack(e.message || "Erreur"); btn.disabled = false; }
+      };
+    });
     body.querySelectorAll("[data-del-example]").forEach((btn) => {
       btn.onclick = async () => {
         try {

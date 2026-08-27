@@ -205,6 +205,69 @@ def extract_text_from_upload(filename: str, data_url: str) -> dict:
     return {"ok": True, "text": text}
 
 
+# ---------------------------------------------------------------------------
+# SUGGESTIONS PREDEFINIES D'EXEMPLES DE STYLE (2026-08-27, demande explicite :
+# "il faut ajouter une fonctionnalite qui apporte quelques suggestions
+# predefinies au user"). Le user n'a pas forcement un fichier sous la main --
+# ces presets sont des extraits reels et courts (ecrits pour KORA, contexte
+# Guinee/Conakry) qu'il peut ajouter en un clic comme exemple de style, au
+# meme titre qu'un upload. Reutilisent le meme stockage (kora_style_examples)
+# et le meme circuit prompt -- aucune logique dupliquee.
+# ---------------------------------------------------------------------------
+STYLE_PRESETS = [
+    {
+        "id": "sobre_institutionnel",
+        "label": "Sobre et institutionnel",
+        "description": "Registre formel, phrases courtes, aucun effet de style — adapté aux communiqués officiels.",
+        "text": ("Le ministère de l'Administration du territoire a annoncé, dans un communiqué diffusé "
+                 "ce lundi, la tenue d'une réunion de coordination avec les gouverneurs de région. "
+                 "La rencontre, prévue à Conakry, doit porter sur le suivi des instructions "
+                 "gouvernementales relatives à la décentralisation. Aucune date de clôture n'a été "
+                 "précisée à ce stade."),
+    },
+    {
+        "id": "narratif_vivant",
+        "label": "Narratif et vivant",
+        "description": "Ancre le fait dans une scène concrète avant d'aller à l'essentiel — plus incarné, sans perdre en rigueur.",
+        "text": ("Il est un peu plus de 7 heures quand les premiers commerçants du marché de Madina "
+                 "découvrent les grilles fermées. Depuis la nuit, un incendie a ravagé une dizaine "
+                 "d'étals dans la section réservée aux tissus. Les sapeurs-pompiers, arrivés vers "
+                 "5 heures, ont maîtrisé les flammes avant qu'elles n'atteignent les entrepôts voisins. "
+                 "Aucune victime n'est à déplorer, mais les pertes matérielles s'annoncent lourdes."),
+    },
+    {
+        "id": "incisif_direct",
+        "label": "Incisif et direct",
+        "description": "Phrases très courtes, va droit au fait marquant, peu de contexte en ouverture — pour une actualité chaude.",
+        "text": ("Coupure générale. Depuis mardi soir, plusieurs quartiers de Conakry sont privés "
+                 "d'électricité. La société en charge évoque une panne technique sur le réseau haute "
+                 "tension. Aucun délai de rétablissement n'a été communiqué. Les habitants, eux, "
+                 "s'organisent déjà avec des groupes électrogènes."),
+    },
+    {
+        "id": "factuel_dense",
+        "label": "Factuel et dense",
+        "description": "Beaucoup d'information par phrase, chiffres et dates intégrés naturellement — pour l'économie ou les données.",
+        "text": ("La production nationale de bauxite a atteint 108 millions de tonnes en 2025, en "
+                 "hausse de 12 % par rapport à l'année précédente, selon les chiffres publiés mercredi "
+                 "par le ministère des Mines. Cette progression s'explique principalement par la montée "
+                 "en puissance de trois nouveaux sites d'exploitation dans la préfecture de Boké, "
+                 "entrés en production au second semestre."),
+    },
+]
+_STYLE_PRESETS_BY_ID = {p["id"]: p for p in STYLE_PRESETS}
+
+
+def add_style_preset(preset_id: str, editor: str = None) -> dict:
+    """Ajoute une suggestion prédéfinie (voir STYLE_PRESETS) comme exemple de
+    style, sans passer par un upload -- même stockage, même circuit que
+    add_style_example()."""
+    preset = _STYLE_PRESETS_BY_ID.get(preset_id)
+    if not preset:
+        return {"ok": False, "error": "suggestion_inconnue"}
+    return add_style_example(f"Suggestion prédéfinie : {preset['label']}", preset["text"], editor=editor)
+
+
 def list_style_examples() -> list:
     _ensure_table()
     con, _ = db.conn()
@@ -368,6 +431,7 @@ def get_overrides() -> dict:
         "skills": SKILLS,
         "skills_enabled": skills_enabled,
         "style_examples": list_style_examples(),
+        "style_presets": STYLE_PRESETS,
     }
 
 
