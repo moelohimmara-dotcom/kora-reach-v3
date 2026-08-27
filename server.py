@@ -575,6 +575,13 @@ class Handler(BaseHTTPRequestHandler):
                 "addon": ov["addon"],
                 "system_is_default": not ov["system"],
                 "default_system": writer.SYSTEM_PROMPT,
+                # 2026-08-27 : compétences facultatives + exemples de style
+                # (voir generation/agent_prompts.py) -- exposés ici pour que
+                # l'UI n'ait qu'un seul endpoint à charger pour tout le
+                # panneau "Agent".
+                "skills": ov["skills"],
+                "skills_enabled": ov["skills_enabled"],
+                "style_examples": ov["style_examples"],
             })
         if path == "/api/last":
             if not self._require_auth():
@@ -1248,6 +1255,43 @@ class Handler(BaseHTTPRequestHandler):
                 return
             field = payload.get("field")  # "system" | "addon"
             res = agent_prompts.reset(field, editor=self._actor_username())
+            return self._send(200 if res.get("ok") else 400, res)
+        if p.path == "/api/agent-prompts/skills":
+            # Compétences facultatives (2026-08-27) : mêmes garde-fous
+            # (capability + audit) que le reste de la zone sensible "Agent".
+            if not self._require_capability("modifier_prompts_agent"):
+                return
+            ids = payload.get("ids") or []
+            res = agent_prompts.set_skills_enabled(ids, editor=self._actor_username())
+            return self._send(200 if res.get("ok") else 400, res)
+        if p.path == "/api/agent-prompts/style-example":
+            if not self._require_capability("modifier_prompts_agent"):
+                return
+            filename = payload.get("filename") or ""
+            data_url = payload.get("data_url") or ""
+            extracted = agent_prompts.extract_text_from_upload(filename, data_url)
+            if not extracted.get("ok"):
+                return self._send(400, extracted)
+            res = agent_prompts.add_style_example(filename, extracted["text"], editor=self._actor_username())
+            return self._send(200 if res.get("ok") else 400, res)
+        if p.path == "/api/agent-prompts/style-example/delete":
+            if not self._require_capability("modifier_prompts_agent"):
+                return
+            example_id = payload.get("id") or ""
+            res = agent_prompts.delete_style_example(example_id, editor=self._actor_username())
+            return self._send(200 if res.get("ok") else 400, res)
+        if p.path == "/api/agent-prompts/suggest":
+            # Suggestions IA (2026-08-27, demande explicite : "suggestions
+            # intelligentes pour le guider") -- ne modifie jamais rien tout
+            # seul, retourne uniquement des pistes texte que l'éditeur
+            # applique lui-même via les champs existants.
+            if not self._require_capability("modifier_prompts_agent"):
+                return
+            ov = agent_prompts.get_overrides()
+            current_system = payload.get("system") if payload.get("system") is not None else (ov["system"] or writer.SYSTEM_PROMPT)
+            current_addon = payload.get("addon") if payload.get("addon") is not None else ov["addon"]
+            goal = payload.get("goal") or ""
+            res = agent_prompts.suggest_improvements(current_system, current_addon, goal)
             return self._send(200 if res.get("ok") else 400, res)
         if p.path == "/api/whitelist":
             # Ajout d'une source (2026-08-19 : gouvernance ouverte a l'UI,

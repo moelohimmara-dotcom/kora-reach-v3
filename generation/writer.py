@@ -144,14 +144,21 @@ def get_system_prompt() -> str:
     """Prompt système effectif (§9.5) : override DB si défini (advanced, zone
     sensible avec piste d'audit — voir agent_prompts.py), sinon SYSTEM_PROMPT
     codé en dur ci-dessus. Un add-on optionnel est ajouté à la suite, sans
-    jamais toucher au marqueur '2. LONGUEUR' dont dépend le split() plus bas."""
+    jamais toucher au marqueur '2. LONGUEUR' dont dépend le split() plus bas.
+
+    2026-08-27 : utilise `effective_addon` (addon brut + compétences facultatives
+    activées + exemples de style fournis par l'éditeur, tous composés côté
+    agent_prompts.py) plutôt que le seul `addon` brut -- repli sur `addon` si
+    un ancien code/test appelle get_overrides() sans cette clé (compatibilité)."""
     try:
         import generation.agent_prompts as agent_prompts
         ov = agent_prompts.get_overrides()
     except Exception:
-        ov = {"system": "", "addon": ""}
+        ov = {"system": "", "addon": "", "effective_addon": ""}
     base = ov.get("system") or SYSTEM_PROMPT
-    addon = ov.get("addon") or ""
+    addon = ov.get("effective_addon")
+    if addon is None:
+        addon = ov.get("addon") or ""
     if addon:
         base = base + "\n\nINSTRUCTIONS COMPLÉMENTAIRES (add-on) :\n" + addon
     return base
