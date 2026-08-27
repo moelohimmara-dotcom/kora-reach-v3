@@ -1,0 +1,4 @@
+# Sauvegarde quotidienne KORA (base Postgres + copie hors VPS Supabase Storage)
+# 2026-08-26 -- voir deploy/scripts/backup_kora_db.sh
+# Installation VPS : sudo cp deploy/kora-backup.cron /etc/cron.d/kora-backup
+0 3 * * * kora /opt/kora-reach/scripts/backup_kora_db.sh >> /opt/kora-reach/backups/backup.log 2>&1
