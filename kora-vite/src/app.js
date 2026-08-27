@@ -38,7 +38,7 @@ import { viewVideos, bindVideos, bindVideoPlayers } from "./views/videos.js";
 import { viewSources, bindSources } from "./views/sources.js";
 import { viewSettings, bindSettings } from "./views/settings.js";
 import { viewAudit, bindAudit } from "./views/audit.js";
-import { viewStyleGuide } from "./views/styleguide.js";
+import { viewStyleGuide, bindStyleGuide } from "./views/styleguide.js";
 import { renderAuth, isAuthRendered, isForceAuthOverlay, bindPasswordToggles } from "./views/auth.js";
 
 // ============================================================================
@@ -577,6 +577,7 @@ function render() {
   // depuis le correctif de list_facts() (editorial/hitl_store.py).
   try { if (s.route === "published") bindVideoPlayers(s.facts || []); } catch (e) { console.error("bindVideoPlayers(published)", e); }
   try { if (s.route === "settings" && !settingsAlreadyMounted) bindSettings(); } catch (e) { console.error("bindSettings", e); }
+  try { if (s.route === "styleguide") bindStyleGuide(); } catch (e) { console.error("bindStyleGuide", e); }
   // Barre d'action de sélection multiple
   try {
     const sb = document.getElementById("selectBar");
@@ -1262,6 +1263,25 @@ function bind() {
     document.addEventListener("click", (e) => {
       const tb = e.target.closest("[data-theme-btn]");
       if (tb) { Store.setTheme(tb.dataset.themeBtn); return; }
+    });
+  }
+  // Bouton "retour" de page (2026-08-27, demande explicite : "quand je suis
+  // dans une page qui ouvre une autre page... un bouton pour retourner
+  // exactement où on se trouvait"). Générique et réutilisable par n'importe
+  // quelle page atteinte hors du rail principal (aujourd'hui : Style Guide,
+  // via Paramètres > Avancés) : history.back() restaure l'état RÉEL précédent
+  // (navigate() pousse déjà un vrai history.pushState à chaque changement de
+  // route, voir plus haut) -- pas une destination fixe qui pourrait être
+  // fausse si la page a été atteinte autrement qu'on ne l'imagine. Filet de
+  // sécurité : si aucun historique KORA n'existe (arrivée directe par lien/
+  // favori), data-page-back-fallback donne une route de repli.
+  if (!window.__koraPageBackClickBound) {
+    window.__koraPageBackClickBound = true;
+    document.addEventListener("click", (e) => {
+      const pb = e.target.closest("[data-page-back]");
+      if (!pb) return;
+      if (window.history.length > 1) { window.history.back(); return; }
+      navigate(pb.dataset.pageBackFallback || "dashboard");
     });
   }
   const tcyc = document.querySelector("[data-theme-cycle]");

@@ -2204,6 +2204,19 @@ html.icons-ready .material-icons { visibility: visible; }
 .drawer-back:hover { background: var(--glass-bg-hover); color: var(--md-sys-color-on-surface); }
 .drawer-back .ic { width: 22px; height: 22px; }
 
+/* Bouton "retour" de page (2026-08-27) -- pour une page atteinte hors du
+   rail principal (ex. Style Guide, via Paramètres), toujours visible
+   (contrairement à .drawer-back, masqué sur desktop puisque le rail y
+   reste visible en permanence à côté du panneau). */
+.page-back {
+  display: inline-flex; align-items: center; gap: 6px; margin-bottom: 14px;
+  padding: 8px 14px 8px 10px; border-radius: var(--radius-pill); border: 1px solid var(--glass-border);
+  background: var(--glass-bg); color: var(--md-sys-color-on-surface-variant); cursor: pointer;
+  font-size: var(--t-label-sm); font-weight: 600; transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.page-back:hover { background: var(--glass-bg-hover); color: var(--md-sys-color-on-surface); }
+.page-back .ic { width: 16px; height: 16px; }
+
 
 /* ---- Desktop / Tablette (≥820px) : master-detail inline ---- */
 @media (min-width: 768px) {
@@ -2538,17 +2551,57 @@ html.icons-ready .material-icons { visibility: visible; }
 
 
 /* ============================================================
-   STYLE GUIDE (/style-guide) — page vivante du design system (B.1)
+   STYLE GUIDE (/style-guide) — page vivante du design system.
+   Refonte complète (2026-08-27) : réutilise .setting-card/.list-row (mêmes
+   composants que le reste de KORA) pour la structure ; les classes .sg-*
+   ci-dessous ne couvrent que ce que ces gabarits ne montrent pas déjà
+   (échantillons de tokens bruts : nuances, échelle typo, espacements,
+   rayons, élévation, catalogue d'icônes).
    ============================================================ */
-.sg-page { padding: 16px; }
-.sg-page h2.section-title { margin-top: 28px; }
+.sg-page { max-width: 860px; margin: 0 auto; padding: 16px; }
 .sg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
-.sg-token { display: flex; align-items: center; gap: 12px; padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
-.sg-swatch { width: 44px; height: 44px; border-radius: 8px; border: 1px solid var(--border); flex: 0 0 auto; }
-.sg-token-meta code { font-size: 13px; color: var(--text-primary); }
-.sg-type > div { margin: 6px 0; }
+.sg-token { display: flex; align-items: center; gap: 12px; padding: 10px; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-sm); }
+.sg-swatch { width: 44px; height: 44px; border-radius: var(--radius-xs); border: 1px solid var(--glass-border); flex: 0 0 auto; }
+.sg-token-meta code { font-size: 13px; color: var(--md-sys-color-on-surface); }
 .sg-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .sg-kpi { max-width: 260px; }
+
+/* Typographie -- une ligne par échelon, échantillon RÉEL + spec à droite */
+.sg-type-list { display: flex; flex-direction: column; gap: 14px; }
+.sg-type-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-bottom: 12px; border-bottom: 1px solid var(--glass-border); }
+.sg-type-row:last-child { border-bottom: none; padding-bottom: 0; }
+.sg-type-spec { flex: none; font-size: var(--t-label-sm); color: var(--md-sys-color-on-surface-variant); white-space: nowrap; }
+.sg-type-display { font-family: var(--font-display); font-size: var(--t-display); font-weight: 800; line-height: 1; }
+.sg-type-headline { font-family: var(--font-display); font-size: var(--t-headline); font-weight: 700; }
+.sg-type-title-lg { font-family: var(--font-display); font-size: var(--t-title-lg); font-weight: 700; }
+.sg-type-title { font-family: var(--font); font-size: var(--t-title); font-weight: 700; }
+.sg-type-body { font-family: var(--font); font-size: var(--t-body); font-weight: 400; line-height: 1.5; }
+.sg-type-label { font-family: var(--font); font-size: var(--t-label); font-weight: 700; }
+.sg-type-label-sm { font-family: var(--font); font-size: var(--t-label-sm); font-weight: 500; color: var(--md-sys-color-on-surface-variant); }
+.sg-type-label-xs { font-family: var(--font); font-size: var(--t-label-xs); font-weight: 600; color: var(--md-sys-color-on-surface-variant); letter-spacing: .3px; text-transform: uppercase; }
+
+/* Espacements -- barre proportionnelle à la valeur réelle du token */
+.sg-scale-list { display: flex; flex-direction: column; gap: 10px; }
+.sg-scale-row { display: flex; align-items: center; gap: 14px; }
+.sg-scale-row code { flex: 0 0 90px; font-size: var(--t-label-sm); color: var(--md-sys-color-on-surface); }
+.sg-space-bar { height: 10px; border-radius: var(--radius-xs); background: var(--coral); flex: none; }
+
+/* Rayons & élévation */
+.sg-radius-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 14px; margin-bottom: 18px; }
+.sg-radius-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.sg-radius-box { width: 56px; height: 56px; background: var(--glass-bg-strong); border: 1px solid var(--glass-border); }
+.sg-radius-cell code { font-size: var(--t-label-xs); color: var(--md-sys-color-on-surface); }
+.sg-elev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 18px; }
+.sg-elev-cell { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.sg-elev-box { width: 56px; height: 56px; border-radius: var(--radius-md); background: var(--glass-bg-strong); }
+.sg-elev-cell code { font-size: var(--t-label-xs); color: var(--md-sys-color-on-surface); }
+
+/* Icônes -- catalogue dynamique (voir bindStyleGuide) */
+.sg-icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 4px; }
+.sg-icon-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: var(--radius-sm); color: var(--md-sys-color-on-surface-variant); transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+.sg-icon-cell:hover { background: var(--glass-bg-hover); color: var(--md-sys-color-on-surface); }
+.sg-icon-cell .ic { width: 20px; height: 20px; }
+.sg-icon-cell code { font-size: 10px; text-align: center; overflow-wrap: anywhere; line-height: 1.3; }
 
 /* ============================================================
    BULLE DE REJET (wireframe 4.3b) — choix corbeille / suppression

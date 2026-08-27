@@ -99,6 +99,15 @@ function placeholderSvg(theme) {
   );
 }
 
+// Bouton "retour" générique pour une page atteinte hors du rail principal
+// (2026-08-27, demande explicite). Câblé une seule fois, globalement, par
+// délégation dans app.js (data-page-back) -- même mécanique que data-theme-btn.
+// `fallbackRoute` : route de repli si l'utilisateur arrive directement sur
+// cette page sans historique KORA (lien direct, favori, onglet rouvert).
+function pageBackButton(fallbackRoute = "dashboard") {
+  return `<button class="page-back" type="button" data-page-back data-page-back-fallback="${esc(fallbackRoute)}" aria-label="Retour">${icon("i-chevron-left")}<span>Retour</span></button>`;
+}
+
 function chip(label, kind = "", ic = "") {
   // kind = primary|secondary|tertiary|warning|error → classe MD3 .chip-<kind>
   const k = kind ? (kind.startsWith("chip-") ? kind : "chip-" + kind) : "";
@@ -301,7 +310,7 @@ function snack(msg) {
 export {
   $, $$, esc, isAdvancedRole, mdToHtml, mdToHtmlInline,
   rteWrapSelection, rtePrefixLines, rteHeading, rteLink,
-  icon, placeholderSvg, chip, factMeta, statusBadge,
+  icon, placeholderSvg, chip, factMeta, statusBadge, pageBackButton,
   imgSrc, hasImg, stateBox, ROLE_LABEL_FR,
   friendlyActionError, friendlyGlobalError, transmissionMessage, guardClick, snack,
 };
