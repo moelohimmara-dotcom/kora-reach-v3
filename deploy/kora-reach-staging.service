@@ -1,0 +1,36 @@
+# kora-reach-staging.service — environnement de test isole de la prod
+# (2026-08-27, meme VPS, service+base separes -- voir deploy/STAGING.md
+# pour le contexte complet et la procedure de mise a jour).
+[Unit]
+Description=KORA Reach STAGING — environnement de test isole
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=kora
+Group=kora
+WorkingDirectory=/opt/kora-reach-staging/repo
+EnvironmentFile=/opt/kora-reach-staging/repo/deploy/.env
+Environment=PORT=8768
+ExecStart=/opt/kora-reach-staging/repo/.venv/bin/python /opt/kora-reach-staging/repo/server.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/kora-reach-staging
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallFilter=@system-service
+
+[Install]
+WantedBy=multi-user.target
