@@ -239,6 +239,19 @@
     <button class="nav-item" data-view="supervision">Supervision</button>
     <button class="nav-item" data-view="config">Configuration</button>
     <button class="nav-item" data-view="audit">Audit &amp; sécurité</button>
+    <!-- Style Guide (2026-08-27, demande explicite : "elle doit aller dans
+         la console root") : lien EXTERNE plutôt qu'un onglet interne --
+         la page (docs/DESIGN_SYSTEM.md, réutilise les vrais composants de
+         l'app éditeur) reste servie par l'app éditeur, seule source de
+         vérité -- la dupliquer ici avec le look terminal de la console root
+         la ferait diverger du vrai rendu qu'elle est censée documenter.
+         Ouvre dans un nouvel onglet : nécessite une session éditeur active
+         (séparée de la session root, voir ADR-0002) -- comportement voulu,
+         pas une limitation. -->
+    <a class="nav-item" href="/kora-v2/style-guide" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:space-between;text-decoration:none">
+      <span>Style Guide (app)</span>
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>
+    </a>
     <div class="sidebar-foot">
       <button id="logoutBtn" style="width:100%">Déconnexion</button>
     </div>

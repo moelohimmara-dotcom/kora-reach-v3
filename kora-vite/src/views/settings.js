@@ -47,13 +47,18 @@ function viewSettings(s) {
     { id: "accounts", ic: "i-users", title: "Comptes & habilitations", sub: "Utilisateurs et rôles" },
     { id: "agent", ic: "i-spark", title: "Agent", sub: "Prompt système, instructions (zone sensible)" },
     { id: "transmitter", ic: "i-send", title: "Transmetteur", sub: "Mode de publication actif" },
-    // Style Guide (B.1) : sorti du rail principal (revue sidebar) — outil de
-    // gouvernance design occasionnel, pas un geste quotidien. data-setnav
-    // spécial : ne correspond à AUCUN tiroir #drawer-styleguide, il navigue
-    // directement vers /style-guide (voir override après la boucle générique
-    // dans bindSettings, même précaution que auditNav/agentNav).
-    { id: "styleguide", ic: "i-palette", title: "Style Guide", sub: "Référence vivante du design system" },
   ] : [];
+  // Style Guide : retiré des Paramètres éditeur (2026-08-27, demande
+  // explicite après clarification de son utilité réelle -- outil de
+  // gouvernance design, sans usage quotidien pour un éditeur). Déplacé dans
+  // la console root (/root-console), aux côtés de Supervision/Configuration/
+  // Audit -- même terrain que les autres outils réservés à l'exploitant
+  // système. La route /style-guide elle-même n'a pas bougé (toujours servie
+  // par l'app éditeur, seule source de vérité pour éviter une copie qui
+  // divergerait) ; la console root y renvoie par un lien externe plutôt que
+  // de percer la séparation d'authentification root/éditeur voulue par
+  // l'ADR-0002 -- accéder à la page exige donc une session éditeur active,
+  // ce qui reste cohérent avec l'isolation recherchée.
   const adminItems = isAdmin ? [
     { id: "auditlog", ic: "i-shield", title: "Journal d'audit", sub: "Connexions, mots de passe, paramètres" },
   ] : [];
@@ -1039,10 +1044,6 @@ function bindSettings() {
   if (agentNav) agentNav.onclick = () => { openDrawer("agent"); loadAgentPrompts(); };
   const transmitterNav = view.querySelector('.settings-nav-item[data-setnav="transmitter"]');
   if (transmitterNav) transmitterNav.onclick = () => { openDrawer("transmitter"); loadTransmitterStatus(); };
-  // Style Guide : pas un tiroir, une navigation directe vers /style-guide
-  // (sorti du rail principal — outil de gouvernance design occasionnel).
-  const sgNav = view.querySelector('.settings-nav-item[data-setnav="styleguide"]');
-  if (sgNav) sgNav.onclick = () => navigate("styleguide");
   if (scrim) scrim.onclick = closeDrawer;
   view.querySelectorAll("[data-setback]").forEach(b => b.onclick = closeDrawer);
   // Escape ferme le tiroir settings (sans fermer la feuille HITL)
