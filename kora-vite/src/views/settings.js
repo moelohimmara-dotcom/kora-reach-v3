@@ -589,13 +589,42 @@ function bindSettings() {
 
   // ---- Agent : prompt système / add-on éditables (9.5, zone sensible) ----
   const escta = (t) => esc(t || "");
+  // Compétences facultatives + exemples de style (2026-08-27, demande
+  // explicite : donner à l'utilisateur le contrôle du "cerveau moteur" de
+  // son agent, au-delà du seul prompt système). Formats de fichier couverts
+  // en 1ère phase (décision explicite) : texte/.md, .docx, .pdf.
+  const STYLE_FILE_MAX_BYTES = 5 * 1024 * 1024;
+  const _fileToDataUrl = (f) => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(f);
+  });
+
   const renderAgentPromptBody = (data) => {
     const body = document.getElementById("agentPromptBody");
     if (!body) return;
     const systemIsDefault = data.system_is_default;
     const systemVal = systemIsDefault ? data.default_system : data.system;
+    const skills = data.skills || [];
+    const skillsEnabled = new Set(data.skills_enabled || []);
+    const styleExamples = data.style_examples || [];
+    const skillRow = (s) => `
+      <label class="list-row skill-row" style="cursor:pointer;align-items:flex-start">
+        <input type="checkbox" class="skill-check" data-skill-id="${esc(s.id)}" ${skillsEnabled.has(s.id) ? "checked" : ""} style="margin-top:3px">
+        <div class="meta" style="margin-left:10px">
+          <div class="name">${esc(s.label)}</div>
+          <div class="sub">${esc(s.description)}</div>
+        </div>
+      </label>`;
+    const exampleRow = (e) => `
+      <div class="list-row" style="align-items:center">
+        <span class="meta-ic">${icon("i-facts")}</span>
+        <div class="meta"><div class="name">${esc(e.filename)}</div><div class="sub">${e.length} caractères extraits · « ${esc(e.excerpt)}${e.excerpt.length >= 200 ? "…" : ""} »</div></div>
+        <button class="btn btn-ghost btn-sm" data-del-example="${esc(e.id)}">${icon("i-trash")}</button>
+      </div>`;
     body.innerHTML = `
-      <p class="muted" style="margin:0 0 14px">Personnalise le comportement du rédacteur automatique. Toute modification est tracée dans le journal d'audit.</p>
+      <p class="muted" style="margin:0 0 14px">Personnalise le comportement du rédacteur automatique. Toute modification est tracée dans le journal d'audit. Rien ici n'est obligatoire : l'agent fonctionne déjà avec le seul prompt système par défaut.</p>
       <div class="setting-card">
         <div class="setting-card-head"><span class="meta-ic">${icon("i-alert")}</span><div class="meta"><div class="name">Prompt système</div><div class="sub">${systemIsDefault ? "Valeur par défaut (jamais modifiée)" : "Personnalisé"}</div></div></div>
         <p class="muted" style="margin:0 0 10px">⚠️ Ce texte pilote directement la rédaction (structure, ton, garde-fous anti-invention et anti-injection). Le marqueur interne <code>2. LONGUEUR</code> doit rester présent : sa suppression ne provoque aucune erreur, mais modifie légèrement la génération section par section. En cas de doute, utilise « Réinitialiser par défaut ».</p>
@@ -603,16 +632,84 @@ function bindSettings() {
         <div class="actions" style="margin-top:10px">
           <button class="btn btn-primary" id="agentPromptSaveSystem">Enregistrer le prompt système</button>
           <button class="btn btn-ghost" id="agentPromptResetSystem" ${systemIsDefault ? "disabled" : ""}>Réinitialiser par défaut</button>
+          <button class="btn btn-ghost" id="agentPromptSuggest">${icon("i-spark")} Suggestions IA</button>
         </div>
+        <div id="agentPromptSuggestions" hidden style="margin-top:12px;padding:12px;border-radius:10px;background:var(--surface-2,rgba(255,255,255,.04))"></div>
       </div>
       <div class="setting-card">
-        <div class="setting-card-head"><span class="meta-ic">${icon("i-edit")}</span><div class="meta"><div class="name">Instructions complémentaires (add-on)</div><div class="sub">Ajoutées à la suite du prompt système, sans risque sur sa structure</div></div></div>
+        <div class="setting-card-head"><span class="meta-ic">${icon("i-check")}</span><div class="meta"><div class="name">Compétences facultatives</div><div class="sub">Comportements précis, activables un par un — aucune n'est requise</div></div></div>
+        <div class="skills-list">${skills.map(skillRow).join("")}</div>
+      </div>
+      <div class="setting-card">
+        <div class="setting-card-head"><span class="meta-ic">${icon("i-facts")}</span><div class="meta"><div class="name">Exemples de style rédactionnel</div><div class="sub">Fichiers texte, .md, .docx ou .pdf — le rédacteur s'en inspire pour le ton, jamais pour le contenu</div></div></div>
+        ${styleExamples.length ? `<div class="style-examples-list" style="margin-bottom:12px">${styleExamples.map(exampleRow).join("")}</div>` : '<p class="muted" style="margin:0 0 12px">Aucun exemple fourni pour l\'instant.</p>'}
+        <label class="btn btn-ghost btn-sm" ${styleExamples.length >= 5 ? "disabled" : ""}>
+          <input type="file" id="agentStyleFile" accept=".txt,.md,.markdown,.docx,.pdf" hidden ${styleExamples.length >= 5 ? "disabled" : ""}>
+          ${icon("i-plus")} Ajouter un exemple ${styleExamples.length >= 5 ? "(maximum 5 atteint)" : ""}
+        </label>
+      </div>
+      <div class="setting-card">
+        <div class="setting-card-head"><span class="meta-ic">${icon("i-edit")}</span><div class="meta"><div class="name">Prompt utilisateur</div><div class="sub">Instructions complémentaires, ajoutées à la suite du prompt système, sans risque sur sa structure</div></div></div>
         <textarea class="text-input" id="agentPromptAddon" rows="6" style="width:100%;resize:vertical" placeholder="Ex. : privilégier un ton plus institutionnel sur les sujets diplomatiques…">${escta(data.addon)}</textarea>
         <div class="actions" style="margin-top:10px">
-          <button class="btn btn-primary" id="agentPromptSaveAddon">Enregistrer l'add-on</button>
-          <button class="btn btn-ghost" id="agentPromptResetAddon" ${data.addon ? "" : "disabled"}>Retirer l'add-on</button>
+          <button class="btn btn-primary" id="agentPromptSaveAddon">Enregistrer</button>
+          <button class="btn btn-ghost" id="agentPromptResetAddon" ${data.addon ? "" : "disabled"}>Retirer</button>
         </div>
       </div>`;
+
+    // ---- Compétences : bascule immédiate au clic (pas de bouton "enregistrer" séparé) ----
+    body.querySelectorAll(".skill-check").forEach((cb) => {
+      cb.onchange = async () => {
+        const ids = [...body.querySelectorAll(".skill-check:checked")].map((el) => el.dataset.skillId);
+        try {
+          await Store.api("/api/agent-prompts/skills", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+          snack(cb.checked ? "Compétence activée" : "Compétence désactivée");
+        } catch (e) { cb.checked = !cb.checked; snack(e.message || "Erreur"); }
+      };
+    });
+
+    // ---- Exemples de style : upload + suppression ----
+    const styleFile = document.getElementById("agentStyleFile");
+    if (styleFile) styleFile.onchange = async () => {
+      const f = styleFile.files && styleFile.files[0];
+      if (!f) return;
+      if (f.size > STYLE_FILE_MAX_BYTES) { snack("Fichier trop lourd (max 5 Mo)"); styleFile.value = ""; return; }
+      try {
+        const dataUrl = await _fileToDataUrl(f);
+        const r = await Store.api("/api/agent-prompts/style-example", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: f.name, data_url: dataUrl }) });
+        if (r.ok) { snack("Exemple ajouté"); await loadAgentPrompts(); }
+        else snack(r.error || "Erreur");
+      } catch (e) { snack(e.message || "Erreur d'envoi"); }
+    };
+    body.querySelectorAll("[data-del-example]").forEach((btn) => {
+      btn.onclick = async () => {
+        try {
+          await Store.api("/api/agent-prompts/style-example/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: btn.dataset.delExample }) });
+          snack("Exemple retiré");
+          await loadAgentPrompts();
+        } catch (e) { snack(e.message || "Erreur"); }
+      };
+    });
+
+    // ---- Suggestions IA : n'écrit jamais le prompt toute seule, l'éditeur applique lui-même ----
+    const suggestBtn = document.getElementById("agentPromptSuggest");
+    if (suggestBtn) suggestBtn.onclick = async () => {
+      const panel = document.getElementById("agentPromptSuggestions");
+      const currentSystem = document.getElementById("agentPromptSystem")?.value || "";
+      const currentAddon = document.getElementById("agentPromptAddon")?.value || "";
+      suggestBtn.disabled = true;
+      suggestBtn.textContent = "Analyse en cours…";
+      try {
+        const r = await Store.api("/api/agent-prompts/suggest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ system: currentSystem, addon: currentAddon }) });
+        if (panel) {
+          panel.hidden = false;
+          panel.innerHTML = r.ok
+            ? `<div class="name" style="margin-bottom:8px">Pistes d'amélioration</div><div class="muted" style="white-space:pre-line">${esc(r.suggestions)}</div>`
+            : `<p class="muted">${esc(r.error || "Aucune suggestion disponible pour l'instant.")}</p>`;
+        }
+      } catch (e) { snack(e.message || "Erreur"); }
+      finally { suggestBtn.disabled = false; suggestBtn.innerHTML = `${icon("i-spark")} Suggestions IA`; }
+    };
     const saveSys = document.getElementById("agentPromptSaveSystem");
     if (saveSys) saveSys.onclick = async () => {
       const val = document.getElementById("agentPromptSystem")?.value || "";
