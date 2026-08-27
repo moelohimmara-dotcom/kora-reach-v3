@@ -25,10 +25,16 @@ const ok = (cond, msg) => { if (!cond) { failures.push(msg); console.log('  ✗ 
 const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', args: ['--no-sandbox'] });
 const ctx = await browser.newContext();
 // Cache désactivé : on teste toujours le build fraîchement déployé
+// try/catch obligatoire (2026-08-27, voir test_parcours_b.mjs pour le
+// détail) : une requête en vol au moment du browser.close() final peut
+// crasher tout le process (contexte disposé) au lieu de juste échouer
+// proprement -- ceci provoquerait un rollback deploy_check.sh à tort.
 await ctx.route('**/*', async (route) => {
-  const resp = await route.fetch();
-  const headers = { ...resp.headers(), 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache' };
-  await route.fulfill({ response: resp, headers });
+  try {
+    const resp = await route.fetch();
+    const headers = { ...resp.headers(), 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache' };
+    await route.fulfill({ response: resp, headers });
+  } catch (e) { try { await route.continue(); } catch (e2) { /* contexte déjà fermé -- rien à faire */ } }
 });
 const page = await ctx.newPage();
 await page.addInitScript(() => { try { if (window.caches) caches.keys().then(ks => ks.forEach(k => caches.delete(k))); } catch (e) {} });

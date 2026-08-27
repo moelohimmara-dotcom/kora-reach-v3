@@ -21,7 +21,16 @@ const nav = async (p, route) => { await p.evaluate((r) => { document.querySelect
 
 const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', args: ['--no-sandbox'] });
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-await ctx.route('**/*', async (route) => { const resp = await route.fetch(); await route.fulfill({ response: resp, headers: { ...resp.headers(), 'Cache-Control': 'no-store' } }); });
+// try/catch obligatoire (2026-08-27, voir test_parcours_b.mjs pour le
+// détail) : une requête en vol au moment du browser.close() final peut
+// crasher tout le process (contexte disposé) au lieu de juste échouer
+// proprement -- ceci provoquerait un rollback deploy_check.sh à tort.
+await ctx.route('**/*', async (route) => {
+  try {
+    const resp = await route.fetch();
+    await route.fulfill({ response: resp, headers: { ...resp.headers(), 'Cache-Control': 'no-store' } });
+  } catch (e) { try { await route.continue(); } catch (e2) { /* contexte déjà fermé -- rien à faire */ } }
+});
 const page = await ctx.newPage();
 await page.addInitScript(() => { try { if (window.caches) caches.keys().then(ks => ks.forEach(k => caches.delete(k))); } catch (e) {} });
 const errors = [];

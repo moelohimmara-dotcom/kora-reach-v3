@@ -14,7 +14,18 @@ const nav = async (p, route) => { await p.evaluate((r) => { document.querySelect
 
 const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', args: ['--no-sandbox'] });
 const ctx = await browser.newContext();
-await ctx.route('**/*', async (route) => { const resp = await route.fetch(); await route.fulfill({ response: resp, headers: { ...resp.headers(), 'Cache-Control': 'no-store' } }); });
+// try/catch obligatoire (2026-08-27, bug reproduit 2x en prod) : une image
+// externe encore en vol (ex. picsum.photos) au moment du browser.close() en
+// fin de script fait lever route.fetch()/route.fulfill() une fois le
+// contexte déjà disposé -- sans catch, ceci crashe le process AVANT le
+// process.exit() normal (exit 1 systématique), déclenchant un rollback
+// automatique de deploy_check.sh alors que le parcours a en réalité réussi.
+await ctx.route('**/*', async (route) => {
+  try {
+    const resp = await route.fetch();
+    await route.fulfill({ response: resp, headers: { ...resp.headers(), 'Cache-Control': 'no-store' } });
+  } catch (e) { try { await route.continue(); } catch (e2) { /* contexte déjà fermé -- rien à faire */ } }
+});
 const page = await ctx.newPage();
 await page.addInitScript(() => { try { if (window.caches) caches.keys().then(ks => ks.forEach(k => caches.delete(k))); } catch (e) {} });
 await page.setViewportSize({ width: 1280, height: 900 });
