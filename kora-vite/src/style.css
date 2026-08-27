@@ -1413,6 +1413,14 @@ html.icons-ready .material-icons { visibility: visible; }
    cocher de compétence, disclosure repliable, panneau de suggestions IA). */
 .setting-card textarea.text-input { width: 100%; resize: vertical; }
 #agentPromptSystem.text-input { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12.5px; line-height: 1.5; }
+
+/* Verrouillage des champs sensibles (Prompt système / Prompt utilisateur) --
+   lecture seule par défaut, tant que "Modifier" n'a pas été cliqué. Le
+   readonly natif du textarea bloque déjà la frappe ; ce style rend cet état
+   visible au premier coup d'œil (pas seulement au clic manqué). */
+.locked-field { resize: none; cursor: default; background: var(--glass-bg-strong); color: var(--md-sys-color-on-surface-variant); }
+.field-lock-note { display: flex; align-items: center; gap: 7px; margin: 8px 0 0; font-size: var(--t-label-sm); color: var(--md-sys-color-on-surface-variant); }
+.field-lock-note .ic { width: 13px; height: 13px; flex: none; }
 .setting-warning { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 10px; }
 .setting-warning .ic { flex: none; width: 16px; height: 16px; margin-top: 2px; color: var(--md-sys-color-on-surface-variant); }
 .setting-warning code { background: var(--glass-bg-strong); padding: 1px 5px; border-radius: 4px; font-size: .92em; }

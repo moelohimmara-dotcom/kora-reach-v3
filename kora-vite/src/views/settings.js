@@ -645,9 +645,12 @@ function bindSettings() {
       <div class="setting-card">
         <div class="setting-card-head"><span class="meta-ic">${icon("i-edit")}</span><div class="meta"><div class="name">Prompt système</div><div class="sub">${systemIsDefault ? "Valeur par défaut (jamais modifiée)" : "Personnalisé"}</div></div></div>
         <p class="muted setting-warning">${icon("i-info")} Ce texte pilote directement la rédaction (structure, ton, garde-fous anti-invention et anti-injection). Le marqueur interne <code>2. LONGUEUR</code> doit rester présent : sa suppression ne provoque aucune erreur, mais modifie légèrement la génération section par section. En cas de doute, utilise « Réinitialiser par défaut ».</p>
-        <textarea class="text-input" id="agentPromptSystem" rows="14">${escta(systemVal)}</textarea>
+        <textarea class="text-input locked-field" id="agentPromptSystem" rows="14" readonly>${escta(systemVal)}</textarea>
+        <p class="field-lock-note" id="agentPromptSystemLockNote">${icon("i-lock")} Verrouillé — clique sur « Modifier » pour éditer ce champ sensible.</p>
         <div class="actions">
-          <button class="btn btn-primary" id="agentPromptSaveSystem">Enregistrer le prompt système</button>
+          <button class="btn btn-tonal" id="agentPromptUnlockSystem">${icon("i-lock")} Modifier</button>
+          <button class="btn btn-primary" id="agentPromptSaveSystem" hidden>Enregistrer le prompt système</button>
+          <button class="btn btn-ghost" id="agentPromptCancelSystem" hidden>Annuler</button>
           <button class="btn btn-ghost" id="agentPromptResetSystem" ${systemIsDefault ? "disabled" : ""}>Réinitialiser par défaut</button>
           <button class="btn btn-ghost" id="agentPromptSuggest">${icon("i-spark")} Suggestions IA</button>
         </div>
@@ -674,9 +677,12 @@ function bindSettings() {
       </div>
       <div class="setting-card">
         <div class="setting-card-head"><span class="meta-ic">${icon("i-user")}</span><div class="meta"><div class="name">Prompt utilisateur</div><div class="sub">Instructions complémentaires, ajoutées à la suite du prompt système, sans risque sur sa structure</div></div></div>
-        <textarea class="text-input" id="agentPromptAddon" rows="6" placeholder="Ex. : privilégier un ton plus institutionnel sur les sujets diplomatiques…">${escta(data.addon)}</textarea>
+        <textarea class="text-input locked-field" id="agentPromptAddon" rows="6" readonly placeholder="Ex. : privilégier un ton plus institutionnel sur les sujets diplomatiques…">${escta(data.addon)}</textarea>
+        <p class="field-lock-note" id="agentPromptAddonLockNote">${icon("i-lock")} Verrouillé — clique sur « Modifier » pour éditer ce champ sensible.</p>
         <div class="actions">
-          <button class="btn btn-primary" id="agentPromptSaveAddon">Enregistrer</button>
+          <button class="btn btn-tonal" id="agentPromptUnlockAddon">${icon("i-lock")} Modifier</button>
+          <button class="btn btn-primary" id="agentPromptSaveAddon" hidden>Enregistrer</button>
+          <button class="btn btn-ghost" id="agentPromptCancelAddon" hidden>Annuler</button>
           <button class="btn btn-ghost" id="agentPromptResetAddon" ${data.addon ? "" : "disabled"}>Retirer</button>
         </div>
       </div>`;
@@ -744,15 +750,57 @@ function bindSettings() {
       } catch (e) { snack(e.message || "Erreur"); }
       finally { suggestBtn.disabled = false; suggestBtn.innerHTML = `${icon("i-spark")} Suggestions IA`; }
     };
-    const saveSys = document.getElementById("agentPromptSaveSystem");
-    if (saveSys) saveSys.onclick = async () => {
-      const val = document.getElementById("agentPromptSystem")?.value || "";
-      try {
-        const r = await Store.api("/api/agent-prompts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ field: "system", value: val }) });
-        if (r.warning) snack(r.warning); else snack("Prompt système enregistré");
-        await loadAgentPrompts();
-      } catch (e) { snack(e.message || "Erreur"); }
+    // ---- Verrouillage des champs sensibles (2026-08-27, demande explicite
+    // après test utilisateur réel : "quelqu'un peut cliquer là-dessus et puis
+    // modifier directement... il faut d'abord appuyer un bouton"). Les deux
+    // textareas s'ouvrent en lecture seule ; "Modifier" les déverrouille,
+    // "Annuler" restaure la valeur affichée sans appel réseau, "Enregistrer"
+    // demande désormais une confirmation explicite (même composant que
+    // "Réinitialiser", qui l'avait déjà -- l'incohérence relevée par le user
+    // est corrigée dans les deux sens) avant d'écrire quoi que ce soit.
+    const wireLockableField = ({ textareaId, unlockId, saveId, cancelId, originalValue, saveConfirm, onSaved }) => {
+      const ta = document.getElementById(textareaId);
+      const unlockBtn = document.getElementById(unlockId);
+      const saveBtn = document.getElementById(saveId);
+      const cancelBtn = document.getElementById(cancelId);
+      const resetBtn = saveBtn?.closest(".actions")?.querySelector('[id^="agentPromptReset"]');
+      const lockNote = ta ? document.getElementById(ta.id + "LockNote") : null;
+      if (!ta || !unlockBtn || !saveBtn || !cancelBtn) return;
+      const setEditing = (editing) => {
+        ta.readOnly = !editing;
+        ta.classList.toggle("locked-field", !editing);
+        unlockBtn.hidden = editing;
+        saveBtn.hidden = !editing;
+        cancelBtn.hidden = !editing;
+        if (resetBtn) resetBtn.hidden = editing;
+        if (lockNote) lockNote.hidden = editing;
+        if (editing) ta.focus();
+      };
+      unlockBtn.onclick = () => setEditing(true);
+      cancelBtn.onclick = () => { ta.value = originalValue; setEditing(false); };
+      saveBtn.onclick = () => confirmAction({
+        title: saveConfirm.title,
+        message: saveConfirm.message,
+        confirmLabel: "Enregistrer",
+        onConfirm: async () => { await onSaved(ta.value || ""); setEditing(false); },
+      });
     };
+    wireLockableField({
+      textareaId: "agentPromptSystem", unlockId: "agentPromptUnlockSystem",
+      saveId: "agentPromptSaveSystem", cancelId: "agentPromptCancelSystem",
+      originalValue: systemVal,
+      saveConfirm: {
+        title: "Enregistrer le nouveau prompt système ?",
+        message: "Ce texte pilotera immédiatement toutes les prochaines générations d'articles.",
+      },
+      onSaved: async (val) => {
+        try {
+          const r = await Store.api("/api/agent-prompts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ field: "system", value: val }) });
+          if (r.warning) snack(r.warning); else snack("Prompt système enregistré");
+          await loadAgentPrompts();
+        } catch (e) { snack(e.message || "Erreur"); }
+      },
+    });
     const resetSys = document.getElementById("agentPromptResetSystem");
     if (resetSys) resetSys.onclick = () => confirmAction({
       title: "Réinitialiser le prompt système ?",
@@ -766,20 +814,27 @@ function bindSettings() {
       } catch (e) { snack(e.message || "Erreur"); }
       },
     });
-    const saveAddon = document.getElementById("agentPromptSaveAddon");
-    if (saveAddon) saveAddon.onclick = async () => {
-      const val = document.getElementById("agentPromptAddon")?.value || "";
-      try {
-        await Store.api("/api/agent-prompts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ field: "addon", value: val }) });
-        snack("Add-on enregistré");
-        await loadAgentPrompts();
-      } catch (e) { snack(e.message || "Erreur"); }
-    };
+    wireLockableField({
+      textareaId: "agentPromptAddon", unlockId: "agentPromptUnlockAddon",
+      saveId: "agentPromptSaveAddon", cancelId: "agentPromptCancelAddon",
+      originalValue: data.addon || "",
+      saveConfirm: {
+        title: "Enregistrer le prompt utilisateur ?",
+        message: "Ces instructions s'ajouteront immédiatement au prompt système pour toutes les prochaines générations.",
+      },
+      onSaved: async (val) => {
+        try {
+          await Store.api("/api/agent-prompts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ field: "addon", value: val }) });
+          snack("Prompt utilisateur enregistré");
+          await loadAgentPrompts();
+        } catch (e) { snack(e.message || "Erreur"); }
+      },
+    });
     const resetAddon = document.getElementById("agentPromptResetAddon");
     if (resetAddon) resetAddon.onclick = async () => {
       try {
         await Store.api("/api/agent-prompts/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ field: "addon" }) });
-        snack("Add-on retiré");
+        snack("Prompt utilisateur retiré");
         await loadAgentPrompts();
       } catch (e) { snack(e.message || "Erreur"); }
     };
