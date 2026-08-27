@@ -2560,8 +2560,16 @@ html.icons-ready .material-icons { visibility: visible; }
    ============================================================ */
 .sg-page { max-width: 860px; margin: 0 auto; padding: 16px; }
 .sg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
-.sg-token { display: flex; align-items: center; gap: 12px; padding: 10px; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-sm); }
-.sg-swatch { width: 44px; height: 44px; border-radius: var(--radius-xs); border: 1px solid var(--glass-border); flex: 0 0 auto; }
+/* NB: --glass-border est intentionnellement transparent partout dans KORA
+   (les cartes se distinguent par l'élévation/l'ombre, pas par un contour --
+   voir .setting-card) ; ça marche pour un composant applicatif normal, mais
+   PAS pour un swatch dont le seul but est de montrer une couleur/forme --
+   --bg et --surface sont eux-mêmes presque noirs, un swatch sans bord ni
+   fond distinct y devient invisible. D'où le fond surface-container-high
+   (vraie teinte plus claire, pas un alias transparent) et le contour
+   md-sys-color-outline (vraie couleur, pas l'alias --glass-border) ci-dessous. */
+.sg-token { display: flex; align-items: center; gap: 12px; padding: 10px; background: var(--md-sys-color-surface-container-high); border-radius: var(--radius-sm); }
+.sg-swatch { width: 44px; height: 44px; border-radius: var(--radius-xs); border: 1px solid var(--md-sys-color-outline); flex: 0 0 auto; }
 .sg-token-meta code { font-size: 13px; color: var(--md-sys-color-on-surface); }
 .sg-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .sg-kpi { max-width: 260px; }
@@ -2589,11 +2597,11 @@ html.icons-ready .material-icons { visibility: visible; }
 /* Rayons & élévation */
 .sg-radius-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 14px; margin-bottom: 18px; }
 .sg-radius-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
-.sg-radius-box { width: 56px; height: 56px; background: var(--glass-bg-strong); border: 1px solid var(--glass-border); }
+.sg-radius-box { width: 56px; height: 56px; background: var(--md-sys-color-surface-container-high); }
 .sg-radius-cell code { font-size: var(--t-label-xs); color: var(--md-sys-color-on-surface); }
 .sg-elev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 18px; }
 .sg-elev-cell { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
-.sg-elev-box { width: 56px; height: 56px; border-radius: var(--radius-md); background: var(--glass-bg-strong); }
+.sg-elev-box { width: 56px; height: 56px; border-radius: var(--radius-md); background: var(--md-sys-color-surface-container-high); }
 .sg-elev-cell code { font-size: var(--t-label-xs); color: var(--md-sys-color-on-surface); }
 
 /* Icônes -- catalogue dynamique (voir bindStyleGuide) */
